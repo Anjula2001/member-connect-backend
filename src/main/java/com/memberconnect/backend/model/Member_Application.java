@@ -28,22 +28,22 @@ public class Member_Application {
     private ApplicationStatus status;
 
     @Column(name = "Title")
-    private String Title;
+    private String title;
 
     @Column(name = "FullName")
-    private String FullName;
+    private String fullName;
 
     @Column(name = "NameAsInPayroll")
-    private String NameAsInPayroll;
+    private String nameAsInPayroll;
 
     @Column(name = "NameWithInitials")
-    private String NameWithInitials;
+    private String nameWithInitials;
 
     @Column(name = "NicNumber")
-    private String NicNumber;
+    private String nicNumber;
 
     @Column(name = "DateOfBirth")
-    private LocalDate DateOfBirth;
+    private LocalDate dateOfBirth;
 
     @Enumerated(EnumType.STRING)
     private Gender gender;
@@ -52,39 +52,39 @@ public class Member_Application {
     private Language preferredLanguage;
 
     @Column(name = "PermanentPrivateAddress")
-    private String PermanentPrivateAddress;
+    private String permanentPrivateAddress;
 
     @Column(name = "ComputerNoInPayslip")
-    private String ComputerNoInPayslip;
+    private String computerNoInPayslip;
 
     @Column(name = "SalaryPayingOffice")
-    private String SalaryPayingOffice;
+    private String salaryPayingOffice;
 
     @Column(name = "OfficeTelephone")
-    private String OfficeTelephone;
+    private String officeTelephone;
 
     @Column(name = "PrivateTelephone")
-    private String PrivateTelephone;
+    private String privateTelephone;
 
     @Column(name = "MobileNumber")
-    private String MobileNumber;
+    private String mobileNumber;
 
     @Column(name = "EmailAddress")
-    private String EmailAddress;
+    private String emailAddress;
 
     @Column(name = "ShareAccountAmount")
-    private BigDecimal ShareAccountAmount;
+    private BigDecimal shareAccountAmount;
 
     @Column(name = "SpecialDepositAmount")
-    private BigDecimal SpecialDepositAmount;
+    private BigDecimal specialDepositAmount;
 
     @Column(name = "FixedDepositAmount")
-    private BigDecimal FixedDepositAmount;
+    private BigDecimal fixedDepositAmount;
 
     @Column(name = "ScholarshipDeathDonationPensionAmount")
-    private BigDecimal ScholarshipDeathDonationPensionAmount;
+    private BigDecimal scholarshipDeathDonationPensionAmount;
 
     @Column(name = "RejoinFlag")
-    private Boolean RejoinFlag;
+    private Boolean rejoinFlag;
 
 }
