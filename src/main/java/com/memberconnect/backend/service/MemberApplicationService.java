@@ -1,5 +1,6 @@
 package com.memberconnect.backend.service;
 import com.memberconnect.backend.dto.MemberApplicationDTO;
+import com.memberconnect.backend.enums.ApplicationStatus;
 import com.memberconnect.backend.model.Member_Application;
 import com.memberconnect.backend.repository.MemberApplicationRepository;
 import org.modelmapper.ModelMapper;
@@ -20,7 +21,10 @@ public class MemberApplicationService {
     private ModelMapper modelMapper;
 
     public MemberApplicationDTO saveMemberApplication(MemberApplicationDTO memberApplicationDTO) {
-        memberApplicationRepository.save(modelMapper.map(memberApplicationDTO, Member_Application.class));
+        Member_Application application = modelMapper.map(memberApplicationDTO, Member_Application.class);
+        application.setStatus(ApplicationStatus.PENDING);
+        application.setApplicationID("APP-" + System.currentTimeMillis());
+        memberApplicationRepository.save(application);
         return memberApplicationDTO;
     }
 
