@@ -89,4 +89,24 @@ public class MemberApplicationService {
 
         return "Application deleted successfully";
     }
+
+    public MemberApplicationDTO getApplicationById(Long id) {
+
+        Member_Application application = memberApplicationRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Application not found"
+                ));
+
+        return modelMapper.map(application, MemberApplicationDTO.class);
+    }
+
+    public MemberApplicationDTO getApplicationByNic(String nic) {
+
+        Member_Application application = memberApplicationRepository.findByNicNumber(nic)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Application not found"
+                ));
+
+        return modelMapper.map(application, MemberApplicationDTO.class);
+    }
 }

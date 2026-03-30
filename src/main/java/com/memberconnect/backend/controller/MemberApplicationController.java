@@ -43,5 +43,13 @@ public class MemberApplicationController {
     public String deleteMemberApplication(@PathVariable Long id) {
         return service.deleteMemberApplication(id);
     }
+    @GetMapping("/{id}")
+    public MemberApplicationDTO getApplicationById(@PathVariable Long id) {
+        return service.getApplicationById(id);
+    }
+    @GetMapping("/nic/{nic}")
+    public MemberApplicationDTO getApplicationByNic(@PathVariable String nic) {
+        return service.getApplicationByNic(nic);
+    }
 
 }
