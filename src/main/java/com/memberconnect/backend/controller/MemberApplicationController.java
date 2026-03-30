@@ -1,6 +1,7 @@
 package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.dto.MemberApplicationDTO;
+import com.memberconnect.backend.enums.ApplicationStatus;
 import com.memberconnect.backend.model.Member_Application;
 import com.memberconnect.backend.service.MemberApplicationService;
 
@@ -50,6 +51,12 @@ public class MemberApplicationController {
     @GetMapping("/nic/{nic}")
     public MemberApplicationDTO getApplicationByNic(@PathVariable String nic) {
         return service.getApplicationByNic(nic);
+    }
+    @PatchMapping("/{id}/status")
+    public MemberApplicationDTO updateStatus(
+            @PathVariable Long id,
+            @RequestParam ApplicationStatus status) {
+        return service.updateStatus(id, status);
     }
 
 }

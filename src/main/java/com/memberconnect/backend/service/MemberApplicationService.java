@@ -109,4 +109,15 @@ public class MemberApplicationService {
 
         return modelMapper.map(application, MemberApplicationDTO.class);
     }
+
+    public MemberApplicationDTO updateStatus(Long id, ApplicationStatus status) {
+
+        Member_Application app = memberApplicationRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Application not found"));
+
+        app.setStatus(status);
+
+        return modelMapper.map(memberApplicationRepository.save(app), MemberApplicationDTO.class);
+    }
 }
