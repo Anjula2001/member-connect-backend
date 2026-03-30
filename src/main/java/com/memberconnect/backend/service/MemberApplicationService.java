@@ -8,6 +8,8 @@ import org.modelmapper.TypeToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import java.util.List;
 
@@ -75,5 +77,16 @@ public class MemberApplicationService {
         Member_Application saved = memberApplicationRepository.save(existing);
 
         return modelMapper.map(saved, MemberApplicationDTO.class);
+    }
+
+    public String deleteMemberApplication(Long id) {
+
+        if (!memberApplicationRepository.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Application not found");
+        }
+
+        memberApplicationRepository.deleteById(id);
+
+        return "Application deleted successfully";
     }
 }

@@ -39,5 +39,9 @@ public class MemberApplicationController {
 
         return service.updatePartial(id, dto);
     }
+    @DeleteMapping("/deleteApplication/{id}")
+    public String deleteMemberApplication(@PathVariable Long id) {
+        return service.deleteMemberApplication(id);
+    }
 
 }
