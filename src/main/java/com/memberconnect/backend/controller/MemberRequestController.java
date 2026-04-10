@@ -28,5 +28,15 @@ public String getAllRequsts(){
      return basicProfileChangeRequestsServices.saveBasicProfileChangeRequest(dto);
  }
 
+ @PutMapping("/updateRequest/{id}")
+    public BasicProfileChangeRequestDTO updateRequest(@PathVariable Integer id, @RequestBody BasicProfileChangeRequestDTO dto) {
+        return basicProfileChangeRequestsServices.updateProfileRequest(id, dto);
+    }
+ @DeleteMapping("/deletRequest/{id}")
+    public String deleteRequest(@PathVariable Integer id) {
+     return basicProfileChangeRequestsServices.deleteProfileRequest(id);
+ }
+
+
 
 }

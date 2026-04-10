@@ -1,18 +1,19 @@
 package com.memberconnect.backend.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.*;
 
-@Getter
-@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Table(name = "NameChangeRequestsTable")
+@Entity
+@Data
+
 public class NameChangeRequest {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "NameChangeRequestID")
-    private String nameChangeRequestID;
+    private Integer nameChangeRequestID;
     @Column(name = "title")
     private String newTitle;
     @Column(name = "fullname")

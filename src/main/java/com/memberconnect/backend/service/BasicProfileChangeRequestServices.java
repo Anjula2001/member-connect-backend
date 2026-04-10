@@ -34,6 +34,24 @@ public class BasicProfileChangeRequestServices {
         return "success";
     }
 
+    public BasicProfileChangeRequestDTO updateProfileRequest(Integer id, BasicProfileChangeRequestDTO dto) {
+
+        BasicProfileChangeRequest existingEntity = basicProfileChangeRequestRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Request not found with id: " + id));
+        modelMapper.map(dto, existingEntity);
+        existingEntity.setId(id);
+        BasicProfileChangeRequest updatedEntity = basicProfileChangeRequestRepo.save(existingEntity);
+        return modelMapper.map(updatedEntity, BasicProfileChangeRequestDTO.class);
+    }
+
+    public String deleteProfileRequest(Integer id) {
+        if (!basicProfileChangeRequestRepo.existsById(id)) {
+            throw new RuntimeException("Cannot delete: Request not found with id: " + id);
+        } basicProfileChangeRequestRepo.deleteById(id);
+        return "Succefully deleted request";
+    }
+
+
 
 
 }
