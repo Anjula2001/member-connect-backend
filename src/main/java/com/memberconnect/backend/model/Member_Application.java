@@ -88,3 +88,4 @@ public class Member_Application {
     private Boolean RejoinFlag;
 
 }
+
