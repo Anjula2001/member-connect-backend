@@ -31,58 +31,120 @@ public class UniversityScholarshipRequest {
     private Member MemberId;
 
     @Column(name = "RequestDate")
-    private LocalDate RequestDate;
+    private LocalDate requestDate;
 
     @Column(name = "StudentName")
-    private String StudentName;
+    private String studentName;
 
     @Column(name = "BirthCertificateNumber")
-    private String BirthCertificateNumber;
+    private String birthCertificateNumber;
 
     @Column(name = "Address")
-    private String Address;
+    private String address;
 
     @Column(name = "NICNumber")
-    private String NICNumber;
+    private String nicNumber;
+
+    @Column(name = "Mobile")
+    private String mobile;
 
     @Enumerated(EnumType.STRING)
     private ApplicantType ApplicantType;
 
     @Column(name = "Examyear")
-    private String Examyear;
+    private String examYear;
 
     @Column(name = "ExamNumber")
-    private String ExamNumber;
+    private String examNumber;
 
     @Column(name = "ZScore")
-    private String ZScore;
+    private String zScore;
 
-    @Column(name = "University")
-    private String University;
+    @ManyToOne
+    @JoinColumn(name = "university_id")
+    private University university;
 
-    @Column(name = "Program")
-    private String Program;
+    @ManyToOne
+    @JoinColumn(name = "program_id")
+    private Program program;
 
-    @Column(name = "Duration")
     private String Duration;
 
     @Column(name = "AcademicYearStartDate")
-    private LocalDate AcademicYearStartDate;
+    private LocalDate academicYearStartDate;
 
     @Enumerated(EnumType.STRING)
-    private MinorAccount HasMinorAccount;
+    private MinorAccount hasMinorAccount;
 
     @Column(name = "MinorAccountMonths")
-    private String MinorAccountMonths;
+    private String minorAccountMonths;
 
-    @Column(name = "Bank")
-    private String Bank;
+    @ManyToOne
+    @JoinColumn(name = "bank_id")
+    private Bank bank;
 
-    @Column(name = "Branch")
-    private String Branch;
+    @ManyToOne
+    @JoinColumn(name = "branch_id")
+    private Branch branch;
 
     @Column(name = "AccountNumber")
-    private String AccountNumber;
+    private String accountNumber;
+
+    public UniversityScholarshipRequest() {}
+    
+    public Long getId() { return id; }
+
+    public LocalDate getRequestDate() { return requestDate; }
+    public void setRequestDate(LocalDate requestDate) { this.requestDate = requestDate; }
+
+    public String getStudentName() { return studentName; }
+    public void setStudentName(String studentName) { this.studentName = studentName; }
+
+    public String getNic() { return nicNumber; }
+    public void setNic(String nic) { this.nicNumber = nic; }
+
+    public String getBcNo() { return birthCertificateNumber; }
+    public void setBcNo(String bcNo) { this.birthCertificateNumber = bcNo; }
+
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+
+    public String getMobile() { return mobile; }
+    public void setMobile(String mobile) { this.mobile = mobile; }
+
+    public Boolean getIsSchoolApplicant() { return ApplicantType == com.memberconnect.backend.enums.ApplicantType.SCHOOL_APPICANT; }
+    public void setIsSchoolApplicant(com.memberconnect.backend.enums.ApplicantType SCHOOL_APPLICANT) { ApplicantType = SCHOOL_APPLICANT; }
+
+    public String getExamYear() { return examYear; }
+    public void setExamYear(String examYear) { this.examYear = examYear; }
+
+    public String getExamNo() { return examNumber; }
+    public void setExamNo(String examNo) { this.examNumber = examNo; }
+
+    public String getZScore() { return zScore; }
+    public void setZScore(String zScore) { this.zScore = zScore; }
+
+    public LocalDate getAcademicYearStart() { return academicYearStartDate; }
+    public void setAcademicYearStart(LocalDate academicYearStart) { this.academicYearStartDate = academicYearStart; }
+
+    public String getAccountNo() { return accountNumber; }
+    public void setAccountNo(String accountNo) { this.accountNumber = accountNo; }
+
+    public Bank getBank() { return bank; }
+    public void setBank(Bank bank) { this.bank = bank; }
+
+    public Branch getBranch() { return branch; }
+    public void setBranch(Branch branch) { this.branch = branch; }
+
+    public University getUniversity() { return university; }
+    public void setUniversity(University university) { this.university = university; }
+
+    public Program getProgram() { return program; }
+    public void setProgram(Program program) { this.program = program; }
+
+    public String getDuration() { return Duration; }
+    public void setDuration(String duration) { this.Duration = duration; }
 }
+
 
 
