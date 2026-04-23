@@ -1,5 +1,6 @@
 package com.memberconnect.backend.dto;
 
+import com.memberconnect.backend.enums.ApplicationStatus;
 import com.memberconnect.backend.enums.Gender;
 import com.memberconnect.backend.enums.Language;
 import lombok.Data;
@@ -9,6 +10,9 @@ import java.time.LocalDate;
 
 @Data
 public class MemberApplicationDTO {
+    private Long id;
+    private String applicationID;
+    private ApplicationStatus status;
 
     private String title;
     private String fullName;

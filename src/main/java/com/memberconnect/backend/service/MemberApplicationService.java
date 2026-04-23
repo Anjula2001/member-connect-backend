@@ -26,8 +26,8 @@ public class MemberApplicationService {
         Member_Application application = modelMapper.map(memberApplicationDTO, Member_Application.class);
         application.setStatus(ApplicationStatus.PENDING);
         application.setApplicationID("APP-" + System.currentTimeMillis());
-        memberApplicationRepository.save(application);
-        return memberApplicationDTO;
+        Member_Application saved = memberApplicationRepository.save(application);
+        return modelMapper.map(saved, MemberApplicationDTO.class);
     }
 
     public List<MemberApplicationDTO>getAllMemberApplications(){
