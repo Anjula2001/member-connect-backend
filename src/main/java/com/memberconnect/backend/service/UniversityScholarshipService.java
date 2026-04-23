@@ -44,8 +44,8 @@ public class UniversityScholarshipService {
         this.branchRepository = branchRepository;
     }
 
-    public boolean isExamNoDuplicate(String ExamNumber) {
-        return scholarshipRequestRepository.existsByExamNumber(ExamNumber);
+    public boolean isExamNoDuplicate(String examNumber) {
+        return scholarshipRequestRepository.existsByExamNumber(examNumber);
     }
 
     public UniversityScholarshipRequest saveRequest(UniversityScholarshipRequest request) {
