@@ -21,7 +21,7 @@ public class UniversityScholarshipRequest {
     private Long id;
 
     @Column(unique = true)
-    private String UniversityScholarshipRequestID;
+    private String universityScholarshipRequestID;
 
     @Enumerated(EnumType.STRING)
     private UniversityScholarshipRequestStatus status;
@@ -144,6 +144,14 @@ public class UniversityScholarshipRequest {
 
     public String getDuration() { return Duration; }
     public void setDuration(String duration) { this.Duration = duration; }
+
+    public String getUniversityScholarshipRequestID() {
+        return universityScholarshipRequestID;
+    }
+
+    public void setUniversityScholarshipRequestID(String universityScholarshipRequestID) {
+        this.universityScholarshipRequestID = universityScholarshipRequestID;
+    }
 }
 
 

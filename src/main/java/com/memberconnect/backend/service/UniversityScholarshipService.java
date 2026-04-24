@@ -105,6 +105,11 @@ public class UniversityScholarshipService {
         return branchRepository.findByBankId(bankId);
     }
 
+    private String generateUniversityScholarshipRequestID() {
+        long nextNumber = scholarshipRequestRepository.count() + 1;
+        return String.format("USR-%03d", nextNumber);
+    }
+
     public UniversityScholarshipRequest saveRequest(UniversityScholarshipRequestDto dto) {
 
         if (scholarshipRequestRepository.existsByExamNumber(dto.getExamNo())) {
@@ -168,6 +173,7 @@ public class UniversityScholarshipService {
         request.setBank(bank);
         request.setBranch(branch);
 
+        request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
         return scholarshipRequestRepository.save(request);
     }
 }
