@@ -11,12 +11,12 @@ public class MinorAccount {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "bc_no", nullable = false)
-    private String bcNo;
+    @Column(name = "BirthCertificateNumber", nullable = false, unique = true)
+    private String birthCertificateNumber;
 
-    @ManyToOne
-    @JoinColumn(name = "member_id", nullable = false)
-    private Member member;
+    @Column(name = "RemittedMonths")
+    private String remittedMonths;
+
 
     @Column(name = "account_number", nullable = false)
     private String accountNumber;
@@ -37,10 +37,10 @@ public class MinorAccount {
 
     public MinorAccount() {}
 
-    public MinorAccount(String bcNo, Member member, String accountNumber,
+    public MinorAccount(String birthCertificateNumber, String accountNumber,
                         Bank bank, Branch branch, LocalDate createdDate, Boolean isActive) {
-        this.bcNo = bcNo;
-        this.member = member;
+        this.birthCertificateNumber = birthCertificateNumber;
+      
         this.accountNumber = accountNumber;
         this.bank = bank;
         this.branch = branch;
@@ -53,12 +53,8 @@ public class MinorAccount {
         return id;
     }
 
-    public String getBcNo() {
-        return bcNo;
-    }
-
-    public Member getMember() {
-        return member;
+    public String getBirthCertificateNumber() {
+        return birthCertificateNumber;
     }
 
     public String getAccountNumber() {
@@ -79,5 +75,9 @@ public class MinorAccount {
 
     public Boolean getIsActive() {
         return isActive;
+    }
+
+    public String getRemittedMonths() {
+        return remittedMonths;
     }
 }
