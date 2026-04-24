@@ -2,7 +2,7 @@ package com.memberconnect.backend.enums;
 
 public enum MemberStatus {
     ACTIVE,
-    INACTIVE,
-    SUSPENDED,
-    TERMINATED
+    RETIREMENT_REQUESTED,
+    RETIREMENT_APPROVED,
+    RETIRED
 }

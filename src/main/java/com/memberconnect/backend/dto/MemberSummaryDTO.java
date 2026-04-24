@@ -1,0 +1,35 @@
+package com.memberconnect.backend.dto;
+
+public class MemberSummaryDTO {
+
+    private String memberId;
+    private String fullName;
+    private String nic;
+    private String status;
+
+    public MemberSummaryDTO() {
+    }
+
+    public MemberSummaryDTO(String memberId, String fullName, String nic, String status) {
+        this.memberId = memberId;
+        this.fullName = fullName;
+        this.nic = nic;
+        this.status = status;
+    }
+
+    public String getMemberId() {
+        return memberId;
+    }
+
+    public String getFullName() {
+        return fullName;
+    }
+
+    public String getNic() {
+        return nic;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+}
