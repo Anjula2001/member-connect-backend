@@ -3,6 +3,7 @@ package com.memberconnect.backend.dto;
 public class RetirementRequestResponseDTO {
 
     private Long id;
+    private String requestNo;
     private String memberId;
     private String requestedDate;
     private String effectiveDate;
@@ -16,6 +17,7 @@ public class RetirementRequestResponseDTO {
 
     public RetirementRequestResponseDTO(
             Long id,
+            String requestNo,
             String memberId,
             String requestedDate,
             String effectiveDate,
@@ -25,6 +27,7 @@ public class RetirementRequestResponseDTO {
             String rejectReason
     ) {
         this.id = id;
+        this.requestNo = requestNo;
         this.memberId = memberId;
         this.requestedDate = requestedDate;
         this.effectiveDate = effectiveDate;
@@ -36,6 +39,10 @@ public class RetirementRequestResponseDTO {
 
     public Long getId() {
         return id;
+    }
+
+    public String getRequestNo() {
+        return requestNo;
     }
 
     public String getMemberId() {

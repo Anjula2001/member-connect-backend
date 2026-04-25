@@ -27,17 +27,20 @@ public class RetirementService {
     private final RetirementRequestRepository requestRepository;
     private final LoanRepository loanRepository;
     private final LoanObligationRepository obligationRepository;
+    private final DocumentService documentService;
 
     public RetirementService(
             MemberRepository memberRepository,
             RetirementRequestRepository requestRepository,
             LoanRepository loanRepository,
-            LoanObligationRepository obligationRepository
+            LoanObligationRepository obligationRepository,
+            DocumentService documentService
     ) {
         this.memberRepository = memberRepository;
         this.requestRepository = requestRepository;
         this.loanRepository = loanRepository;
         this.obligationRepository = obligationRepository;
+        this.documentService = documentService;
     }
 
     public Member getMemberEntity(String memberId) {
@@ -92,33 +95,106 @@ public class RetirementService {
         return dto;
     }
 
-    public RetirementRequestResponseDTO saveRequest(String memberId, MemberRetirementRequestDTO dto) {
+    private String generateRequestNo() {
+        int year = LocalDate.now().getYear();
+        String prefix = "R-" + year + "-";
+
+        return requestRepository
+                .findLastRequestByPrefix(prefix)
+                .map(lastRequest -> {
+                    String lastNo = lastRequest.getRequestNo();
+
+                    int lastSeq = Integer.parseInt(
+                            lastNo.substring(lastNo.lastIndexOf("-") + 1)
+                    );
+
+                    return prefix + String.format("%03d", lastSeq + 1);
+                })
+                .orElse(prefix + "001");
+    }
+
+   public RetirementRequestResponseDTO saveRequest(String memberId, MemberRetirementRequestDTO dto) {
+
+    // ✅ Get member
         Member member = getMemberEntity(memberId);
 
+        // ✅ Validate member status
         if (member.getStatus() != MemberStatus.ACTIVE &&
             member.getStatus() != MemberStatus.RETIREMENT_REQUESTED) {
             throw new RuntimeException("Only ACTIVE or RETIREMENT_REQUESTED member can save retirement request");
         }
 
+        // ✅ Validate required fields
+        if (dto.getRequestedDate() == null || dto.getRequestedDate().isBlank()) {
+            throw new RuntimeException("Requested Date is required");
+        }
+
+        if (dto.getEffectiveDate() == null || dto.getEffectiveDate().isBlank()) {
+            throw new RuntimeException("Effective Date is required");
+        }
+
+        // ✅ Parse dates
         LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
         LocalDate effectiveDate = LocalDate.parse(dto.getEffectiveDate());
 
-        if (effectiveDate.isAfter(LocalDate.now())) {
+        LocalDate today = LocalDate.now();
+
+        // ✅ Validate dates
+        if (requestedDate.isAfter(today)) {
+            throw new RuntimeException("Requested Date cannot be a future date");
+        }
+
+        if (effectiveDate.isAfter(today)) {
             throw new RuntimeException("Effective Date cannot be a future date");
         }
 
-        RetirementRequest request = new RetirementRequest();
-        request.setMemberId(memberId);
+        // ✅ Check existing request (ONLY ONE ACTIVE REQUEST)
+        RetirementRequest existingRequest = requestRepository
+                .findByMemberId(memberId)
+                .stream()
+                .filter(r -> r.getStatus() != RetirementRequestStatus.INACTIVE)
+                .findFirst()
+                .orElse(null);
+
+        RetirementRequest request;
+
+        if (existingRequest != null) {
+
+            // ✅ EDIT MODE
+            request = existingRequest;
+
+            // ❌ Prevent editing after submit/approval/rejection
+            if (request.getStatus() == RetirementRequestStatus.SUBMITTED_FOR_APPROVAL) {
+                throw new RuntimeException("Cannot edit after submission");
+            }
+
+            if (request.getStatus() == RetirementRequestStatus.APPROVED ||
+                request.getStatus() == RetirementRequestStatus.REJECTED) {
+                throw new RuntimeException("Cannot edit approved or rejected request");
+            }
+
+        } else {
+
+            // ✅ NEW MODE
+            request = new RetirementRequest();
+            request.setRequestNo(generateRequestNo());
+            request.setMemberId(memberId);
+            request.setStatus(RetirementRequestStatus.NEW);
+        }
+
+        // ✅ Set / update values
         request.setRequestedDate(requestedDate);
         request.setEffectiveDate(effectiveDate);
         request.setComment(dto.getComment());
-        request.setStatus(RetirementRequestStatus.NEW);
 
+        // ✅ Save request
         RetirementRequest saved = requestRepository.save(request);
 
+        // ✅ Update member status
         member.setStatus(MemberStatus.RETIREMENT_REQUESTED);
         memberRepository.save(member);
 
+        // ✅ Return response
         return mapToResponse(saved);
     }
 
@@ -130,6 +206,16 @@ public class RetirementService {
 
         if (!validation.isCanSubmit()) {
             throw new RuntimeException("Cannot submit: " + validation.getMessage());
+        }
+
+        boolean allMandatoryUploaded =
+                documentService.allMandatoryDocumentsUploaded(
+                        request.getId(),
+                        request.getMemberId()
+                );
+
+        if (!allMandatoryUploaded) {
+            throw new RuntimeException("Cannot submit. Mandatory documents are missing.");
         }
 
         request.setStatus(RetirementRequestStatus.SUBMITTED_FOR_APPROVAL);
@@ -186,16 +272,17 @@ public class RetirementService {
                 .toList();
     }
 
-    private RetirementRequestResponseDTO mapToResponse(RetirementRequest request) {
-        return new RetirementRequestResponseDTO(
-                request.getId(),
-                request.getMemberId(),
-                request.getRequestedDate() != null ? request.getRequestedDate().toString() : null,
-                request.getEffectiveDate() != null ? request.getEffectiveDate().toString() : null,
-                request.getComment(),
-                request.getStatus().name(),
-                request.getIncompleteReason(),
-                request.getRejectReason()
-        );
-    }
+   private RetirementRequestResponseDTO mapToResponse(RetirementRequest request) {
+    return new RetirementRequestResponseDTO(
+            request.getId(),
+            request.getRequestNo(),
+            request.getMemberId(),
+            request.getRequestedDate() != null ? request.getRequestedDate().toString() : null,
+            request.getEffectiveDate() != null ? request.getEffectiveDate().toString() : null,
+            request.getComment(),
+            request.getStatus().name(),
+            request.getIncompleteReason(),
+            request.getRejectReason()
+    );
+}
 }

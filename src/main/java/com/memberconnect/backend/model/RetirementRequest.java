@@ -21,7 +21,7 @@ public class RetirementRequest {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "request_no", unique = true)
+    @Column(name = "request_no", unique = true,nullable = false)
     private String requestNo;
 
     @Column(name = "member_id", nullable = false)

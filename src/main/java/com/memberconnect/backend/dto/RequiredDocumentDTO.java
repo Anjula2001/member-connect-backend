@@ -1,20 +1,31 @@
 package com.memberconnect.backend.dto;
 
 public class RequiredDocumentDTO {
-    private Long documentTypeId;
-    private String documentCode;
+    private Long id;
     private String documentName;
     private boolean mandatory;
     private boolean uploaded;
 
-    public Long getDocumentTypeId() { return documentTypeId; }
-    public void setDocumentTypeId(Long documentTypeId) { this.documentTypeId = documentTypeId; }
-    public String getDocumentCode() { return documentCode; }
-    public void setDocumentCode(String documentCode) { this.documentCode = documentCode; }
-    public String getDocumentName() { return documentName; }
-    public void setDocumentName(String documentName) { this.documentName = documentName; }
-    public boolean isMandatory() { return mandatory; }
-    public void setMandatory(boolean mandatory) { this.mandatory = mandatory; }
-    public boolean isUploaded() { return uploaded; }
-    public void setUploaded(boolean uploaded) { this.uploaded = uploaded; }
+    public RequiredDocumentDTO(Long id, String documentName, boolean mandatory, boolean uploaded) {
+        this.id = id;
+        this.documentName = documentName;
+        this.mandatory = mandatory;
+        this.uploaded = uploaded;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getDocumentName() {
+        return documentName;
+    }
+
+    public boolean isMandatory() {
+        return mandatory;
+    }
+
+    public boolean isUploaded() {
+        return uploaded;
+    }
 }
