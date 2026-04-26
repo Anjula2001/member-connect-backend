@@ -1,4 +1,34 @@
 package com.memberconnect.backend.controller;
 
+import com.memberconnect.backend.model.Document;
+import com.memberconnect.backend.service.DocumentUploadService;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+@RestController
+@RequestMapping("/api/documents")
+@CrossOrigin(origins = "http://localhost:3000")
 public class DocumentController {
+
+    private final DocumentUploadService documentService;
+
+    public DocumentController(DocumentUploadService documentService) {
+        this.documentService = documentService;
+    }
+
+    @PostMapping("/upload/{requestId}")
+    public ResponseEntity<?> uploadDocument(
+            @PathVariable Long requestId,
+            @RequestParam("documentType") String documentType,
+            @RequestParam("file") MultipartFile file
+    ) {
+        try {
+            Document doc = documentService.uploadDocument(requestId, documentType, file);
+            return ResponseEntity.ok(doc);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

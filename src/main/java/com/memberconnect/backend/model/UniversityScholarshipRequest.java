@@ -28,7 +28,7 @@ public class UniversityScholarshipRequest {
 
     @ManyToOne
     @JoinColumn(name = "MemberId", referencedColumnName = "memberId")
-    private Member MemberId;
+    private Member member;
 
     @Column(name = "RequestDate")
     private LocalDate requestDate;
@@ -49,7 +49,7 @@ public class UniversityScholarshipRequest {
     private String mobile;
 
     @Enumerated(EnumType.STRING)
-    private ApplicantType ApplicantType;
+    private ApplicantType applicantType;
 
     @Column(name = "Examyear")
     private String examYear;
@@ -57,7 +57,7 @@ public class UniversityScholarshipRequest {
     @Column(name = "ExamNumber")
     private String examNumber;
 
-    @Column(name = "ZScore")
+    @Column(name = "zscore")
     private String zScore;
 
     @ManyToOne
@@ -68,7 +68,7 @@ public class UniversityScholarshipRequest {
     @JoinColumn(name = "program_id")
     private Program program;
 
-    private String Duration;
+    private String duration;
 
     @Column(name = "AcademicYearStartDate")
     private LocalDate academicYearStartDate;
@@ -112,8 +112,8 @@ public class UniversityScholarshipRequest {
     public String getMobile() { return mobile; }
     public void setMobile(String mobile) { this.mobile = mobile; }
 
-    public Boolean getIsSchoolApplicant() { return ApplicantType == com.memberconnect.backend.enums.ApplicantType.SCHOOL_APPICANT; }
-    public void setIsSchoolApplicant(com.memberconnect.backend.enums.ApplicantType SCHOOL_APPLICANT) { ApplicantType = SCHOOL_APPLICANT; }
+    public Boolean getIsSchoolApplicant() { return applicantType == com.memberconnect.backend.enums.ApplicantType.SCHOOL_APPICANT; }
+    public void setIsSchoolApplicant(com.memberconnect.backend.enums.ApplicantType SCHOOL_APPLICANT) { applicantType = SCHOOL_APPLICANT; }
 
     public String getExamYear() { return examYear; }
     public void setExamYear(String examYear) { this.examYear = examYear; }
@@ -142,8 +142,8 @@ public class UniversityScholarshipRequest {
     public Program getProgram() { return program; }
     public void setProgram(Program program) { this.program = program; }
 
-    public String getDuration() { return Duration; }
-    public void setDuration(String duration) { this.Duration = duration; }
+    public String getDuration() { return duration; }
+    public void setDuration(String duration) { this.duration = duration; }
 
     public String getUniversityScholarshipRequestID() {
         return universityScholarshipRequestID;

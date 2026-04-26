@@ -67,6 +67,15 @@ public class UniversityScholarshipController {
         }
     }
 
+    @PostMapping("/university-scholarships/submit/{id}")
+    public ResponseEntity<?> submitRequest(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(service.submitRequest(id));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
     @GetMapping("/minor-account/check")
     public ResponseEntity<Map<String, Object>> checkMinorAccount(
             @RequestParam String birthCertificateNumber

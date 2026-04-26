@@ -24,6 +24,8 @@ public class UniversityScholarshipRequestDto {
     private String accountNo;
     private String bank;
     private String branch;
+    private String hasMinorAccount;
+    private String minorAccountMonths;
 
     public UniversityScholarshipRequestDto() {}
 
@@ -150,7 +152,7 @@ public class UniversityScholarshipRequestDto {
     public String getBank() {
         return bank;
     }
-
+    
     public void setBank(String bank) {
         this.bank = bank;
     }
@@ -161,5 +163,21 @@ public class UniversityScholarshipRequestDto {
 
     public void setBranch(String branch) {
         this.branch = branch;
+    }
+
+    public String getHasMinorAccount() {
+        return hasMinorAccount;
+    }
+
+    public void setHasMinorAccount(String hasMinorAccount) {
+        this.hasMinorAccount = hasMinorAccount;
+    }
+
+    public String getMinorAccountMonths() {
+        return minorAccountMonths;
+    }
+
+    public void setMinorAccountMonths(String minorAccountMonths) {
+        this.minorAccountMonths = minorAccountMonths;
     }
 }

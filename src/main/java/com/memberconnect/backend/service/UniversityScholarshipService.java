@@ -3,6 +3,7 @@ package com.memberconnect.backend.service;
 import com.memberconnect.backend.dto.ProgramOptionDto;
 import com.memberconnect.backend.dto.UniversityScholarshipRequestDto;
 import com.memberconnect.backend.enums.ApplicantType;
+import com.memberconnect.backend.enums.UniversityScholarshipRequestStatus;
 import com.memberconnect.backend.model.Bank;
 import com.memberconnect.backend.model.Branch;
 import com.memberconnect.backend.model.MinorAccount;
@@ -52,7 +53,8 @@ public class UniversityScholarshipService {
         this.branchRepository = branchRepository;
         this.minorAccountRepository = minorAccountRepository;
     }
-
+   
+    //Check minor account based on birth certificate number
     public Map<String, Object> checkMinorAccount(String birthCertificateNumber) {
         Optional<MinorAccount> minorAccount =
                 minorAccountRepository.findByBirthCertificateNumber(birthCertificateNumber);
@@ -70,14 +72,17 @@ public class UniversityScholarshipService {
         );
     }
 
+    // Check duplicate exam number
     public boolean isExamNoDuplicate(String examNumber) {
         return scholarshipRequestRepository.existsByExamNumber(examNumber);
     }
-
+ 
+    // Get all universities based on table data
     public List<University> getAllUniversities() {
         return universityRepository.findAll();
     }
-
+ 
+    // Get programs based on university ID
     public List<ProgramOptionDto> getProgramsByUniversity(Long universityId) {
         return universityProgramRepository.findByUniversityId(universityId)
                 .stream()
@@ -89,6 +94,7 @@ public class UniversityScholarshipService {
                 .toList();
     }
 
+    // Get duration based on university ID and program ID
     public Integer getDuration(Long universityId, Long programId) {
         UniversityProgram up = universityProgramRepository
                 .findByUniversityIdAndProgramId(universityId, programId)
@@ -96,20 +102,24 @@ public class UniversityScholarshipService {
 
         return up.getDuration();
     }
-
+ 
+    // Get all banks based on table data
     public List<Bank> getAllBanks() {
         return bankRepository.findAll();
     }
 
+    // Get branches based on bank ID
     public List<Branch> getBranchesByBank(Long bankId) {
         return branchRepository.findByBankId(bankId);
     }
 
+    //Generate unique University Scholarship Request ID
     private String generateUniversityScholarshipRequestID() {
         long nextNumber = scholarshipRequestRepository.count() + 1;
         return String.format("USR-%03d", nextNumber);
     }
 
+    // Save university scholarship request
     public UniversityScholarshipRequest saveRequest(UniversityScholarshipRequestDto dto) {
 
         if (scholarshipRequestRepository.existsByExamNumber(dto.getExamNo())) {
@@ -154,9 +164,12 @@ public class UniversityScholarshipService {
         request.setBcNo(dto.getBcNo());
         request.setAddress(dto.getAddress());
         request.setMobile(dto.getMobile());
-
+        
+        // Set applicant type based on isSchoolApplicant field
         if (Boolean.TRUE.equals(dto.getIsSchoolApplicant())) {
             request.setApplicantType(ApplicantType.SCHOOL_APPICANT);
+        } else {
+            request.setApplicantType(ApplicantType.PRIVATE_APPLICANT);
         }
 
         request.setExamYear(dto.getExamYear());
@@ -174,6 +187,53 @@ public class UniversityScholarshipService {
         request.setBranch(branch);
 
         request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
+
+        // Set status NEW
+        request.setStatus(UniversityScholarshipRequestStatus.NEW);
+        
+        // Check minor account if hasMinorAccount is not provided
+        if (dto.getHasMinorAccount() == null) {
+        Map<String, Object> minorData = checkMinorAccount(dto.getBcNo());
+
+        request.setHasMinorAccount(
+            "YES".equals(minorData.get("hasMinorAccount"))
+                ? com.memberconnect.backend.enums.MinorAccount.YES
+                : com.memberconnect.backend.enums.MinorAccount.NO
+        );
+
+        request.setMinorAccountMonths((String) minorData.get("remittedMonths"));
+        }
+
+        request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
+        return scholarshipRequestRepository.save(request);
+    }   
+ 
+    // Submit university scholarship request
+    public UniversityScholarshipRequest submitRequest(Long id) {
+
+        UniversityScholarshipRequest request = scholarshipRequestRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
+
+        // Check required fields
+        if (request.getStudentName() == null || request.getExamNo() == null) {
+            throw new RuntimeException("Fill all required fields before submitting");
+        }
+
+        // Check documents uploaded
+        boolean hasAllDocuments = checkDocumentsUploaded(id);
+
+        if (!hasAllDocuments) {
+            throw new RuntimeException("Upload all mandatory documents before submitting");
+        }
+
+        // Update status
+        request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL);
+
         return scholarshipRequestRepository.save(request);
     }
+    
+    private boolean checkDocumentsUploaded(Long requestId) {
+        return true; // temporary
+    }
+
 }
