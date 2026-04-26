@@ -9,6 +9,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 
 @Service
 public class DocumentUploadService {
@@ -30,15 +31,16 @@ public class DocumentUploadService {
         UniversityScholarshipRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
 
-        // 🔹 Save file to local folder
         String uploadDir = "uploads/";
         File folder = new File(uploadDir);
-        if (!folder.exists()) folder.mkdir();
 
-        String filePath = uploadDir + file.getOriginalFilename();
+        if (!folder.exists()) {
+            folder.mkdir();
+        }
+
+        String filePath = uploadDir + System.currentTimeMillis() + "_" + file.getOriginalFilename();
         file.transferTo(new File(filePath));
 
-        // 🔹 Save DB record
         Document doc = new Document();
         doc.setRequest(request);
         doc.setDocumentType(documentType);
@@ -46,5 +48,9 @@ public class DocumentUploadService {
         doc.setFilePath(filePath);
 
         return documentUploadRepository.save(doc);
+    }
+
+    public List<Document> getDocumentsByRequestId(Long requestId) {
+        return documentUploadRepository.findByRequest_Id(requestId);
     }
 }

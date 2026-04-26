@@ -90,6 +90,9 @@ public class UniversityScholarshipRequest {
     @Column(name = "AccountNumber")
     private String accountNumber;
 
+    @Column(name = "incomplete_reason")
+    private String incompleteReason;
+
     public UniversityScholarshipRequest() {}
     
     public Long getId() { return id; }
@@ -151,6 +154,14 @@ public class UniversityScholarshipRequest {
 
     public void setUniversityScholarshipRequestID(String universityScholarshipRequestID) {
         this.universityScholarshipRequestID = universityScholarshipRequestID;
+    }
+
+    public String getIncompleteReason() {
+        return incompleteReason;
+    }
+
+    public void setIncompleteReason(String incompleteReason) {
+        this.incompleteReason = incompleteReason;
     }
 }
 

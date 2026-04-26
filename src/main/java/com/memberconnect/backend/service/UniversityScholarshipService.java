@@ -236,4 +236,17 @@ public class UniversityScholarshipService {
         return true; // temporary
     }
 
+   public UniversityScholarshipRequest markAsIncomplete(Long requestId, String reason) {
+        UniversityScholarshipRequest request = scholarshipRequestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
+
+        if (request.getStatus() != UniversityScholarshipRequestStatus.NEW) {
+            throw new RuntimeException("Only NEW requests can be marked as incomplete");
+        }
+
+        request.setStatus(UniversityScholarshipRequestStatus.INCOMPLETE);
+        request.setIncompleteReason(reason);
+
+        return scholarshipRequestRepository.save(request);
+    }
 }

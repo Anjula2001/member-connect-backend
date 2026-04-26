@@ -1,11 +1,7 @@
 package com.memberconnect.backend.model;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
 
-@Getter
-@Setter
 @Entity
 @Table(name = "uploaded_documents")
 public class Document {
@@ -29,7 +25,7 @@ public class Document {
 
     public Document() {}
 
-     public Long getId() {
+    public Long getId() {
         return id;
     }
 

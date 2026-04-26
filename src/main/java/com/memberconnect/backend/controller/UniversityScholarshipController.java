@@ -84,4 +84,22 @@ public class UniversityScholarshipController {
                 service.checkMinorAccount(birthCertificateNumber)
         );
     }
+
+    @PostMapping("/university-scholarships/incomplete/{id}")
+    public ResponseEntity<?> markIncomplete(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body
+    ) {
+        try {
+            String reason = body.get("reason");
+
+            UniversityScholarshipRequest updated =
+                    service.markAsIncomplete(id, reason);
+
+            return ResponseEntity.ok(updated);
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

@@ -2,7 +2,6 @@ package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.model.Document;
 import com.memberconnect.backend.service.DocumentUploadService;
-
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,5 +29,10 @@ public class DocumentController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
+    }
+
+    @GetMapping("/request/{requestId}")
+    public ResponseEntity<?> getDocumentsByRequestId(@PathVariable Long requestId) {
+        return ResponseEntity.ok(documentService.getDocumentsByRequestId(requestId));
     }
 }
