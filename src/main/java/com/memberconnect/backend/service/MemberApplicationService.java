@@ -15,6 +15,7 @@ import java.util.List;
 
 @Service
 @Transactional
+@SuppressWarnings("null")
 public class MemberApplicationService {
     @Autowired
     private MemberApplicationRepository memberApplicationRepository;
@@ -24,7 +25,6 @@ public class MemberApplicationService {
 
     public MemberApplicationDTO saveMemberApplication(MemberApplicationDTO memberApplicationDTO) {
         Member_Application application = modelMapper.map(memberApplicationDTO, Member_Application.class);
-        application.setStatus(ApplicationStatus.PENDING);
         application.setApplicationID("APP-" + System.currentTimeMillis());
         Member_Application saved = memberApplicationRepository.save(application);
         return modelMapper.map(saved, MemberApplicationDTO.class);
@@ -38,7 +38,7 @@ public class MemberApplicationService {
     public MemberApplicationDTO updateMemberApplication(Long id, MemberApplicationDTO dto) {
         Member_Application existing = memberApplicationRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Application not found"));
-        modelMapper.map(dto, existing);
+        applyNonNullFields(existing, dto);
         Member_Application updated = memberApplicationRepository.save(existing);
         return modelMapper.map(updated, MemberApplicationDTO.class);
     }
@@ -47,6 +47,16 @@ public class MemberApplicationService {
 
         Member_Application existing = memberApplicationRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Application not found"));
+        applyNonNullFields(existing, dto);
+
+        Member_Application saved = memberApplicationRepository.save(existing);
+
+        return modelMapper.map(saved, MemberApplicationDTO.class);
+    }
+
+    private void applyNonNullFields(Member_Application existing, MemberApplicationDTO dto) {
+        if (dto.getApplicationDate() != null) existing.setApplicationDate(dto.getApplicationDate());
+        if (dto.getStatus() != null) existing.setStatus(dto.getStatus());
 
         if (dto.getTitle() != null) existing.setTitle(dto.getTitle());
         if (dto.getFullName() != null) existing.setFullName(dto.getFullName());
@@ -59,6 +69,13 @@ public class MemberApplicationService {
         if (dto.getPreferredLanguage() != null) existing.setPreferredLanguage(dto.getPreferredLanguage());
 
         if (dto.getPermanentPrivateAddress() != null) existing.setPermanentPrivateAddress(dto.getPermanentPrivateAddress());
+        if (dto.getWorkingLocationType() != null) existing.setWorkingLocationType(dto.getWorkingLocationType());
+        if (dto.getDesignation() != null) existing.setDesignation(dto.getDesignation());
+        if (dto.getNatureOfOccupation() != null) existing.setNatureOfOccupation(dto.getNatureOfOccupation());
+        if (dto.getEducationalDistrict() != null) existing.setEducationalDistrict(dto.getEducationalDistrict());
+        if (dto.getEducationalZone() != null) existing.setEducationalZone(dto.getEducationalZone());
+        if (dto.getWorkingLocation() != null) existing.setWorkingLocation(dto.getWorkingLocation());
+        if (dto.getWorkingLocationAddress() != null) existing.setWorkingLocationAddress(dto.getWorkingLocationAddress());
         if (dto.getComputerNoInPayslip() != null) existing.setComputerNoInPayslip(dto.getComputerNoInPayslip());
         if (dto.getSalaryPayingOffice() != null) existing.setSalaryPayingOffice(dto.getSalaryPayingOffice());
         if (dto.getOfficeTelephone() != null) existing.setOfficeTelephone(dto.getOfficeTelephone());
@@ -72,11 +89,13 @@ public class MemberApplicationService {
         if (dto.getScholarshipDeathDonationPensionAmount() != null)
             existing.setScholarshipDeathDonationPensionAmount(dto.getScholarshipDeathDonationPensionAmount());
 
+        if (dto.getNomineeFullName() != null) existing.setNomineeFullName(dto.getNomineeFullName());
+        if (dto.getNomineeRelationship() != null) existing.setNomineeRelationship(dto.getNomineeRelationship());
+        if (dto.getIdentification() != null) existing.setIdentification(dto.getIdentification());
+        if (dto.getIdentificationNumber() != null) existing.setIdentificationNumber(dto.getIdentificationNumber());
+        if (dto.getIdentificationDetails() != null) existing.setIdentificationDetails(dto.getIdentificationDetails());
+        if (dto.getNomineeAddress() != null) existing.setNomineeAddress(dto.getNomineeAddress());
         if (dto.getRejoinFlag() != null) existing.setRejoinFlag(dto.getRejoinFlag());
-
-        Member_Application saved = memberApplicationRepository.save(existing);
-
-        return modelMapper.map(saved, MemberApplicationDTO.class);
     }
 
     public String deleteMemberApplication(Long id) {

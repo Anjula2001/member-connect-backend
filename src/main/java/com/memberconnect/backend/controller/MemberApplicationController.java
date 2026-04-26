@@ -2,7 +2,6 @@ package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.dto.MemberApplicationDTO;
 import com.memberconnect.backend.enums.ApplicationStatus;
-import com.memberconnect.backend.model.Member_Application;
 import com.memberconnect.backend.service.MemberApplicationService;
 
 import org.springframework.beans.factory.annotation.Autowired;
