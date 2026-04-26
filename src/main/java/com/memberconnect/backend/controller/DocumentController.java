@@ -31,4 +31,9 @@ public class DocumentController {
     public DocumentSummaryDTO getDocumentSummary(@PathVariable Long applicationId) {
         return documentService.getDocumentSummary(applicationId);
     }
+
+    @DeleteMapping("/{id}")
+    public void deleteDocument(@PathVariable Long id) {
+        documentService.deleteDocument(id);
+    }
 }

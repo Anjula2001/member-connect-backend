@@ -15,6 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -105,5 +109,23 @@ public class DocumentService {
                 uploadedMandatoryTypes.size(),
                 uploadedDocs.size()
         );
+    }
+
+    public void deleteDocument(Long id) {
+        UploadDocument doc = uploadDocumentRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found"));
+
+        // Delete physical file from disk if storagePath is known
+        if (doc.getStoragePath() != null && !doc.getStoragePath().isBlank()) {
+            try {
+                Path filePath = Paths.get(doc.getStoragePath());
+                Files.deleteIfExists(filePath);
+            } catch (IOException e) {
+                // Log but don't fail — remove the DB record regardless
+                System.err.println("Warning: could not delete file at " + doc.getStoragePath() + ": " + e.getMessage());
+            }
+        }
+
+        uploadDocumentRepository.deleteById(id);
     }
 }
