@@ -198,6 +198,35 @@ public class UniversityScholarshipService {
         }
     }
 
+    private void validateAnotherApprovedScholarshipWithinYear(UniversityScholarshipRequestDto dto) {
+
+        UniversityScholarshipExamMaster examMaster = examMasterRepository
+                .findByExamYear(dto.getExamYear())
+                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
+
+        LocalDate examLastDate = examMaster.getExamLastDate();
+
+        Member member = memberRepository.findById(dto.getMemberId())
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        LocalDate startDate = examLastDate.minusYears(1);
+        LocalDate endDate = examLastDate;
+
+        boolean exists = scholarshipRequestRepository
+            .existsByMember_MemberIdAndStatusAndAcademicYearStartDateBetween(
+                    member.getMemberId(),
+                    UniversityScholarshipRequestStatus.APPROVED,
+                    startDate,
+                    endDate
+            );
+
+        if (exists) {
+            throw new RuntimeException(
+                    "Another University Scholarship was approved for the Member within a year"
+            );
+        }
+    }
+
     //Check minor account based on birth certificate number
     public Map<String, Object> checkMinorAccount(String birthCertificateNumber) {
         Optional<MinorAccount> minorAccount =
@@ -273,6 +302,8 @@ public class UniversityScholarshipService {
         validateMembershipDuration(dto);
         validateScholarshipRemittanceMonths(dto);
         validateRemainingMonthsSettled(dto);
+        validateAnotherApprovedScholarshipWithinYear(dto);
+        
 
         if (scholarshipRequestRepository.existsByExamNumber(dto.getExamNo())) {
             throw new RuntimeException(
@@ -401,5 +432,6 @@ public class UniversityScholarshipService {
         request.setIncompleteReason(reason);
 
         return scholarshipRequestRepository.save(request);
+
     }
 }

@@ -77,4 +77,19 @@ public class Member {
 
     @Column(name = "SalaryPayingOffice")
     private String salaryPayingOffice;
+
+    public Member() {}
+
+    public Long getId() {
+        return id;
+    }
+    
+    public String getMemberId() {
+        return memberId;
+    }
+
+    public void setMemberId(String memberId) {
+        this.memberId = memberId;
+    }
+
 }

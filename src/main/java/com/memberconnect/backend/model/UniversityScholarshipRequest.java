@@ -97,56 +97,137 @@ public class UniversityScholarshipRequest {
     
     public Long getId() { return id; }
 
-    public LocalDate getRequestDate() { return requestDate; }
-    public void setRequestDate(LocalDate requestDate) { this.requestDate = requestDate; }
+    public LocalDate getRequestDate() { 
+        return requestDate; 
+    }
 
-    public String getStudentName() { return studentName; }
-    public void setStudentName(String studentName) { this.studentName = studentName; }
+    public void setRequestDate(LocalDate requestDate) {
+         this.requestDate = requestDate; 
+    }
 
-    public String getNic() { return nicNumber; }
-    public void setNic(String nic) { this.nicNumber = nic; }
+    public String getStudentName() { 
+        return studentName; 
+    }
 
-    public String getBcNo() { return birthCertificateNumber; }
-    public void setBcNo(String bcNo) { this.birthCertificateNumber = bcNo; }
+    public void setStudentName(String studentName) { 
+        this.studentName = studentName; 
+    }
 
-    public String getAddress() { return address; }
-    public void setAddress(String address) { this.address = address; }
+    public String getNic() {
+         return nicNumber; 
+    }
+    public void setNic(String nic) { 
+        this.nicNumber = nic; 
+    }
 
-    public String getMobile() { return mobile; }
-    public void setMobile(String mobile) { this.mobile = mobile; }
+    public String getBcNo() { 
+        return birthCertificateNumber;
+    }
 
-    public Boolean getIsSchoolApplicant() { return applicantType == com.memberconnect.backend.enums.ApplicantType.SCHOOL_APPICANT; }
-    public void setIsSchoolApplicant(com.memberconnect.backend.enums.ApplicantType SCHOOL_APPLICANT) { applicantType = SCHOOL_APPLICANT; }
+    public void setBcNo(String bcNo) {
+        this.birthCertificateNumber = bcNo; 
+    }
 
-    public String getExamYear() { return examYear; }
-    public void setExamYear(String examYear) { this.examYear = examYear; }
+    public String getAddress() { 
+        return address; 
+    }
+    public void setAddress(String address) { 
+        this.address = address; 
+    }
 
-    public String getExamNo() { return examNumber; }
-    public void setExamNo(String examNo) { this.examNumber = examNo; }
+    public String getMobile() { 
+        return mobile; 
+    }
+    public void setMobile(String mobile) { 
+        this.mobile = mobile; 
+    }
 
-    public String getZScore() { return zScore; }
-    public void setZScore(String zScore) { this.zScore = zScore; }
+    public Boolean getIsSchoolApplicant() { 
+        return applicantType == com.memberconnect.backend.enums.ApplicantType.SCHOOL_APPICANT; 
+    }
+    public void setIsSchoolApplicant(com.memberconnect.backend.enums.ApplicantType SCHOOL_APPLICANT) { 
+        applicantType = SCHOOL_APPLICANT; 
+    }
 
-    public LocalDate getAcademicYearStart() { return academicYearStartDate; }
-    public void setAcademicYearStart(LocalDate academicYearStart) { this.academicYearStartDate = academicYearStart; }
+    public String getExamYear() {
+         return examYear; 
+    }
 
-    public String getAccountNo() { return accountNumber; }
-    public void setAccountNo(String accountNo) { this.accountNumber = accountNo; }
+    public void setExamYear(String examYear) {
+        this.examYear = examYear; 
+    }
 
-    public Bank getBank() { return bank; }
-    public void setBank(Bank bank) { this.bank = bank; }
+    public String getExamNo() { 
+        return examNumber; 
+    }
 
-    public Branch getBranch() { return branch; }
-    public void setBranch(Branch branch) { this.branch = branch; }
+    public void setExamNo(String examNo) { 
+        this.examNumber = examNo; 
+    }
 
-    public University getUniversity() { return university; }
-    public void setUniversity(University university) { this.university = university; }
+    public String getZScore() { 
+        return zScore; 
+    }
 
-    public Program getProgram() { return program; }
-    public void setProgram(Program program) { this.program = program; }
+    public void setZScore(String zScore) { 
+        this.zScore = zScore; 
+    }
 
-    public String getDuration() { return duration; }
-    public void setDuration(String duration) { this.duration = duration; }
+    public LocalDate getAcademicYearStart() { 
+        return academicYearStartDate; 
+    }
+
+    public void setAcademicYearStart(LocalDate academicYearStart) { 
+        this.academicYearStartDate = academicYearStart; 
+    }
+
+    public String getAccountNo() { 
+        return accountNumber; 
+    }
+
+    public void setAccountNo(String accountNo) { 
+        this.accountNumber = accountNo; 
+    }
+
+    public Bank getBank() { 
+        return bank; 
+    }
+
+    public void setBank(Bank bank) { 
+        this.bank = bank; 
+    }
+
+    public Branch getBranch() { 
+        return branch; 
+    }
+
+    public void setBranch(Branch branch) { 
+        this.branch = branch; 
+    }
+
+    public University getUniversity() { 
+        return university; 
+    }
+    
+    public void setUniversity(University university) { 
+        this.university = university; 
+    }
+
+    public Program getProgram() { 
+        return program; 
+    }
+
+    public void setProgram(Program program) { 
+        this.program = program; 
+    }
+
+    public String getDuration() { 
+        return duration; 
+    }
+
+    public void setDuration(String duration) { 
+        this.duration = duration; 
+    }
 
     public String getUniversityScholarshipRequestID() {
         return universityScholarshipRequestID;

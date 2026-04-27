@@ -9,6 +9,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -46,11 +47,17 @@ public class DocumentUploadService {
         doc.setDocumentType(documentType);
         doc.setFileName(file.getOriginalFilename());
         doc.setFilePath(filePath);
+        doc.setFileType(file.getContentType());
+        doc.setUploadedAt(LocalDateTime.now());
 
         return documentUploadRepository.save(doc);
     }
 
     public List<Document> getDocumentsByRequestId(Long requestId) {
         return documentUploadRepository.findByRequest_Id(requestId);
+    }
+
+    public List<Document> getDocumentsByRequestAndType(Long requestId, String documentType) {
+        return documentUploadRepository.findByRequest_IdAndDocumentType(requestId, documentType);
     }
 }

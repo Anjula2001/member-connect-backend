@@ -9,5 +9,7 @@ public interface DocumentUploadRepository extends JpaRepository<Document, Long> 
 
     List<Document> findByRequest_Id(Long requestId);
 
+    List<Document> findByRequest_IdAndDocumentType(Long requestId, String documentType);
+    
     boolean existsByRequest_IdAndDocumentType(Long requestId, String documentType);
 }

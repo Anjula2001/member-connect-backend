@@ -1,5 +1,7 @@
 package com.memberconnect.backend.model;
 
+import java.time.LocalDateTime;
+
 import jakarta.persistence.*;
 
 @Entity
@@ -22,6 +24,12 @@ public class Document {
 
     @Column(name = "file_path", nullable = false)
     private String filePath;
+
+    @Column(name = "file_type")
+    private String fileType;
+
+    @Column(name = "uploaded_at")
+    private LocalDateTime uploadedAt;
 
     public Document() {}
 
@@ -59,6 +67,22 @@ public class Document {
 
     public void setFilePath(String filePath) {
         this.filePath = filePath;
+    }
+
+    public String getFileType() {
+        return fileType;
+    }
+
+    public void setFileType(String fileType) {
+        this.fileType = fileType;
+    }
+
+    public LocalDateTime getUploadedAt() {
+        return uploadedAt;
+    }
+
+    public void setUploadedAt(LocalDateTime uploadedAt) {
+        this.uploadedAt = uploadedAt;
     }
 }
 
