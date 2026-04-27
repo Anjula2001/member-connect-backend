@@ -27,6 +27,8 @@ public class UniversityScholarshipRequestDto {
     private String hasMinorAccount;
     private String minorAccountMonths;
 
+    private Long memberId;
+
     public UniversityScholarshipRequestDto() {}
 
     public LocalDate getRequestDate() {
@@ -179,5 +181,13 @@ public class UniversityScholarshipRequestDto {
 
     public void setMinorAccountMonths(String minorAccountMonths) {
         this.minorAccountMonths = minorAccountMonths;
+    }
+
+    public Long getMemberId() {
+        return memberId;
+    }
+
+    public void setMemberId(Long memberId) {
+        this.memberId = memberId;
     }
 }

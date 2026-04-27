@@ -19,6 +19,8 @@ import com.memberconnect.backend.repository.UniversityProgramRepository;
 import com.memberconnect.backend.repository.UniversityRepository;
 import com.memberconnect.backend.repository.UniversityScholarshipRequestRepository;
 import org.springframework.stereotype.Service;
+import com.memberconnect.backend.model.Member;
+import com.memberconnect.backend.repository.MemberRepository;
 
 import java.util.List;
 import java.util.Map;
@@ -34,6 +36,7 @@ public class UniversityScholarshipService {
     private final BankRepository bankRepository;
     private final BranchRepository branchRepository;
     private final MinorAccountRepository minorAccountRepository;
+    private final MemberRepository memberRepository;
 
     public UniversityScholarshipService(
             UniversityRepository universityRepository,
@@ -42,7 +45,8 @@ public class UniversityScholarshipService {
             UniversityScholarshipRequestRepository scholarshipRequestRepository,
             BankRepository bankRepository,
             BranchRepository branchRepository,
-            MinorAccountRepository minorAccountRepository
+            MinorAccountRepository minorAccountRepository,
+            MemberRepository memberRepository
 
     ) {
         this.universityRepository = universityRepository;
@@ -52,6 +56,7 @@ public class UniversityScholarshipService {
         this.bankRepository = bankRepository;
         this.branchRepository = branchRepository;
         this.minorAccountRepository = minorAccountRepository;
+        this.memberRepository = memberRepository;
     }
    
     //Check minor account based on birth certificate number
@@ -121,6 +126,9 @@ public class UniversityScholarshipService {
 
     // Save university scholarship request
     public UniversityScholarshipRequest saveRequest(UniversityScholarshipRequestDto dto) {
+        
+        Member member = memberRepository.findById(dto.getMemberId())
+                .orElseThrow(() -> new RuntimeException("Member not found"));
 
         if (scholarshipRequestRepository.existsByExamNumber(dto.getExamNo())) {
             throw new RuntimeException(
@@ -157,7 +165,8 @@ public class UniversityScholarshipService {
         }
 
         UniversityScholarshipRequest request = new UniversityScholarshipRequest();
-
+        
+        request.setMember(member);
         request.setRequestDate(dto.getRequestDate());
         request.setStudentName(dto.getStudentName());
         request.setNic(dto.getNic());
