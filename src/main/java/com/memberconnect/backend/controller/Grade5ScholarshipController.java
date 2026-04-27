@@ -1,6 +1,7 @@
 package com.memberconnect.backend.controller;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.memberconnect.backend.dto.Grade5StudentDTO;
 import com.memberconnect.backend.model.Grade5ScholarshipRequest;
+import com.memberconnect.backend.model.MinorSavingsAccount;
 import com.memberconnect.backend.service.Grade5ScholarshipService;
 
 @RestController
@@ -25,7 +27,7 @@ public class Grade5ScholarshipController {
     @Autowired
     private Grade5ScholarshipService service;
 
-    // ✅ Validate exam number
+    // Validate exam number
     @GetMapping("/exists")
     public Map<String, Boolean> checkExamNumber(
             @RequestParam String examNo
@@ -38,7 +40,7 @@ public class Grade5ScholarshipController {
         return response;
     }
 
-    // ✅ Save full request
+    // Save full request
     @PostMapping("/save")
     public ResponseEntity<?> saveRequest(@RequestBody Grade5StudentDTO dto) {
         try {
@@ -48,5 +50,19 @@ public class Grade5ScholarshipController {
             return ResponseEntity.badRequest()
                 .body("Entered Examination Number is duplicating with another Scholarship Request");
         }
-}
+    }
+
+    @GetMapping("/minor-account")
+    public List<MinorSavingsAccount> getMinorAccount(
+            @RequestParam String birthCertificateNo
+    ) {
+        return service.getMinorAccounts(birthCertificateNo);
+    }
+
+    @GetMapping("/fund-details")
+    public Map<String, Object> getFundDetails(
+            @RequestParam String birthCertificateNo
+    ) {
+        return service.getFundDisbursementDetails(birthCertificateNo);
+    }
 }

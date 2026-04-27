@@ -3,6 +3,11 @@ package com.memberconnect.backend.controller;
 import java.io.IOException;
 import java.util.List;
 
+import java.io.File;
+import java.nio.file.Files;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -55,5 +60,37 @@ public class DocumentController {
         documentService.deleteUploadedDocument(uploadedDocumentId);
     }
 
+    @GetMapping("/required-documents-preview")
+    public List<RequiredDocumentDTO> getRequiredDocumentsPreview(
+            @RequestParam String memberId
+    ) {
+        return documentService.getRequiredDocuments(0L, memberId);
+    }
+    
+    @GetMapping("/{requestId}/documents/{requiredDocumentId}/uploaded")
+    public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
+            @PathVariable Long requestId,
+            @PathVariable Long requiredDocumentId
+    ) {
+        return documentService.getUploadedDocumentsByRequiredDocument(
+                requestId,
+                requiredDocumentId
+        );
+    }
 
+    @GetMapping("/documents/{uploadedDocumentId}/download")
+    public ResponseEntity<byte[]> downloadDocument(
+            @PathVariable Long uploadedDocumentId
+    ) throws IOException {
+        UploadedDocument document = documentService.getUploadedDocumentById(uploadedDocumentId);
+
+        File file = new File(document.getFilePath());
+
+        byte[] fileBytes = Files.readAllBytes(file.toPath());
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + document.getFileName() + "\"")
+                .header(HttpHeaders.CONTENT_TYPE, document.getFileType())
+                .body(fileBytes);
+    }
 }

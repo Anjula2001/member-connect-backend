@@ -10,4 +10,5 @@ public interface MinorSavingsAccountRepository
         extends JpaRepository<MinorSavingsAccount, String> {
 
     List<MinorSavingsAccount> findByMemberId(String memberId);
+    List<MinorSavingsAccount> findByBirthCertificateNo(String birthCertificateNo);
 }

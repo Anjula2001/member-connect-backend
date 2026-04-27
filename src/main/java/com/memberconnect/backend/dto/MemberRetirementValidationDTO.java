@@ -8,9 +8,6 @@ public class MemberRetirementValidationDTO {
     private boolean canSubmit;
     private String message;
 
-    public MemberRetirementValidationDTO() {
-    }
-
     public boolean isHasOutstandingLoans() {
         return hasOutstandingLoans;
     }

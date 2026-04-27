@@ -8,6 +8,13 @@ import com.memberconnect.backend.model.UploadedDocument;
 
 public interface UploadedDocumentRepository extends JpaRepository<UploadedDocument, Long> {
     List<UploadedDocument> findByRequestId(Long requestId);
+    
+    List<UploadedDocument> findByRequestIdAndRequiredDocumentId(
+        Long requestId,
+        Long requiredDocumentId
+    );
 
     boolean existsByRequestIdAndRequiredDocumentId(Long requestId, Long requiredDocumentId);
+
+   
 }
