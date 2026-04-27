@@ -1,10 +1,9 @@
 package com.memberconnect.backend.controller;
 
-import java.io.IOException;
-import java.util.List;
-
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
+import java.util.List;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -23,7 +22,7 @@ import com.memberconnect.backend.model.UploadedDocument;
 import com.memberconnect.backend.service.DocumentService;
 
 @RestController
-@RequestMapping("/api/retirement-requests")
+@RequestMapping("/api")
 @CrossOrigin(origins = "http://localhost:3000")
 public class DocumentController {
 
@@ -33,42 +32,52 @@ public class DocumentController {
         this.documentService = documentService;
     }
 
-    @GetMapping("/{requestId}/required-documents")
+    @GetMapping("/{requestType}/{requestId}/required-documents")
     public List<RequiredDocumentDTO> getRequiredDocuments(
+            @PathVariable String requestType,
             @PathVariable Long requestId,
             @RequestParam String memberId
     ) {
-        return documentService.getRequiredDocuments(requestId, memberId);
+        String applicationType = mapRequestTypeToApplicationType(requestType);
+        return documentService.getRequiredDocuments(requestId, memberId, applicationType);
     }
 
-   @PostMapping("/{requestId}/documents/{requiredDocumentId}/upload")
+    @GetMapping("/{requestType}/required-documents-preview")
+    public List<RequiredDocumentDTO> getRequiredDocumentsPreview(
+            @PathVariable String requestType,
+            @RequestParam String memberId
+    ) {
+        String applicationType = mapRequestTypeToApplicationType(requestType);
+        return documentService.getRequiredDocuments(0L, memberId, applicationType);
+    }
+
+    @PostMapping("/{requestType}/{requestId}/documents/{requiredDocumentId}/upload")
     public UploadedDocument uploadDocument(
+            @PathVariable String requestType,
             @PathVariable Long requestId,
             @PathVariable Long requiredDocumentId,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
-        return documentService.uploadDocument(requestId, requiredDocumentId, file);
+        String applicationType = mapRequestTypeToApplicationType(requestType);
+        return documentService.uploadDocument(
+                requestId,
+                requiredDocumentId,
+                file,
+                applicationType
+        );
     }
 
-    @GetMapping("/{requestId}/uploaded-documents")
-    public List<UploadedDocument> getUploadedDocuments(@PathVariable Long requestId) {
+    @GetMapping("/{requestType}/{requestId}/uploaded-documents")
+    public List<UploadedDocument> getUploadedDocuments(
+            @PathVariable String requestType,
+            @PathVariable Long requestId
+    ) {
         return documentService.getUploadedDocuments(requestId);
     }
 
-    @DeleteMapping("/documents/{uploadedDocumentId}")
-    public void deleteUploadedDocument(@PathVariable Long uploadedDocumentId) {
-        documentService.deleteUploadedDocument(uploadedDocumentId);
-    }
-
-    @GetMapping("/required-documents-preview")
-    public List<RequiredDocumentDTO> getRequiredDocumentsPreview(
-            @RequestParam String memberId
-    ) {
-        return documentService.getRequiredDocuments(0L, memberId);
-    }
-    
-    @GetMapping("/{requestId}/documents/{requiredDocumentId}/uploaded")
+    @GetMapping("/{requestType}/{requestId}/documents/{requiredDocumentId}/uploaded")
     public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
+            @PathVariable String requestType,
             @PathVariable Long requestId,
             @PathVariable Long requiredDocumentId
     ) {
@@ -78,19 +87,41 @@ public class DocumentController {
         );
     }
 
-    @GetMapping("/documents/{uploadedDocumentId}/download")
+    @DeleteMapping("/{requestType}/documents/{uploadedDocumentId}")
+    public void deleteUploadedDocument(
+            @PathVariable String requestType,
+            @PathVariable Long uploadedDocumentId
+    ) {
+        documentService.deleteUploadedDocument(uploadedDocumentId);
+    }
+
+    @GetMapping("/{requestType}/documents/{uploadedDocumentId}/download")
     public ResponseEntity<byte[]> downloadDocument(
+            @PathVariable String requestType,
             @PathVariable Long uploadedDocumentId
     ) throws IOException {
-        UploadedDocument document = documentService.getUploadedDocumentById(uploadedDocumentId);
+        UploadedDocument document =
+                documentService.getUploadedDocumentById(uploadedDocumentId);
 
         File file = new File(document.getFilePath());
-
         byte[] fileBytes = Files.readAllBytes(file.toPath());
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + document.getFileName() + "\"")
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + document.getFileName() + "\""
+                )
                 .header(HttpHeaders.CONTENT_TYPE, document.getFileType())
                 .body(fileBytes);
+    }
+
+    private String mapRequestTypeToApplicationType(String requestType) {
+        return switch (requestType) {
+            case "retirement-requests" -> "RETIREMENT";
+            case "grade5-requests" -> "GRADE5";
+            default -> throw new RuntimeException(
+                    "Invalid request type: " + requestType
+            );
+        };
     }
 }

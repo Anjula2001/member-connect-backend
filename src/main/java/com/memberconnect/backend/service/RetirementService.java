@@ -213,7 +213,8 @@ public class RetirementService {
         boolean allMandatoryUploaded =
                 documentService.allMandatoryDocumentsUploaded(
                         request.getId(),
-                        request.getMemberId()
+                        request.getMemberId(),
+                        "RETIREMENT"
                 );
 
         if (!allMandatoryUploaded) {

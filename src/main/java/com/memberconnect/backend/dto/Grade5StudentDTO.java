@@ -10,6 +10,7 @@ public class Grade5StudentDTO{
     private String examinationNumber;
     private Integer districtCutOffMark;
     private Integer marksObtained;
+    private String requestedDate;
   
 
     // Getters & Setters
@@ -47,5 +48,13 @@ public class Grade5StudentDTO{
     public Integer getMarksObtained() { return marksObtained; }
     public void setMarksObtained(Integer marksObtained) {
         this.marksObtained = marksObtained;
+    }
+
+    public String getRequestedDate() {
+        return requestedDate;
+    }
+
+    public void setRequestedDate(String requestedDate) {
+        this.requestedDate = requestedDate;
     }
 }
