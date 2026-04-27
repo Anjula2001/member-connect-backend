@@ -10,18 +10,25 @@ import com.memberconnect.backend.model.MinorAccount;
 import com.memberconnect.backend.model.Program;
 import com.memberconnect.backend.model.University;
 import com.memberconnect.backend.model.UniversityProgram;
+import com.memberconnect.backend.model.UniversityScholarshipExamMaster;
 import com.memberconnect.backend.model.UniversityScholarshipRequest;
 import com.memberconnect.backend.repository.BankRepository;
 import com.memberconnect.backend.repository.BranchRepository;
 import com.memberconnect.backend.repository.MinorAccountRepository;
 import com.memberconnect.backend.repository.ProgramRepository;
+import com.memberconnect.backend.repository.ScholarshipMonthSettlementRepository;
 import com.memberconnect.backend.repository.UniversityProgramRepository;
 import com.memberconnect.backend.repository.UniversityRepository;
+import com.memberconnect.backend.repository.UniversityScholarshipExamMasterRepository;
 import com.memberconnect.backend.repository.UniversityScholarshipRequestRepository;
 import org.springframework.stereotype.Service;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.repository.MemberRepository;
+import com.memberconnect.backend.repository.ScholarshipRemittanceRepository;
+import org.springframework.beans.factory.annotation.Value;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +44,16 @@ public class UniversityScholarshipService {
     private final BranchRepository branchRepository;
     private final MinorAccountRepository minorAccountRepository;
     private final MemberRepository memberRepository;
+    private final UniversityScholarshipExamMasterRepository examMasterRepository;
+    private final int minimumMembershipYears = 5;
+    private final ScholarshipRemittanceRepository remittanceRepository;
+    private final ScholarshipMonthSettlementRepository settlementRepository;
+
+    @Value("${scholarship.required.remitted.months}")
+    private int requiredRemittedMonths;
+
+    @Value("${scholarship.lookback.years}")
+    private int lookbackYears;
 
     public UniversityScholarshipService(
             UniversityRepository universityRepository,
@@ -46,8 +63,10 @@ public class UniversityScholarshipService {
             BankRepository bankRepository,
             BranchRepository branchRepository,
             MinorAccountRepository minorAccountRepository,
-            MemberRepository memberRepository
-
+            MemberRepository memberRepository,
+            UniversityScholarshipExamMasterRepository examMasterRepository,
+            ScholarshipRemittanceRepository remittanceRepository,
+            ScholarshipMonthSettlementRepository settlementRepository
     ) {
         this.universityRepository = universityRepository;
         this.programRepository = programRepository;
@@ -57,8 +76,128 @@ public class UniversityScholarshipService {
         this.branchRepository = branchRepository;
         this.minorAccountRepository = minorAccountRepository;
         this.memberRepository = memberRepository;
+        this.examMasterRepository = examMasterRepository;
+        this.remittanceRepository = remittanceRepository;
+        this.settlementRepository = settlementRepository;
     }
    
+    private void validateMemberActiveOnExamLastDate(UniversityScholarshipRequestDto dto) {
+        
+        Member member = memberRepository.findById(dto.getMemberId())
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        if (member.getStatus() == null || !"ACTIVE".equalsIgnoreCase(member.getStatus().name())) {
+            throw new RuntimeException(
+                    "The University Scholarship Request cannot be saved. The Member is not Active during the selected Exam"
+            );
+        }
+    }
+    
+    private void validateMembershipDuration(UniversityScholarshipRequestDto dto) {
+
+        // Get exam last date
+        UniversityScholarshipExamMaster examMaster = examMasterRepository
+                .findByExamYear(dto.getExamYear())
+                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
+
+        LocalDate examLastDate = examMaster.getExamLastDate();
+
+        // Get member
+        Member member = memberRepository.findById(dto.getMemberId())
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        LocalDate membershipStartDate = member.getMembershipStartDate();
+
+        if (membershipStartDate == null) {
+            throw new RuntimeException("Membership start date not found");
+        }
+
+        // Calculate years
+        long years = ChronoUnit.YEARS.between(membershipStartDate, examLastDate);
+
+        if (years < minimumMembershipYears) {
+            throw new RuntimeException(
+                    "Required continues Membership period does not comply (" + minimumMembershipYears + " years)"
+            );
+        }
+    }
+
+     private void validateScholarshipRemittanceMonths(UniversityScholarshipRequestDto dto) {
+
+        UniversityScholarshipExamMaster examMaster = examMasterRepository
+                .findByExamYear(dto.getExamYear())
+                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
+
+        LocalDate examLastDate = examMaster.getExamLastDate();
+
+        Member member = memberRepository.findById(dto.getMemberId())
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        String endMonth = examLastDate.withDayOfMonth(1).toString().substring(0, 7);
+        String startMonth = examLastDate
+                .minusYears(lookbackYears)
+                .withDayOfMonth(1)
+                .toString()
+                .substring(0, 7);
+
+        long remittedMonthCount =
+                remittanceRepository.countByMember_IdAndRemittedTrueAndRemittanceMonthBetween(
+                        member.getId(),
+                        startMonth,
+                        endMonth
+                );
+
+        if (remittedMonthCount < requiredRemittedMonths) {
+            throw new RuntimeException(
+                    "Scholarship amount was not continuously remitted from the Member for the specified period"
+            );
+        }
+    }
+
+    private void validateRemainingMonthsSettled(UniversityScholarshipRequestDto dto) {
+
+        UniversityScholarshipExamMaster examMaster = examMasterRepository
+                .findByExamYear(dto.getExamYear())
+                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
+
+        LocalDate examLastDate = examMaster.getExamLastDate();
+
+        Member member = memberRepository.findById(dto.getMemberId())
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        LocalDate startDate = examLastDate
+                .minusYears(lookbackYears)
+                .withDayOfMonth(1);
+
+        LocalDate endDate = examLastDate.withDayOfMonth(1);
+
+        LocalDate currentMonth = startDate;
+
+        while (!currentMonth.isAfter(endDate)) {
+            String month = currentMonth.toString().substring(0, 7);
+
+            boolean remitted = remittanceRepository
+                    .existsByMember_IdAndRemittanceMonthAndRemittedTrue(
+                            member.getId(),
+                            month
+                    );
+
+            boolean settled = settlementRepository
+                    .existsByMember_IdAndSettlementMonthAndSettledTrue(
+                            member.getId(),
+                            month
+                    );
+
+            if (!remitted && !settled) {
+                throw new RuntimeException(
+                        "The Scholarship Amounts were not settled for some months"
+                );
+            }
+
+            currentMonth = currentMonth.plusMonths(1);
+        }
+    }
+
     //Check minor account based on birth certificate number
     public Map<String, Object> checkMinorAccount(String birthCertificateNumber) {
         Optional<MinorAccount> minorAccount =
@@ -129,6 +268,11 @@ public class UniversityScholarshipService {
         
         Member member = memberRepository.findById(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        validateMemberActiveOnExamLastDate(dto);
+        validateMembershipDuration(dto);
+        validateScholarshipRemittanceMonths(dto);
+        validateRemainingMonthsSettled(dto);
 
         if (scholarshipRequestRepository.existsByExamNumber(dto.getExamNo())) {
             throw new RuntimeException(

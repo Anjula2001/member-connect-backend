@@ -60,7 +60,6 @@ public class UniversityScholarshipController {
             UniversityScholarshipRequest saved = service.saveRequest(dto);
             return ResponseEntity.ok(saved);
         } catch (RuntimeException ex) {
-            ex.printStackTrace();
             return ResponseEntity.badRequest().body(
                     Map.of("message", ex.getMessage())
             );
@@ -103,5 +102,5 @@ public class UniversityScholarshipController {
         }
     }
 
-    
+
 }
