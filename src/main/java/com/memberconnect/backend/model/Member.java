@@ -1,14 +1,23 @@
 package com.memberconnect.backend.model;
 
-import com.memberconnect.backend.enums.MemberStatus;
-import com.memberconnect.backend.enums.Language;
-import com.memberconnect.backend.enums.Gender;
+import java.time.LocalDate;
 
-import jakarta.persistence.*;
+import com.memberconnect.backend.enums.Gender;
+import com.memberconnect.backend.enums.Language;
+import com.memberconnect.backend.enums.MemberStatus;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -48,7 +57,7 @@ public class Member {
     @Column(name = "NameAsInPayroll")
     private String nameAsInPayroll;
 
-    @Column(name = "NameWithInitials")
+    @Column(name = "name_with_initials")
     private String nameWithInitials;
 
     @Column(name = "DateOfBirth")
@@ -77,4 +86,12 @@ public class Member {
 
     @Column(name = "SalaryPayingOffice")
     private String salaryPayingOffice;
+
+    public String getNameWithInitials() {
+        return nameWithInitials;
+    }
+
+    public void setNameWithInitials(String nameWithInitials) {
+        this.nameWithInitials = nameWithInitials;
+    }
 }

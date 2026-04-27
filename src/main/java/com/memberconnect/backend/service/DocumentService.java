@@ -111,6 +111,16 @@ public class DocumentService {
         return uploadedDocumentRepository.findByRequestId(requestId);
     }
 
+    public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
+                Long requestId,
+                Long requiredDocumentId
+    ) {
+            return uploadedDocumentRepository.findByRequestIdAndRequiredDocumentId(
+                    requestId,
+                    requiredDocumentId
+            );
+    }
+
     public void deleteUploadedDocument(Long uploadedDocumentId) {
         uploadedDocumentRepository.deleteById(uploadedDocumentId);
     }
@@ -121,5 +131,10 @@ public class DocumentService {
         return docs.stream()
                 .filter(RequiredDocumentDTO::isMandatory)
                 .allMatch(RequiredDocumentDTO::isUploaded);
+    }
+
+    public UploadedDocument getUploadedDocumentById(Long uploadedDocumentId) {
+        return uploadedDocumentRepository.findById(uploadedDocumentId)
+                .orElseThrow(() -> new RuntimeException("Uploaded document not found"));
     }
 }

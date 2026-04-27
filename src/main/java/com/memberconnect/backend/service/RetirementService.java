@@ -54,8 +54,10 @@ public class RetirementService {
         return new MemberSummaryDTO(
                 member.getMemberId(),
                 member.getFullName(),
+                member.getNameWithInitials(),
                 member.getNic(),
                 member.getStatus().name()
+                
         );
     }
 
@@ -115,16 +117,16 @@ public class RetirementService {
 
    public RetirementRequestResponseDTO saveRequest(String memberId, MemberRetirementRequestDTO dto) {
 
-    // ✅ Get member
+    //Get member
         Member member = getMemberEntity(memberId);
 
-        // ✅ Validate member status
+        //Validate member status
         if (member.getStatus() != MemberStatus.ACTIVE &&
             member.getStatus() != MemberStatus.RETIREMENT_REQUESTED) {
             throw new RuntimeException("Only ACTIVE or RETIREMENT_REQUESTED member can save retirement request");
         }
 
-        // ✅ Validate required fields
+        //Validate required fields
         if (dto.getRequestedDate() == null || dto.getRequestedDate().isBlank()) {
             throw new RuntimeException("Requested Date is required");
         }
@@ -133,13 +135,13 @@ public class RetirementService {
             throw new RuntimeException("Effective Date is required");
         }
 
-        // ✅ Parse dates
+        //Parse dates
         LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
         LocalDate effectiveDate = LocalDate.parse(dto.getEffectiveDate());
 
         LocalDate today = LocalDate.now();
 
-        // ✅ Validate dates
+        // Validate dates
         if (requestedDate.isAfter(today)) {
             throw new RuntimeException("Requested Date cannot be a future date");
         }
@@ -148,7 +150,7 @@ public class RetirementService {
             throw new RuntimeException("Effective Date cannot be a future date");
         }
 
-        // ✅ Check existing request (ONLY ONE ACTIVE REQUEST)
+        //Check existing request (ONLY ONE ACTIVE REQUEST)
         RetirementRequest existingRequest = requestRepository
                 .findByMemberId(memberId)
                 .stream()
@@ -160,10 +162,10 @@ public class RetirementService {
 
         if (existingRequest != null) {
 
-            // ✅ EDIT MODE
+            // EDIT MODE
             request = existingRequest;
 
-            // ❌ Prevent editing after submit/approval/rejection
+            // Prevent editing after submit/approval/rejection
             if (request.getStatus() == RetirementRequestStatus.SUBMITTED_FOR_APPROVAL) {
                 throw new RuntimeException("Cannot edit after submission");
             }
@@ -175,26 +177,26 @@ public class RetirementService {
 
         } else {
 
-            // ✅ NEW MODE
+            //NEW MODE
             request = new RetirementRequest();
             request.setRequestNo(generateRequestNo());
             request.setMemberId(memberId);
             request.setStatus(RetirementRequestStatus.NEW);
         }
 
-        // ✅ Set / update values
+        //Set / update values
         request.setRequestedDate(requestedDate);
         request.setEffectiveDate(effectiveDate);
         request.setComment(dto.getComment());
 
-        // ✅ Save request
+        //Save request
         RetirementRequest saved = requestRepository.save(request);
 
-        // ✅ Update member status
+        //Update member status
         member.setStatus(MemberStatus.RETIREMENT_REQUESTED);
         memberRepository.save(member);
 
-        // ✅ Return response
+        //Return response
         return mapToResponse(saved);
     }
 

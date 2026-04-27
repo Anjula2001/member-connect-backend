@@ -1,5 +1,7 @@
 package com.memberconnect.backend.model;
 
+import java.time.LocalDate;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -13,6 +15,9 @@ public class MinorSavingsAccount {
     @Column(name = "minor_account_no")
     private String minorAccountNo;
 
+    @Column(name = "birth_certificate_no")
+    private String birthCertificateNo;
+
     @Column(name = "member_id", nullable = false)
     private String memberId;
 
@@ -22,7 +27,12 @@ public class MinorSavingsAccount {
     @Column(name = "balance", nullable = false)
     private float balance;
 
-    // Constructors
+    @Column(name = "remitted_amount")
+    private Double remittedAmount;
+
+    @Column(name = "remitted_date")
+    private LocalDate remittedDate;
+
     public MinorSavingsAccount() {}
 
     public MinorSavingsAccount(String minorAccountNo, String memberId, String holderName, float balance) {
@@ -32,18 +42,59 @@ public class MinorSavingsAccount {
         this.balance = balance;
     }
 
-    // Getters & Setters
-    public String getMinorAccountNo() { return minorAccountNo; }
-    public void setMinorAccountNo(String minorAccountNo) { this.minorAccountNo = minorAccountNo; }
+    public String getMinorAccountNo() {
+        return minorAccountNo;
+    }
 
-    public String getMemberId() { return memberId; }
-    public void setMemberId(String memberId) { this.memberId = memberId; }
+    public void setMinorAccountNo(String minorAccountNo) {
+        this.minorAccountNo = minorAccountNo;
+    }
 
-    public String getHolderName() { return holderName; }
-    public void setHolderName(String holderName) { this.holderName = holderName; }
+    public String getBirthCertificateNo() {
+        return birthCertificateNo;
+    }
 
-    public float getBalance() { return balance; }
-    public void setBalance(float balance) { this.balance = balance; }
+    public void setBirthCertificateNo(String birthCertificateNo) {
+        this.birthCertificateNo = birthCertificateNo;
+    }
+
+    public String getMemberId() {
+        return memberId;
+    }
+
+    public void setMemberId(String memberId) {
+        this.memberId = memberId;
+    }
+
+    public String getHolderName() {
+        return holderName;
+    }
+
+    public void setHolderName(String holderName) {
+        this.holderName = holderName;
+    }
+
+    public float getBalance() {
+        return balance;
+    }
+
+    public void setBalance(float balance) {
+        this.balance = balance;
+    }
+
+    public Double getRemittedAmount() {
+        return remittedAmount;
+    }
+
+    public void setRemittedAmount(Double remittedAmount) {
+        this.remittedAmount = remittedAmount;
+    }
+
+    public LocalDate getRemittedDate() {
+        return remittedDate;
+    }
+
+    public void setRemittedDate(LocalDate remittedDate) {
+        this.remittedDate = remittedDate;
+    }
 }
-    
-
