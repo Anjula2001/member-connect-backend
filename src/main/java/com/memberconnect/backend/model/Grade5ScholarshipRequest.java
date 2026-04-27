@@ -1,5 +1,7 @@
 package com.memberconnect.backend.model;
 
+import java.time.LocalDate;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -16,8 +18,20 @@ public class Grade5ScholarshipRequest {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "RequestedDate")
+    private LocalDate requestedDate;
+
     @Column(name = "StudentName")
     private String studentName;
+
+    @Column(name = "RequestNo")
+    private String requestNo;
+
+    @Column(name = "MemberId")
+    private String memberId;
+
+    @Column(name = "Status")
+    private String status;
 
     @Column(name = "BirthCertificateNumber")
     private String birthCertificateNumber;
@@ -37,7 +51,20 @@ public class Grade5ScholarshipRequest {
     @Column(name = "MarksObtained")
     private Integer marksObtained;
 
-    // Getters & Setters
+    @Column(name = "DistrictCutOffMark")
+    private Integer districtCutOffMark;
+
+    @Column(name = "IncompleteReason")
+    private String incompleteReason;
+
+    public Integer getDistrictCutOffMark() {
+        return districtCutOffMark;
+    }
+
+    public void setDistrictCutOffMark(Integer districtCutOffMark) {
+        this.districtCutOffMark = districtCutOffMark;
+    }
+    
     public Long getId() { 
         return id; 
     }
@@ -89,6 +116,46 @@ public class Grade5ScholarshipRequest {
     }
     public void setMarksObtained(Integer marksObtained) {
         this.marksObtained = marksObtained;
+    }
+
+    public String getRequestNo() {
+        return requestNo;
+    }
+
+    public void setRequestNo(String requestNo) {
+        this.requestNo = requestNo;
+    }
+
+    public String getMemberId() {
+        return memberId;
+    }
+
+    public void setMemberId(String memberId) {
+        this.memberId = memberId;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public LocalDate getRequestedDate() {
+        return requestedDate;
+    }
+
+    public void setRequestedDate(LocalDate requestedDate) {
+        this.requestedDate = requestedDate;
+    }
+
+     public String getIncompleteReason() {
+        return incompleteReason;
+    }
+
+    public void setIncompleteReason(String incompleteReason) {
+        this.incompleteReason = incompleteReason;
     }
 }
 

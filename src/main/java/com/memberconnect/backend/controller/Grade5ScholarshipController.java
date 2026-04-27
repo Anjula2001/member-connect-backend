@@ -8,7 +8,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -42,13 +44,15 @@ public class Grade5ScholarshipController {
 
     // Save full request
     @PostMapping("/save")
-    public ResponseEntity<?> saveRequest(@RequestBody Grade5StudentDTO dto) {
+    public ResponseEntity<?> saveRequest(
+            @RequestParam String memberId,
+            @RequestBody Grade5StudentDTO dto
+    ) {
         try {
-            Grade5ScholarshipRequest saved = service.saveRequest(dto);
+            Grade5ScholarshipRequest saved = service.saveRequest(memberId, dto);
             return ResponseEntity.ok(saved);
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest()
-                .body("Entered Examination Number is duplicating with another Scholarship Request");
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
@@ -64,5 +68,27 @@ public class Grade5ScholarshipController {
             @RequestParam String birthCertificateNo
     ) {
         return service.getFundDisbursementDetails(birthCertificateNo);
+    }
+
+   @GetMapping("/{memberId}/request")
+    public ResponseEntity<?> getLatestRequest(
+            @PathVariable String memberId
+    ) {
+        Grade5ScholarshipRequest request = service.getLatestRequest(memberId);
+
+        if (request == null) {
+            return ResponseEntity.ok().body(null); // send JSON null
+        }
+
+        return ResponseEntity.ok(request);
+    }
+
+    @PutMapping("/{requestId}/mark-incomplete")
+    public Grade5ScholarshipRequest markIncomplete(
+            @PathVariable Long requestId,
+            @RequestBody Map<String, String> body
+    ) {
+        String reason = body.get("reason");
+        return service.markIncomplete(requestId, reason);
     }
 }

@@ -15,6 +15,5 @@ public interface UploadedDocumentRepository extends JpaRepository<UploadedDocume
     );
 
     boolean existsByRequestIdAndRequiredDocumentId(Long requestId, Long requiredDocumentId);
-
-   
+    
 }

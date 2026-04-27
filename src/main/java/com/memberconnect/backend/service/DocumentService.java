@@ -33,15 +33,22 @@ public class DocumentService {
         this.minorSavingsAccountRepository = minorSavingsAccountRepository;
     }
 
-    public List<RequiredDocumentDTO> getRequiredDocuments(Long requestId, String memberId) {
+    public List<RequiredDocumentDTO> getRequiredDocuments(
+            Long requestId,
+            String memberId,
+            String applicationType
+    ) {
         List<String> types = new ArrayList<>();
-        types.add("RETIREMENT");
 
-        boolean hasMinorSavings =
-                !minorSavingsAccountRepository.findByMemberId(memberId).isEmpty();
+        types.add(applicationType);
 
-        if (hasMinorSavings) {
-            types.add("RETIREMENT_MINOR");
+        if ("RETIREMENT".equals(applicationType)) {
+            boolean hasMinorSavings =
+                    !minorSavingsAccountRepository.findByMemberId(memberId).isEmpty();
+
+            if (hasMinorSavings) {
+                types.add("RETIREMENT_MINOR");
+            }
         }
 
         List<RequiredDocument> requiredDocs =
@@ -63,7 +70,8 @@ public class DocumentService {
     public UploadedDocument uploadDocument(
             Long requestId,
             Long requiredDocumentId,
-            MultipartFile file
+            MultipartFile file,
+            String applicationType
     ) {
         try {
             if (file == null || file.isEmpty()) {
@@ -72,7 +80,7 @@ public class DocumentService {
 
             String uploadDir = System.getProperty("user.dir")
                     + File.separator + "uploads"
-                    + File.separator + "retirement"
+                    + File.separator + applicationType.toLowerCase()
                     + File.separator + requestId;
 
             File dir = new File(uploadDir);
@@ -112,21 +120,26 @@ public class DocumentService {
     }
 
     public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
-                Long requestId,
-                Long requiredDocumentId
+            Long requestId,
+            Long requiredDocumentId
     ) {
-            return uploadedDocumentRepository.findByRequestIdAndRequiredDocumentId(
-                    requestId,
-                    requiredDocumentId
-            );
+        return uploadedDocumentRepository.findByRequestIdAndRequiredDocumentId(
+                requestId,
+                requiredDocumentId
+        );
     }
 
     public void deleteUploadedDocument(Long uploadedDocumentId) {
         uploadedDocumentRepository.deleteById(uploadedDocumentId);
     }
 
-    public boolean allMandatoryDocumentsUploaded(Long requestId, String memberId) {
-        List<RequiredDocumentDTO> docs = getRequiredDocuments(requestId, memberId);
+    public boolean allMandatoryDocumentsUploaded(
+            Long requestId,
+            String memberId,
+            String applicationType
+    ) {
+        List<RequiredDocumentDTO> docs =
+                getRequiredDocuments(requestId, memberId, applicationType);
 
         return docs.stream()
                 .filter(RequiredDocumentDTO::isMandatory)

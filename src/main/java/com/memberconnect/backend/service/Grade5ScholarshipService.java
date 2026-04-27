@@ -1,5 +1,6 @@
 package com.memberconnect.backend.service;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,17 +33,19 @@ public class Grade5ScholarshipService {
     }
 
     // Save request
-    public Grade5ScholarshipRequest saveRequest(Grade5StudentDTO dto) {
+    public Grade5ScholarshipRequest saveRequest(String memberId, Grade5StudentDTO dto)  {
 
         // Prevent duplicate
         if (repository.existsByExaminationNumber(dto.getExaminationNumber())) {
             throw new RuntimeException("Examination number already exists");
         }
 
-        
-
         Grade5ScholarshipRequest entity = new Grade5ScholarshipRequest();
-
+        
+        entity.setRequestNo(generateRequestNo());
+        entity.setRequestedDate(LocalDate.parse(dto.getRequestedDate()));
+        entity.setMemberId(memberId);
+        entity.setStatus("NEW");
         entity.setStudentName(dto.getStudentName());
         entity.setExaminationNumber(dto.getExaminationNumber());
         entity.setExamYear(dto.getExamYear());
@@ -50,6 +53,7 @@ public class Grade5ScholarshipService {
         entity.setBirthCertificateNumber(dto.getBirthCertificateNumber());
         entity.setSchool(dto.getStudentSchool());
         entity.setDistrict(dto.getSchoolDistrict());
+        entity.setDistrictCutOffMark(dto.getDistrictCutOffMark());
        
         List<MinorSavingsAccount> accounts =
                 minorRepo.findByBirthCertificateNo(dto.getBirthCertificateNumber());
@@ -65,6 +69,22 @@ public class Grade5ScholarshipService {
         return repository.save(entity);
     }
 
+    private String generateRequestNo() {
+        int year = LocalDate.now().getYear();
+        String prefix = "G5-" + year + "-";
+
+        return repository.findTopByRequestNoStartingWithOrderByRequestNoDesc(prefix)
+                .map(lastRequest -> {
+                    String lastNo = lastRequest.getRequestNo();
+
+                    int lastSeq = Integer.parseInt(
+                            lastNo.substring(lastNo.lastIndexOf("-") + 1)
+                    );
+
+                    return prefix + String.format("%03d", lastSeq + 1);
+                })
+                .orElse(prefix + "001");
+    }
     public Map<String, Object> getFundDisbursementDetails(String birthCertificateNo) {
 
         List<MinorSavingsAccount> accounts =
@@ -97,6 +117,22 @@ public class Grade5ScholarshipService {
         result.put("doubleAmount", eligibleMonths >= 36);
 
         return result;
+    }
+
+    public Grade5ScholarshipRequest getLatestRequest(String memberId) {
+        return repository
+            .findTopByMemberIdOrderByIdDesc(memberId)
+            .orElse(null);
+    }
+
+    public Grade5ScholarshipRequest markIncomplete(Long requestId, String reason) {
+        Grade5ScholarshipRequest request = repository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
+
+        request.setStatus("INCOMPLETE");
+        request.setIncompleteReason(reason);
+
+        return repository.save(request);
     }
     
 }
