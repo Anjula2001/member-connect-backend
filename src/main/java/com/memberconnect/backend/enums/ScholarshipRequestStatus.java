@@ -1,5 +1,13 @@
 package com.memberconnect.backend.enums;
 
-public class ScholarshipRequestStatus {
-    
+public enum ScholarshipRequestStatus {
+    NEW,
+    SUBMITTED_FOR_NORMAL_APPROVAL,
+    SUBMITTED_FOR_DEVIATION_APPROVAL,
+    ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST,
+    ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST,
+    REJECTED,
+    APPROVED,
+    INACTIVE,
+    INCOMPLETE
 }

@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.memberconnect.backend.dto.Grade5StudentDTO;
+import com.memberconnect.backend.enums.ScholarshipRequestStatus;
 import com.memberconnect.backend.model.Grade5ScholarshipRequest;
 import com.memberconnect.backend.model.MinorSavingsAccount;
 import com.memberconnect.backend.repository.Grade5ScholarshipRepository;
@@ -134,5 +135,23 @@ public class Grade5ScholarshipService {
 
         return repository.save(request);
     }
-    
+    public Grade5ScholarshipRequest submitRequest(Long requestId, String status) {
+
+        Grade5ScholarshipRequest request = repository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
+
+        if (!"NEW".equals(request.getStatus()) && !"INCOMPLETE".equals(request.getStatus())) {
+            throw new RuntimeException("Only NEW or INCOMPLETE requests can be submitted");
+        }
+
+        if (!ScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_APPROVAL.name().equals(status)
+                && !ScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_APPROVAL.name().equals(status)) {
+            throw new RuntimeException("Invalid submit status");
+        }
+
+        request.setStatus(status);
+        request.setIncompleteReason(null);
+
+        return repository.save(request);
+    }
 }
