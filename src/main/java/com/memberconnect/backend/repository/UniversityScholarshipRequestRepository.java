@@ -12,6 +12,8 @@ public interface UniversityScholarshipRequestRepository
 
     boolean existsByExamNumber(String examNumber);
 
+        java.util.Optional<UniversityScholarshipRequest> findByUniversityScholarshipRequestID(String universityScholarshipRequestID);
+
     boolean existsByMember_MemberIdAndStatusAndAcademicYearStartDateBetween(
             String memberId,
             UniversityScholarshipRequestStatus status,

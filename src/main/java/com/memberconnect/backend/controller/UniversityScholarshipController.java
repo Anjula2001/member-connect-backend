@@ -107,4 +107,13 @@ public class UniversityScholarshipController {
         return ResponseEntity.ok(service.getAllScholarshipRequests());
     }
 
+    @GetMapping("/university-scholarships/{requestId}")
+    public ResponseEntity<?> getRequestByRequestId(@PathVariable String requestId) {
+        try {
+            return ResponseEntity.ok(service.getScholarshipRequestByRequestId(requestId));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+    
 }

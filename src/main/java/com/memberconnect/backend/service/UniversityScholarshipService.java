@@ -233,14 +233,67 @@ public class UniversityScholarshipService {
                 .stream()
                 .map(request -> new UniversityScholarshipListDto(
                         request.getId(),
+                        request.getMember() != null ? request.getMember().getMemberId() : null,
                         request.getUniversityScholarshipRequestID(),
                         request.getStudentName(),
                         request.getMember() != null ? request.getMember().getFullName() : "",
                         request.getUniversity() != null ? request.getUniversity().getName() : "",
-                        request.getStatus() != null ? request.getStatus().name() : ""
+                        request.getStatus() != null ? request.getStatus().name() : "",
+                        request.getNic() != null ? request.getNic() : "",
+                        request.getBcNo() != null ? request.getBcNo() : "",
+                        request.getAddress() != null ? request.getAddress() : "",
+                        request.getMobile() != null ? request.getMobile() : "",
+                        request.getApplicantType() != null ? request.getApplicantType().name() : "",
+                        request.getExamYear() != null ? request.getExamYear() : "",
+                        request.getExamNo() != null ? request.getExamNo() : "",
+                        request.getZScore() != null ? request.getZScore() : "",
+                        request.getProgram() != null ? request.getProgram().getName() : "",
+                        request.getDuration() != null ? request.getDuration() : "",
+                        request.getRequestDate(),
+                        request.getAcademicYearStart(),
+                        request.getHasMinorAccount() != null ? request.getHasMinorAccount().name() : "",
+                        request.getMinorAccountMonths() != null ? request.getMinorAccountMonths() : "",
+                        request.getBank() != null ? request.getBank().getName() : "",
+                        request.getBranch() != null ? request.getBranch().getName() : "",
+                        request.getAccountNo() != null ? request.getAccountNo() : "",
+                        request.getIncompleteReason() != null ? request.getIncompleteReason() : ""
                 ))
                 .toList();
         }
+
+    public UniversityScholarshipListDto getScholarshipRequestByRequestId(String requestId) {
+        UniversityScholarshipRequest request = scholarshipRequestRepository
+                .findByUniversityScholarshipRequestID(requestId)
+                .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
+
+        return new UniversityScholarshipListDto(
+                request.getId(),
+                request.getMember() != null ? request.getMember().getMemberId() : null,
+                request.getUniversityScholarshipRequestID(),
+                request.getStudentName(),
+                request.getMember() != null ? request.getMember().getFullName() : "",
+                request.getUniversity() != null ? request.getUniversity().getName() : "",
+                request.getStatus() != null ? request.getStatus().name() : "",
+                request.getNic() != null ? request.getNic() : "",
+                request.getBcNo() != null ? request.getBcNo() : "",
+                request.getAddress() != null ? request.getAddress() : "",
+                request.getMobile() != null ? request.getMobile() : "",
+                request.getApplicantType() != null ? request.getApplicantType().name() : "",
+                request.getExamYear() != null ? request.getExamYear() : "",
+                request.getExamNo() != null ? request.getExamNo() : "",
+                request.getZScore() != null ? request.getZScore() : "",
+                request.getProgram() != null ? request.getProgram().getName() : "",
+                request.getDuration() != null ? request.getDuration() : "",
+                request.getRequestDate(),
+                request.getAcademicYearStart(),
+                request.getHasMinorAccount() != null ? request.getHasMinorAccount().name() : "",
+                request.getMinorAccountMonths() != null ? request.getMinorAccountMonths() : "",
+                request.getBank() != null ? request.getBank().getName() : "",
+                request.getBranch() != null ? request.getBranch().getName() : "",
+                request.getAccountNo() != null ? request.getAccountNo() : "",
+                request.getIncompleteReason() != null ? request.getIncompleteReason() : ""
+        );
+    }
 
     //Check minor account based on birth certificate number
     public Map<String, Object> checkMinorAccount(String birthCertificateNumber) {
