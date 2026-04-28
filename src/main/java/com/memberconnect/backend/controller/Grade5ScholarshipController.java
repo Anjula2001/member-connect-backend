@@ -91,4 +91,22 @@ public class Grade5ScholarshipController {
         String reason = body.get("reason");
         return service.markIncomplete(requestId, reason);
     }
+
+    @PutMapping("/{requestId}/submit")
+    public ResponseEntity<?> submitRequest(
+            @PathVariable Long requestId,
+            @RequestBody Map<String, String> body
+    ) {
+        try {
+            String status = body.get("status");
+
+            Grade5ScholarshipRequest updated =
+                    service.submitRequest(requestId, status);
+
+            return ResponseEntity.ok(updated);
+
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

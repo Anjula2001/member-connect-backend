@@ -3,6 +3,9 @@ package com.memberconnect.backend.service;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.modelmapper.ModelMapper;
+import org.modelmapper.TypeToken;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.memberconnect.backend.dto.MemberRetirementRequestDTO;
@@ -28,6 +31,17 @@ public class RetirementService {
     private final LoanRepository loanRepository;
     private final LoanObligationRepository obligationRepository;
     private final DocumentService documentService;
+    
+    @Autowired
+    private RetirementRequestRepository repository;
+
+    @Autowired
+    private ModelMapper modelMapper;
+
+    public List<RetirementRequest> getAllRequests() {
+        List<RetirementRequest> requests = repository.findAll();
+        return modelMapper.map(requests, new TypeToken<List<RetirementRequest>>() {}.getType());
+    }
 
     public RetirementService(
             MemberRepository memberRepository,
@@ -276,16 +290,18 @@ public class RetirementService {
     }
 
    private RetirementRequestResponseDTO mapToResponse(RetirementRequest request) {
-    return new RetirementRequestResponseDTO(
-            request.getId(),
-            request.getRequestNo(),
-            request.getMemberId(),
-            request.getRequestedDate() != null ? request.getRequestedDate().toString() : null,
-            request.getEffectiveDate() != null ? request.getEffectiveDate().toString() : null,
-            request.getComment(),
-            request.getStatus().name(),
-            request.getIncompleteReason(),
-            request.getRejectReason()
-    );
-}
+        return new RetirementRequestResponseDTO(
+                request.getId(),
+                request.getRequestNo(),
+                request.getMemberId(),
+                request.getRequestedDate() != null ? request.getRequestedDate().toString() : null,
+                request.getEffectiveDate() != null ? request.getEffectiveDate().toString() : null,
+                request.getComment(),
+                request.getStatus().name(),
+                request.getIncompleteReason(),
+                request.getRejectReason()
+        );
+    }
+    
+    
 }
