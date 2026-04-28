@@ -2,12 +2,12 @@ package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.model.Document;
 import com.memberconnect.backend.service.DocumentUploadService;
-
-
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/documents")
@@ -30,6 +30,7 @@ public class DocumentController {
             Document doc = documentService.uploadDocument(requestId, documentType, file);
             return ResponseEntity.ok(doc);
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
@@ -49,4 +50,9 @@ public class DocumentController {
         );
     }
 
+    @GetMapping("/download/{documentId}")
+    public ResponseEntity<Resource> downloadDocument(@PathVariable Long documentId)
+            throws IOException {
+        return documentService.downloadDocument(documentId);
+    }
 }

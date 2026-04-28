@@ -1,8 +1,7 @@
 package com.memberconnect.backend.model;
 
-import java.time.LocalDateTime;
-
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "uploaded_documents")

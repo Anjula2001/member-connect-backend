@@ -26,6 +26,7 @@ import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.repository.MemberRepository;
 import com.memberconnect.backend.repository.ScholarshipRemittanceRepository;
 import org.springframework.beans.factory.annotation.Value;
+import com.memberconnect.backend.dto.UniversityScholarshipListDto;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -226,6 +227,20 @@ public class UniversityScholarshipService {
             );
         }
     }
+
+    public List<UniversityScholarshipListDto> getAllScholarshipRequests() {
+        return scholarshipRequestRepository.findAll()
+                .stream()
+                .map(request -> new UniversityScholarshipListDto(
+                        request.getId(),
+                        request.getUniversityScholarshipRequestID(),
+                        request.getStudentName(),
+                        request.getMember() != null ? request.getMember().getFullName() : "",
+                        request.getUniversity() != null ? request.getUniversity().getName() : "",
+                        request.getStatus() != null ? request.getStatus().name() : ""
+                ))
+                .toList();
+        }
 
     //Check minor account based on birth certificate number
     public Map<String, Object> checkMinorAccount(String birthCertificateNumber) {

@@ -102,5 +102,9 @@ public class UniversityScholarshipController {
         }
     }
 
+    @GetMapping("/university-scholarships")
+    public ResponseEntity<?> getAllRequests() {
+        return ResponseEntity.ok(service.getAllScholarshipRequests());
+    }
 
 }
