@@ -2,9 +2,12 @@ package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.dto.ProgramOptionDto;
 import com.memberconnect.backend.dto.UniversityScholarshipRequestDto;
+import com.memberconnect.backend.enums.UniversityScholarshipRequestStatus;
 import com.memberconnect.backend.model.University;
 import com.memberconnect.backend.model.UniversityScholarshipRequest;
+import com.memberconnect.backend.repository.UniversityScholarshipRequestRepository;
 import com.memberconnect.backend.service.UniversityScholarshipService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,6 +18,9 @@ import java.util.Map;
 @RequestMapping("/api")
 @CrossOrigin(origins = "http://localhost:3000")
 public class UniversityScholarshipController {
+
+    @Autowired
+    private UniversityScholarshipRequestRepository universityScholarshipRepository;
 
     private final UniversityScholarshipService service;
 
@@ -132,6 +138,26 @@ public class UniversityScholarshipController {
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
         }
+    }
+
+    @PostMapping("/university-scholarships/reject/{requestId}")
+    public ResponseEntity<UniversityScholarshipRequest> rejectScholarship(
+            @PathVariable String requestId,
+            @RequestBody Map<String, String> body
+    ) {
+        String reason = body.get("decisionReason"); // frontend key stays same
+
+        UniversityScholarshipRequest request =
+                universityScholarshipRepository.findByUniversityScholarshipRequestID(requestId)
+                        .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
+
+        request.setStatus(UniversityScholarshipRequestStatus.REJECTED);
+        request.setRejectReason(reason); 
+
+        UniversityScholarshipRequest saved =
+                universityScholarshipRepository.save(request);
+
+        return ResponseEntity.ok(saved);
     }
     
 }

@@ -199,4 +199,6 @@ public class UniversityScholarshipRequestDto {
     public void setFollowDeviationProcess(Boolean followDeviationProcess) {
         this.followDeviationProcess = followDeviationProcess;
     }
+
+
 }

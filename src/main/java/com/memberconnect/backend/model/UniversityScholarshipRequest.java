@@ -96,6 +96,9 @@ public class UniversityScholarshipRequest {
     @Column(name = "follow_deviation_process")
     private Boolean followDeviationProcess;
 
+    @Column(name = "reject_reason")
+    private String rejectReason;
+
     public UniversityScholarshipRequest() {}
     
     public Long getId() { return id; }
@@ -263,6 +266,22 @@ public class UniversityScholarshipRequest {
     
     public void setMember(Member member) {
         this.member = member;
+    }
+
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    public void setRejectReason(String rejectReason) {
+        this.rejectReason = rejectReason;
+    }
+
+    public UniversityScholarshipRequestStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(UniversityScholarshipRequestStatus status) {
+        this.status = status;
     }
 }
 
