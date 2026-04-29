@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -18,6 +19,18 @@ public class BoardApprovalList {
 
     @Column(unique = true)
     private String listId;
+
+    @Column(name = "BoardMeetingId")
+    private Long boardMeetingId;
+
+    @Column(name = "BoardMeetingDate")
+    private LocalDate boardMeetingDate;
+
+    @Column(name = "ApplicationIds", columnDefinition = "TEXT")
+    private String applicationIdsCsv;
+
+    @Column(name = "Status")
+    private String status;
 
     @Column(name = "CreatedAt")
     private LocalDateTime createdAt;
