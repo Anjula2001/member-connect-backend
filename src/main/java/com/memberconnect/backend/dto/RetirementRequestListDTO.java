@@ -27,4 +27,5 @@ public class RetirementRequestListDTO {
     private Boolean hasOutstandingLoans;
     private Boolean hasLoanObligations;
     private String location;
+
 }
