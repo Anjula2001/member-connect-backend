@@ -28,6 +28,7 @@ public class UniversityScholarshipRequestDto {
     private String minorAccountMonths;
 
     private Long memberId;
+    private Boolean followDeviationProcess;
 
     public UniversityScholarshipRequestDto() {}
 
@@ -189,5 +190,13 @@ public class UniversityScholarshipRequestDto {
 
     public void setMemberId(Long memberId) {
         this.memberId = memberId;
+    }
+
+    public Boolean getFollowDeviationProcess() {
+        return followDeviationProcess;
+    }
+
+    public void setFollowDeviationProcess(Boolean followDeviationProcess) {
+        this.followDeviationProcess = followDeviationProcess;
     }
 }

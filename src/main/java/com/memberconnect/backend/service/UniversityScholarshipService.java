@@ -46,6 +46,7 @@ public class UniversityScholarshipService {
     private final MinorAccountRepository minorAccountRepository;
     private final MemberRepository memberRepository;
     private final UniversityScholarshipExamMasterRepository examMasterRepository;
+        private final com.memberconnect.backend.repository.ScholarshipConfigRepository scholarshipConfigRepository;
     private final int minimumMembershipYears = 5;
     private final ScholarshipRemittanceRepository remittanceRepository;
     private final ScholarshipMonthSettlementRepository settlementRepository;
@@ -66,6 +67,7 @@ public class UniversityScholarshipService {
             MinorAccountRepository minorAccountRepository,
             MemberRepository memberRepository,
             UniversityScholarshipExamMasterRepository examMasterRepository,
+            com.memberconnect.backend.repository.ScholarshipConfigRepository scholarshipConfigRepository,
             ScholarshipRemittanceRepository remittanceRepository,
             ScholarshipMonthSettlementRepository settlementRepository
     ) {
@@ -78,6 +80,7 @@ public class UniversityScholarshipService {
         this.minorAccountRepository = minorAccountRepository;
         this.memberRepository = memberRepository;
         this.examMasterRepository = examMasterRepository;
+                this.scholarshipConfigRepository = scholarshipConfigRepository;
         this.remittanceRepository = remittanceRepository;
         this.settlementRepository = settlementRepository;
     }
@@ -438,6 +441,35 @@ public class UniversityScholarshipService {
         request.setBank(bank);
         request.setBranch(branch);
 
+        // followDeviationProcess flag (optional, future UI/backend control)
+        boolean followDeviation = Boolean.TRUE.equals(dto.getFollowDeviationProcess());
+
+        // Determine eligibility period (months) from ScholarshipConfig; default to 6 months
+        int eligibilityMonths = scholarshipConfigRepository.findByConfigKey("scholarship.eligibility.period.months")
+                .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue)
+                .orElse(6);
+
+        // If request date is provided and exam info is available, check eligibility window
+        try {
+                UniversityScholarshipExamMaster examMaster = examMasterRepository
+                        .findByExamYear(dto.getExamYear())
+                        .orElse(null);
+
+                if (dto.getRequestDate() != null && examMaster != null) {
+                        LocalDate examLastDate = examMaster.getExamLastDate();
+                        LocalDate earliestAllowed = examLastDate.minusMonths(eligibilityMonths);
+
+                        LocalDate reqDate = dto.getRequestDate();
+                        if (reqDate.isBefore(earliestAllowed) || reqDate.isAfter(examLastDate)) {
+                                followDeviation = true;
+                        }
+                }
+        } catch (Exception ignored) {
+        // If any config or exam master lookup fails, do not block save; leave followDeviation as provided
+        }
+
+        request.setFollowDeviationProcess(followDeviation);
+
         request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
 
         // Set status NEW
@@ -483,6 +515,24 @@ public class UniversityScholarshipService {
 
         return scholarshipRequestRepository.save(request);
     }
+
+        // Approve request by committee and forward to appropriate board list
+        public UniversityScholarshipRequest approveRequest(Long id) {
+                UniversityScholarshipRequest request = scholarshipRequestRepository.findById(id)
+                                .orElseThrow(() -> new RuntimeException("Request not found"));
+
+                if (request.getStatus() != UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
+                        throw new RuntimeException("Only requests submitted for committee approval can be approved");
+                }
+
+                if (Boolean.TRUE.equals(request.getFollowDeviationProcess())) {
+                        request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL);
+                } else {
+                        request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_BOARD_APPROVAL);
+                }
+
+                return scholarshipRequestRepository.save(request);
+        }
     
     private boolean checkDocumentsUploaded(Long requestId) {
         return true; // temporary

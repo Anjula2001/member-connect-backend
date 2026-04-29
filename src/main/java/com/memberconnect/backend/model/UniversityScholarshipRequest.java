@@ -93,6 +93,9 @@ public class UniversityScholarshipRequest {
     @Column(name = "incomplete_reason")
     private String incompleteReason;
 
+    @Column(name = "follow_deviation_process")
+    private Boolean followDeviationProcess;
+
     public UniversityScholarshipRequest() {}
     
     public Long getId() { return id; }
@@ -243,6 +246,14 @@ public class UniversityScholarshipRequest {
 
     public void setIncompleteReason(String incompleteReason) {
         this.incompleteReason = incompleteReason;
+    }
+
+    public Boolean getFollowDeviationProcess() {
+        return followDeviationProcess;
+    }
+
+    public void setFollowDeviationProcess(Boolean followDeviationProcess) {
+        this.followDeviationProcess = followDeviationProcess;
     }
 
     public Member getMember() {

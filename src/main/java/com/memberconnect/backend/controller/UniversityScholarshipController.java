@@ -102,6 +102,16 @@ public class UniversityScholarshipController {
         }
     }
 
+    @PostMapping("/university-scholarships/approve/{id}")
+    public ResponseEntity<?> approveRequest(@PathVariable Long id) {
+        try {
+            UniversityScholarshipRequest updated = service.approveRequest(id);
+            return ResponseEntity.ok(updated);
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
     @GetMapping("/university-scholarships")
     public ResponseEntity<?> getAllRequests() {
         return ResponseEntity.ok(service.getAllScholarshipRequests());
