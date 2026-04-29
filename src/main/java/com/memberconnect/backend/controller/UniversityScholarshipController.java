@@ -66,10 +66,23 @@ public class UniversityScholarshipController {
         }
     }
 
-    @PostMapping("/university-scholarships/submit/{id}")
-    public ResponseEntity<?> submitRequest(@PathVariable Long id) {
+    @PutMapping("/university-scholarships/{requestId}")
+    public ResponseEntity<?> updateRequest(
+            @PathVariable String requestId,
+            @RequestBody UniversityScholarshipRequestDto dto
+    ) {
         try {
-            return ResponseEntity.ok(service.submitRequest(id));
+            UniversityScholarshipRequest updated = service.updateRequestByRequestId(requestId, dto);
+            return ResponseEntity.ok(updated);
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/university-scholarships/submit/{requestId}")
+    public ResponseEntity<?> submitRequest(@PathVariable String requestId) {
+        try {
+            return ResponseEntity.ok(service.submitRequest(requestId));
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
         }
@@ -84,28 +97,23 @@ public class UniversityScholarshipController {
         );
     }
 
-    @PostMapping("/university-scholarships/incomplete/{id}")
+    @PostMapping("/university-scholarships/incomplete/{requestId}")
     public ResponseEntity<?> markIncomplete(
-            @PathVariable Long id,
+            @PathVariable String requestId,
             @RequestBody Map<String, String> body
     ) {
-        try {
-            String reason = body.get("reason");
+        String reason = body.get("reason");
+        UniversityScholarshipRequest updated =
+                service.markAsIncomplete(requestId, reason);
 
-            UniversityScholarshipRequest updated =
-                    service.markAsIncomplete(id, reason);
-
-            return ResponseEntity.ok(updated);
-
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        return ResponseEntity.ok(updated);
     }
 
-    @PostMapping("/university-scholarships/approve/{id}")
-    public ResponseEntity<?> approveRequest(@PathVariable Long id) {
+
+    @PostMapping("/university-scholarships/approve/{requestId}")
+    public ResponseEntity<?> approveRequest(@PathVariable String requestId) {
         try {
-            UniversityScholarshipRequest updated = service.approveRequest(id);
+            UniversityScholarshipRequest updated = service.approveRequest(requestId);
             return ResponseEntity.ok(updated);
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));

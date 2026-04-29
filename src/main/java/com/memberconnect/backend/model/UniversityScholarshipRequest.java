@@ -148,6 +148,7 @@ public class UniversityScholarshipRequest {
     public Boolean getIsSchoolApplicant() { 
         return applicantType == com.memberconnect.backend.enums.ApplicantType.SCHOOL_APPICANT; 
     }
+    
     public void setIsSchoolApplicant(com.memberconnect.backend.enums.ApplicantType SCHOOL_APPLICANT) { 
         applicantType = SCHOOL_APPLICANT; 
     }

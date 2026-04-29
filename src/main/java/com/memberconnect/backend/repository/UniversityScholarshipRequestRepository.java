@@ -1,9 +1,11 @@
 package com.memberconnect.backend.repository;
 
 import com.memberconnect.backend.enums.UniversityScholarshipRequestStatus;
+
 import com.memberconnect.backend.model.UniversityScholarshipRequest;
 
 import java.time.LocalDate;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -12,7 +14,7 @@ public interface UniversityScholarshipRequestRepository
 
     boolean existsByExamNumber(String examNumber);
 
-        java.util.Optional<UniversityScholarshipRequest> findByUniversityScholarshipRequestID(String universityScholarshipRequestID);
+    Optional<UniversityScholarshipRequest> findByUniversityScholarshipRequestID(String universityScholarshipRequestID);
 
     boolean existsByMember_MemberIdAndStatusAndAcademicYearStartDateBetween(
             String memberId,
@@ -20,4 +22,6 @@ public interface UniversityScholarshipRequestRepository
             LocalDate startDate,
             LocalDate endDate
     );
+
+    
 }

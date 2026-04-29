@@ -85,29 +85,103 @@ public class UniversityScholarshipListDto {
         this.incompleteReason = incompleteReason;
     }
 
-    public Long getId() { return id; }
-    public String getMemberId() { return memberId; }
-    public String getRequestId() { return requestId; }
-    public String getStudentName() { return studentName; }
-    public String getMemberName() { return memberName; }
-    public String getUniversityName() { return universityName; }
-    public String getStatus() { return status; }
-    public String getNic() { return nic; }
-    public String getBirthCertificateNumber() { return birthCertificateNumber; }
-    public String getAddress() { return address; }
-    public String getMobile() { return mobile; }
-    public String getApplicantType() { return applicantType; }
-    public String getExamYear() { return examYear; }
-    public String getExamNumber() { return examNumber; }
-    public String getZScore() { return zScore; }
-    public String getProgramName() { return programName; }
-    public String getDuration() { return duration; }
-    public LocalDate getRequestDate() { return requestDate; }
-    public LocalDate getAcademicYearStartDate() { return academicYearStartDate; }
-    public String getHasMinorAccount() { return hasMinorAccount; }
-    public String getMinorAccountMonths() { return minorAccountMonths; }
-    public String getBankName() { return bankName; }
-    public String getBranchName() { return branchName; }
-    public String getAccountNumber() { return accountNumber; }
-    public String getIncompleteReason() { return incompleteReason; }
+    public Long getId() { 
+        return id; 
+    }
+
+    public String getMemberId() { 
+        return memberId; 
+    }
+
+    public String getRequestId() { 
+        return requestId; 
+    }
+
+    public String getStudentName() { 
+        return studentName; 
+    }
+
+    public String getMemberName() {
+         return memberName;
+    }
+
+    public String getUniversityName() { 
+        return universityName; 
+    }
+
+    public String getStatus() { 
+        return status; 
+    }
+
+    public String getNic() { 
+        return nic; 
+    }
+
+    public String getBirthCertificateNumber() { 
+        return birthCertificateNumber; 
+    }
+
+    public String getAddress() { 
+        return address; 
+    }
+
+    public String getMobile() { 
+        return mobile; 
+    }
+
+    public String getApplicantType() {
+         return applicantType; 
+    }
+
+    public String getExamYear() { 
+        return examYear; 
+    }
+
+    public String getExamNumber() { 
+        return examNumber; 
+    }
+
+    public String getZScore() { 
+        return zScore; 
+    }
+
+    public String getProgramName() { 
+        return programName; 
+    }
+
+    public String getDuration() { 
+        return duration; 
+    }
+
+    public LocalDate getRequestDate() { 
+        return requestDate; 
+    }
+
+    public LocalDate getAcademicYearStartDate() { 
+        return academicYearStartDate; 
+    }
+
+    public String getHasMinorAccount() { 
+        return hasMinorAccount; 
+    }
+
+    public String getMinorAccountMonths() { 
+        return minorAccountMonths; 
+    }
+
+    public String getBankName() { 
+        return bankName; 
+    }
+
+    public String getBranchName() { 
+        return branchName; 
+    }
+
+    public String getAccountNumber() { 
+        return accountNumber; 
+    }
+
+    public String getIncompleteReason() { 
+        return incompleteReason; 
+    }
 }
