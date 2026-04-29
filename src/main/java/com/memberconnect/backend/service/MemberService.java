@@ -45,26 +45,26 @@ public class MemberService {
         }
 
         Member saved = memberRepository.save(member);
-        return modelMapper.map(saved, MemberDTO.class);
+        return convertToDTO(saved);
     }
 
     public List<MemberDTO> getAllMembers() {
         List<Member> members = memberRepository.findAll();
         return members.stream()
-                .map(member -> modelMapper.map(member, MemberDTO.class))
+                .map(this::convertToDTO)
                 .toList();
     }
 
     public MemberDTO getMemberById(Long id) {
         Member member = memberRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
-        return modelMapper.map(member, MemberDTO.class);
+        return convertToDTO(member);
     }
 
     public MemberDTO getMemberByNic(String nic) {
         Member member = memberRepository.findByNic(nic)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found with NIC: " + nic));
-        return modelMapper.map(member, MemberDTO.class);
+        return convertToDTO(member);
     }
 
     public List<MemberDTO> searchMembers(String query, List<MemberStatus> statuses, List<String> locations,
@@ -106,7 +106,7 @@ public class MemberService {
                         return false;
                     return true;
                 })
-                .map(m -> modelMapper.map(m, MemberDTO.class))
+                .map(this::convertToDTO)
                 .toList();
     }
 
@@ -115,7 +115,7 @@ public class MemberService {
                 .orElseThrow(() -> new RuntimeException("Member not found"));
         applyNonNullFields(existing, dto);
         Member updated = memberRepository.save(existing);
-        return modelMapper.map(updated, MemberDTO.class);
+        return convertToDTO(updated);
     }
 
     public String deleteMember(Long id) {
@@ -173,6 +173,14 @@ public class MemberService {
 
         member.setStatus(status);
 
-        return modelMapper.map(memberRepository.save(member), MemberDTO.class);
+        return convertToDTO(memberRepository.save(member));
+    }
+
+    private MemberDTO convertToDTO(Member member) {
+        MemberDTO dto = modelMapper.map(member, MemberDTO.class);
+        if (member.getApplication() != null) {
+            dto.setApplicationId(member.getApplication().getId());
+        }
+        return dto;
     }
 }
