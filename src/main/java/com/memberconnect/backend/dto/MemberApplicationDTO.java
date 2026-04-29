@@ -36,6 +36,7 @@ public class MemberApplicationDTO {
     private String educationalZone ;
     private String workingLocation ;
     private String workingLocationAddress;
+    private String computerNumnberinPayslip;
     private String privateTelephone;
     private String mobileNumber;
     private String emailAddress;
@@ -49,6 +50,15 @@ public class MemberApplicationDTO {
     private BigDecimal specialDepositAmount;
     private BigDecimal fixedDepositAmount;
     private BigDecimal scholarshipDeathDonationPensionAmount;
-    private Boolean rejoinFlag;
 
+    private Boolean rejoinFlag;
+    private String boardDecisionReason;
+
+    public String getBoardDecisionReason() {
+        return boardDecisionReason;
+    }
+
+    public void setBoardDecisionReason(String boardDecisionReason) {
+        this.boardDecisionReason = boardDecisionReason;
+    }
 }
