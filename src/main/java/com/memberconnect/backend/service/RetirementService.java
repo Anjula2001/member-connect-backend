@@ -3,9 +3,6 @@ package com.memberconnect.backend.service;
 import java.time.LocalDate;
 import java.util.List;
 
-import org.modelmapper.ModelMapper;
-import org.modelmapper.TypeToken;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.memberconnect.backend.dto.MemberRetirementRequestDTO;
@@ -31,17 +28,6 @@ public class RetirementService {
     private final LoanRepository loanRepository;
     private final LoanObligationRepository obligationRepository;
     private final DocumentService documentService;
-    
-    @Autowired
-    private RetirementRequestRepository repository;
-
-    @Autowired
-    private ModelMapper modelMapper;
-
-    public List<RetirementRequest> getAllRequests() {
-        List<RetirementRequest> requests = repository.findAll();
-        return modelMapper.map(requests, new TypeToken<List<RetirementRequest>>() {}.getType());
-    }
 
     public RetirementService(
             MemberRepository memberRepository,
@@ -55,6 +41,13 @@ public class RetirementService {
         this.loanRepository = loanRepository;
         this.obligationRepository = obligationRepository;
         this.documentService = documentService;
+    }
+
+    public List<RetirementRequestResponseDTO> getAllRequests() {
+        return requestRepository.findAll()
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
     }
 
     public Member getMemberEntity(String memberId) {
@@ -290,16 +283,34 @@ public class RetirementService {
     }
 
    private RetirementRequestResponseDTO mapToResponse(RetirementRequest request) {
+        Member member = memberRepository.findByMemberId(request.getMemberId())
+                .orElse(null);
+        
+
+        boolean hasLoanBalance = loanRepository
+            .existsByMemberIdAndBalanceGreaterThan(request.getMemberId(), 0.0);
+
+   
+        boolean hasIndirectObligations = obligationRepository
+            .existsByMemberId(request.getMemberId());
+
         return new RetirementRequestResponseDTO(
                 request.getId(),
                 request.getRequestNo(),
                 request.getMemberId(),
+                member != null ? member.getFullName() : null,
+                member != null ? member.getNameAsInPayroll() : null,
+                member != null ? member.getNameWithInitials() : null,
+                member != null ? member.getNic() : null,
                 request.getRequestedDate() != null ? request.getRequestedDate().toString() : null,
                 request.getEffectiveDate() != null ? request.getEffectiveDate().toString() : null,
                 request.getComment(),
                 request.getStatus().name(),
                 request.getIncompleteReason(),
-                request.getRejectReason()
+                request.getRejectReason(),
+
+                hasLoanBalance,
+                hasIndirectObligations
         );
     }
     

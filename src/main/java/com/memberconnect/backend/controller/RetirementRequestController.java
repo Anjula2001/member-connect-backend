@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.memberconnect.backend.dto.MemberRetirementRequestDTO;
 import com.memberconnect.backend.dto.RetirementRequestResponseDTO;
-import com.memberconnect.backend.model.RetirementRequest;
 import com.memberconnect.backend.service.RetirementService;
 
 @RestController
@@ -30,7 +29,7 @@ public class RetirementRequestController {
 
     // Get all retirement requests
     @GetMapping
-    public List<RetirementRequest> getAllRetirementRequests() {
+    public List<RetirementRequestResponseDTO> getAllRetirementRequests() {
         return retirementService.getAllRequests();
     }
 
@@ -68,4 +67,22 @@ public class RetirementRequestController {
         String reason = body.get("reason");
         return retirementService.markIncomplete(requestId, reason);
     }
+
+    @PutMapping("/{requestId}/approve")
+    public RetirementRequestResponseDTO approveRequest(
+            @PathVariable Long requestId
+    ) {
+        return retirementService.approveRequest(requestId);
+    }
+
+    @PutMapping("/{requestId}/reject")
+    public RetirementRequestResponseDTO rejectRequest(
+            @PathVariable Long requestId,
+            @RequestBody Map<String, String> body
+    ) {
+        String reason = body.get("reason");
+        return retirementService.rejectRequest(requestId, reason);
+    }
+
+   
 }
