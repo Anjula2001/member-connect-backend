@@ -12,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
 import java.util.List;
+import java.lang.reflect.Field;
 
 @Service
 @Transactional
@@ -95,7 +96,18 @@ public class MemberApplicationService {
         if (dto.getIdentificationNumber() != null) existing.setIdentificationNumber(dto.getIdentificationNumber());
         if (dto.getIdentificationDetails() != null) existing.setIdentificationDetails(dto.getIdentificationDetails());
         if (dto.getNomineeAddress() != null) existing.setNomineeAddress(dto.getNomineeAddress());
-        if (dto.getRejoinFlag() != null) existing.setRejoinFlag(dto.getRejoinFlag());
+        String boardDecisionReason = readBoardDecisionReason(dto);
+        if (boardDecisionReason != null) existing.setBoardDecisionReason(boardDecisionReason);
+    }
+
+    private String readBoardDecisionReason(MemberApplicationDTO dto) {
+        try {
+            Field field = MemberApplicationDTO.class.getDeclaredField("boardDecisionReason");
+            field.setAccessible(true);
+            return (String) field.get(dto);
+        } catch (ReflectiveOperationException error) {
+            return null;
+        }
     }
 
     public String deleteMemberApplication(Long id) {

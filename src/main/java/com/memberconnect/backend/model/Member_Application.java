@@ -131,4 +131,7 @@ public class Member_Application {
     @Column(name = "RejoinFlag")
     private Boolean rejoinFlag;
 
+    @Column(name = "BoardDecisionReason", length = 2000)
+    private String boardDecisionReason;
+
 }

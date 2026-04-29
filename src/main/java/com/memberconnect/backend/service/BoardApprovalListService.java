@@ -13,7 +13,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -44,6 +46,10 @@ public class BoardApprovalListService {
 		dto.setCreatedAt(entity.getCreatedAt());
 		dto.setProcessedAt(entity.getProcessedAt());
 		dto.setProcessedBy(entity.getProcessedBy());
+		dto.setActualMeetingDate(entity.getActualMeetingDate());
+		dto.setDecision(entity.getDecision());
+		dto.setRejectReason(entity.getRejectReason());
+		dto.setBoardRemarks(entity.getBoardRemarks());
 		return dto;
 	}
 
@@ -155,10 +161,67 @@ public class BoardApprovalListService {
 							applicationDTO.setFixedDepositAmount(application.getFixedDepositAmount());
 							applicationDTO.setScholarshipDeathDonationPensionAmount(application.getScholarshipDeathDonationPensionAmount());
 							applicationDTO.setRejoinFlag(application.getRejoinFlag());
+							writeBoardDecisionReason(applicationDTO, application.getBoardDecisionReason());
 							return applicationDTO;
 						})
 						.orElseThrow(() -> new RuntimeException("Application not found: " + applicationId)))
 				.collect(Collectors.toList());
+	}
+
+	private void writeBoardDecisionReason(MemberApplicationDTO dto, String boardDecisionReason) {
+		try {
+			Field field = MemberApplicationDTO.class.getDeclaredField("boardDecisionReason");
+			field.setAccessible(true);
+			field.set(dto, boardDecisionReason);
+		} catch (ReflectiveOperationException error) {
+			// Ignore if the field is unavailable; the rest of the payload is still valid.
+		}
+	}
+
+	public BoardApprovalListDTO processBoardApprovalList(String listId, BoardApprovalListDTO dto) {
+		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
+				.orElseThrow(() -> new RuntimeException("Board approval list not found"));
+
+		if (dto.getDecision() == null || dto.getDecision().trim().isEmpty()) {
+			throw new RuntimeException("Decision is required");
+		}
+
+		String decision = dto.getDecision().trim();
+		boolean approved = "APPROVE".equalsIgnoreCase(decision);
+		boolean rejected = "REJECT".equalsIgnoreCase(decision);
+		if (!approved && !rejected) {
+			throw new RuntimeException("Decision must be Approve or Reject");
+		}
+
+		if (rejected && (dto.getRejectReason() == null || dto.getRejectReason().trim().isEmpty())) {
+			throw new RuntimeException("Reject reason is required when rejecting applications");
+		}
+
+		LocalDate actualMeetingDate = dto.getActualMeetingDate() != null ? dto.getActualMeetingDate() : LocalDate.now();
+		String boardRemarks = dto.getBoardRemarks();
+		String rejectReason = rejected ? dto.getRejectReason().trim() : null;
+
+		List<String> applicationIds = parseApplicationIds(entity.getApplicationIdsCsv());
+		for (String applicationId : applicationIds) {
+			memberApplicationRepository.findByApplicationID(applicationId).ifPresent(application -> {
+				application.setStatus(approved ? ApplicationStatus.INACTIVE : ApplicationStatus.REJECTED);
+				application.setBoardDecisionReason(rejectReason);
+				memberApplicationRepository.save(application);
+			});
+		}
+
+		entity.setStatus("PROCESSED");
+		entity.setProcessedAt(LocalDateTime.now());
+		entity.setProcessedBy(dto.getProcessedBy() == null || dto.getProcessedBy().trim().isEmpty()
+				? "Head Office User"
+				: dto.getProcessedBy().trim());
+		entity.setActualMeetingDate(actualMeetingDate);
+		entity.setDecision(approved ? "Approve" : "Reject");
+		entity.setRejectReason(rejectReason);
+		entity.setBoardRemarks(boardRemarks);
+
+		BoardApprovalList saved = boardApprovalListRepository.save(entity);
+		return toDto(saved);
 	}
 
 	public String deleteBoardApprovalList(String listId) {

@@ -19,4 +19,8 @@ public class BoardApprovalListDTO {
 	private LocalDateTime createdAt;
 	private LocalDateTime processedAt;
 	private String processedBy;
+	private LocalDate actualMeetingDate;
+	private String decision;
+	private String rejectReason;
+	private String boardRemarks;
 }

@@ -36,6 +36,13 @@ public class BoardApprovalListController {
 		return boardApprovalListService.getApplicationsByListId(listId);
 	}
 
+	@PatchMapping("/processBoardApprovalList/{listId}")
+	public BoardApprovalListDTO processBoardApprovalList(
+			@PathVariable String listId,
+			@RequestBody BoardApprovalListDTO boardApprovalListDTO) {
+		return boardApprovalListService.processBoardApprovalList(listId, boardApprovalListDTO);
+	}
+
 	@DeleteMapping("/deleteBoardApprovalList/{listId}")
 	public String deleteBoardApprovalList(@PathVariable String listId) {
 		return boardApprovalListService.deleteBoardApprovalList(listId);
