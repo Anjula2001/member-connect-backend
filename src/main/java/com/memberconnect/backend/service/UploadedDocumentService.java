@@ -30,7 +30,7 @@ public class UploadedDocumentService {
         this.repository = repository;
     }
 
-    public UploadedDocument upload(Long requestId, Long requiredDocumentId, MultipartFile file) throws IOException {
+    public UploadedDocument upload(String requestId, Long requiredDocumentId, MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File is empty");
         }
@@ -59,21 +59,21 @@ public class UploadedDocumentService {
         return repository.save(ud);
     }
 
-    public List<UploadedDocumentDisplayDto> listByRequest(Long requestId) {
+    public List<UploadedDocumentDisplayDto> listByRequest(String requestId) {
         return repository.findByRequestId(requestId)
                 .stream()
                 .map(d -> new UploadedDocumentDisplayDto(d.getId(), d.getRequiredDocumentId(), d.getFileName(), d.getFileType(), d.getUploadedAt()))
                 .collect(Collectors.toList());
     }
 
-    public List<UploadedDocumentDisplayDto> listByRequestAndRequired(Long requestId, Long requiredDocumentId) {
+    public List<UploadedDocumentDisplayDto> listByRequestAndRequired(String requestId, Long requiredDocumentId) {
         return repository.findByRequestIdAndRequiredDocumentId(requestId, requiredDocumentId)
                 .stream()
                 .map(d -> new UploadedDocumentDisplayDto(d.getId(), d.getRequiredDocumentId(), d.getFileName(), d.getFileType(), d.getUploadedAt()))
                 .collect(Collectors.toList());
     }
 
-    public byte[] download(Long documentId, Long requestId) throws IOException {
+    public byte[] download(Long documentId, String requestId) throws IOException {
         Optional<UploadedDocument> opt = repository.findByIdAndRequestId(documentId, requestId);
         if (opt.isEmpty()) throw new IllegalArgumentException("Document not found");
         UploadedDocument d = opt.get();
@@ -82,12 +82,12 @@ public class UploadedDocumentService {
         return Files.readAllBytes(f.toPath());
     }
 
-    public UploadedDocument getDetails(Long documentId, Long requestId) {
+    public UploadedDocument getDetails(Long documentId, String requestId) {
         return repository.findByIdAndRequestId(documentId, requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Document not found"));
     }
 
-    public void delete(Long documentId, Long requestId) throws IOException {
+    public void delete(Long documentId, String requestId) throws IOException {
         Optional<UploadedDocument> opt = repository.findByIdAndRequestId(documentId, requestId);
         if (opt.isEmpty()) throw new IllegalArgumentException("Document not found");
         UploadedDocument d = opt.get();

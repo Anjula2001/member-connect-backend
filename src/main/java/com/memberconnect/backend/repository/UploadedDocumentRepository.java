@@ -8,11 +8,11 @@ import java.util.Optional;
 
 public interface UploadedDocumentRepository extends JpaRepository<UploadedDocument, Long> {
 
-    List<UploadedDocument> findByRequestId(Long requestId);
+    List<UploadedDocument> findByRequestId(String requestId);
 
-    List<UploadedDocument> findByRequestIdAndRequiredDocumentId(Long requestId, Long requiredDocumentId);
+    List<UploadedDocument> findByRequestIdAndRequiredDocumentId(String requestId, Long requiredDocumentId);
 
-    Optional<UploadedDocument> findByIdAndRequestId(Long id, Long requestId);
+    Optional<UploadedDocument> findByIdAndRequestId(Long id, String requestId);
 
-    void deleteByRequestId(Long requestId);
+    void deleteByRequestId(String requestId);
 }

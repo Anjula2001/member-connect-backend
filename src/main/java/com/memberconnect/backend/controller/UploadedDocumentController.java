@@ -28,7 +28,7 @@ public class UploadedDocumentController {
 
     @PostMapping("/upload")
     public ResponseEntity<UploadedDocumentUploadDto> upload(
-            @RequestParam Long requestId,
+            @RequestParam String requestId,
             @RequestParam Long requiredDocumentId,
             @RequestParam("file") MultipartFile file
     ) {
@@ -43,7 +43,7 @@ public class UploadedDocumentController {
     }
 
     @GetMapping
-    public ResponseEntity<?> listByRequest(@RequestParam Long requestId) {
+    public ResponseEntity<?> listByRequest(@RequestParam String requestId) {
         try {
             List<UploadedDocumentDisplayDto> list = service.listByRequest(requestId);
             return ResponseEntity.ok(list);
@@ -53,7 +53,7 @@ public class UploadedDocumentController {
     }
 
     @GetMapping("/by-required")
-    public ResponseEntity<?> listByRequired(@RequestParam Long requestId, @RequestParam Long requiredDocumentId) {
+    public ResponseEntity<?> listByRequired(@RequestParam String requestId, @RequestParam Long requiredDocumentId) {
         try {
             List<UploadedDocumentDisplayDto> list = service.listByRequestAndRequired(requestId, requiredDocumentId);
             return ResponseEntity.ok(list);
@@ -63,7 +63,7 @@ public class UploadedDocumentController {
     }
 
     @GetMapping("/download/{id}")
-    public ResponseEntity<byte[]> download(@PathVariable Long id, @RequestParam Long requestId) {
+    public ResponseEntity<byte[]> download(@PathVariable Long id, @RequestParam String requestId) {
         try {
             byte[] content = service.download(id, requestId);
             UploadedDocument d = service.getDetails(id, requestId);
@@ -79,7 +79,7 @@ public class UploadedDocumentController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable Long id, @RequestParam Long requestId) {
+    public ResponseEntity<?> delete(@PathVariable Long id, @RequestParam String requestId) {
         try {
             service.delete(id, requestId);
             return ResponseEntity.ok(Map.of("success", true, "message", "Deleted"));

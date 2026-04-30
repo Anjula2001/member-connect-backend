@@ -17,7 +17,8 @@ public class UploadedDocument {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Long requestId;
+    
+    private String requestId;
 
     private Long requiredDocumentId;
 
@@ -34,11 +35,11 @@ public class UploadedDocument {
         return id;
     }
 
-    public Long getRequestId() {
+    public String getRequestId() {
         return requestId;
     }
 
-    public void setRequestId(Long requestId) {
+    public void setRequestId(String requestId) {
         this.requestId = requestId;
     }
 
