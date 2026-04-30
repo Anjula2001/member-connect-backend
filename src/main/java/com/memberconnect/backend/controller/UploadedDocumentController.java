@@ -42,7 +42,7 @@ public class UploadedDocumentController {
         }
     }
 
-    @GetMapping
+    @GetMapping("/by-request")
     public ResponseEntity<?> listByRequest(@RequestParam String requestId) {
         try {
             List<UploadedDocumentDisplayDto> list = service.listByRequest(requestId);

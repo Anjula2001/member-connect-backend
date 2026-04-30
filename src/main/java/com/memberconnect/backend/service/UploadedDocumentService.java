@@ -62,14 +62,30 @@ public class UploadedDocumentService {
     public List<UploadedDocumentDisplayDto> listByRequest(String requestId) {
         return repository.findByRequestId(requestId)
                 .stream()
-                .map(d -> new UploadedDocumentDisplayDto(d.getId(), d.getRequiredDocumentId(), d.getFileName(), d.getFileType(), d.getUploadedAt()))
+            .map(d -> new UploadedDocumentDisplayDto(
+                d.getId(),
+                d.getRequestId(),
+                d.getRequiredDocumentId(),
+                d.getFileName(),
+                d.getFilePath(),
+                d.getFileType(),
+                d.getUploadedAt()
+            ))
                 .collect(Collectors.toList());
     }
 
     public List<UploadedDocumentDisplayDto> listByRequestAndRequired(String requestId, Long requiredDocumentId) {
         return repository.findByRequestIdAndRequiredDocumentId(requestId, requiredDocumentId)
                 .stream()
-                .map(d -> new UploadedDocumentDisplayDto(d.getId(), d.getRequiredDocumentId(), d.getFileName(), d.getFileType(), d.getUploadedAt()))
+            .map(d -> new UploadedDocumentDisplayDto(
+                d.getId(),
+                d.getRequestId(),
+                d.getRequiredDocumentId(),
+                d.getFileName(),
+                d.getFilePath(),
+                d.getFileType(),
+                d.getUploadedAt()
+            ))
                 .collect(Collectors.toList());
     }
 
