@@ -1,9 +1,8 @@
 package com.memberconnect.backend.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import com.memberconnect.backend.enums.ApplicationStatus;
+import jakarta.persistence.*;
+
 import java.time.LocalDate;
 
 @Entity
@@ -12,6 +11,9 @@ public class BasicProfileChangeRequest {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
+
+    @Enumerated(EnumType.STRING)
+    private ApplicationStatus newStatus;
 
     private LocalDate newDateOfBirth;
     private String newNIC;
@@ -34,8 +36,9 @@ public class BasicProfileChangeRequest {
     public BasicProfileChangeRequest(Integer id, LocalDate newDateOfBirth, String newNIC, String newGender,
                                      String newPreferredLanguage, String newPermanentPrivateAddress,
                                      String newPrivateTelephone, String newMobileNumber, String newEmailAddress,
-                                     String newDesignationId, String newNatureOfOccupation) {
+                                     String newDesignationId, String newNatureOfOccupation,ApplicationStatus newStatus) {
         this.id = id;
+        this.newStatus = newStatus;
         this.newDateOfBirth = newDateOfBirth;
         this.newNIC = newNIC;
         this.newGender = newGender;

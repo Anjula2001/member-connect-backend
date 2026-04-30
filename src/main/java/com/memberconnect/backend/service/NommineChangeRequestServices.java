@@ -1,5 +1,6 @@
 package com.memberconnect.backend.service;
 
+import com.memberconnect.backend.dto.NameChangeRequestDTO;
 import com.memberconnect.backend.dto.NommineChangeRequestDTO;
 import com.memberconnect.backend.model.NameChangeRequest;
 import com.memberconnect.backend.model.NommineChangeRequests;
@@ -11,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
+
 @Service
 @Transactional
 
@@ -25,9 +28,19 @@ public class NommineChangeRequestServices {
  return modelMapper.map(nommineChangeRequests,new TypeToken<List<NommineChangeRequestDTO>>(){}.getType());
  }
 
- public String NommineChangeRequestaddService(NommineChangeRequestDTO nommineChangeRequestDTO){
+ public NommineChangeRequestDTO getNommineChangeRequestById(Integer id){
+     Optional <NommineChangeRequests> optionalEntity =  nominneChangeRequestRepo.findById(id);
+
+     if(optionalEntity.isPresent()){
+         return modelMapper.map(optionalEntity.get(),NommineChangeRequestDTO.class);
+     }else {
+         return null;
+     }
+ }
+
+ public NommineChangeRequestDTO NommineChangeRequestaddService(NommineChangeRequestDTO nommineChangeRequestDTO){
 nominneChangeRequestRepo.save(modelMapper.map(nommineChangeRequestDTO,NommineChangeRequests.class));
-return "success";
+return nommineChangeRequestDTO;
 
  }
 
@@ -46,5 +59,7 @@ return "success";
      return modelMapper.map(updatedNommineChangeRequest,NommineChangeRequestDTO.class);
 
  }
+
+
 
 }

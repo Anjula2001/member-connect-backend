@@ -1,5 +1,8 @@
 package com.memberconnect.backend.dto;
 
+import com.memberconnect.backend.enums.ApplicationStatus;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -25,6 +28,9 @@ public class BasicProfileChangeRequestDTO {
 
     @NotBlank(message = "Gender is required")
     private String newGender;
+
+    @Enumerated(EnumType.STRING)
+    private ApplicationStatus newStatus;
 
     private String newPreferredLanguage;
 
