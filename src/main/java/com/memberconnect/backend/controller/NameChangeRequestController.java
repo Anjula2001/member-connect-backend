@@ -12,7 +12,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api5/namechange")
-
+@CrossOrigin(origins = "http://localhost:3000")
 
 public class NameChangeRequestController {
     @Autowired
@@ -24,16 +24,21 @@ public class NameChangeRequestController {
     public List<NameChangeRequestDTO> getNameChangeRequests(){
         return nameChangeRequstServices.NameChangeRequestgetAll();
     }
+    @GetMapping("/getnamebyid/{id}")
+    public NameChangeRequestDTO getNameChangeRequestsById(@PathVariable Integer id){
+        NameChangeRequestDTO entity = nameChangeRequstServices.getRequestById(id);
+        return entity;
+    }
     @PostMapping("/savenamechange")
-    public String saveNameChangeRequest(@RequestBody NameChangeRequestDTO nameChangeRequestDTO){
+    public NameChangeRequestDTO saveNameChangeRequest(@RequestBody NameChangeRequestDTO nameChangeRequestDTO){
         return nameChangeRequstServices.addNameChangeRequestService(nameChangeRequestDTO);
     }
-    @PutMapping("/updateNommine")
+    @PutMapping("/updatenamechange")
     public NameChangeRequestDTO updateNameChangeRequest(@PathVariable Integer id , @RequestBody NameChangeRequestDTO nameChangeRequestDTO){
         return nameChangeRequstServices.updateNameChangeRequestService(id,nameChangeRequestDTO);
     }
 
-    @DeleteMapping("/deletnameChange")
+    @DeleteMapping("/deletnameChange/{id}")
     public String deleteNameChangeRequest(@PathVariable Integer id){
         return nameChangeRequstServices.deleteNameChangeRequestService(id);
     }

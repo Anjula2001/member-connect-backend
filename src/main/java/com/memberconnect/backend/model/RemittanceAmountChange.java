@@ -1,9 +1,7 @@
 package com.memberconnect.backend.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import com.memberconnect.backend.enums.ApplicationStatus;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 
@@ -15,6 +13,8 @@ public class RemittanceAmountChange {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
+    @Enumerated(EnumType.STRING)
+    private ApplicationStatus newStatus;
     private String newRemittanceAmount;
     private String newRemittanceCurrency;
 }

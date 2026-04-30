@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional
@@ -26,6 +27,18 @@ public class BasicProfileChangeRequestServices {
     public List<BasicProfileChangeRequestDTO> getBasicProfileChangeRequests(){
         List<BasicProfileChangeRequest> basicProfileChangeRequests = basicProfileChangeRequestRepo.findAll();
         return modelMapper.map(basicProfileChangeRequests,new TypeToken<List<BasicProfileChangeRequestDTO>>(){}.getType());
+    }
+    public BasicProfileChangeRequestDTO getRequestById(Integer id) {
+        // Find the entity by ID
+        Optional<BasicProfileChangeRequest> optionalEntity = basicProfileChangeRequestRepo.findById(id);
+
+        if (optionalEntity.isPresent()) {
+            // Map the entity to DTO if found
+            return modelMapper.map(optionalEntity.get(), BasicProfileChangeRequestDTO.class);
+        } else {
+            // Return null or throw a custom exception if not found
+            return null;
+        }
     }
 
     public String saveBasicProfileChangeRequest(BasicProfileChangeRequestDTO basicProfileChangeRequestDTO){
