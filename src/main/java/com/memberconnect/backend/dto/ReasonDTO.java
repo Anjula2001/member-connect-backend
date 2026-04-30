@@ -1,17 +1,15 @@
 package com.memberconnect.backend.dto;
 
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@AllArgsConstructor     
+@NoArgsConstructor
 public class ReasonDTO {
 
     private String reason;
 
-    public ReasonDTO() {
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
 }

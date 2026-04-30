@@ -41,7 +41,7 @@ public class RetirementRequestController {
     ) {
         return retirementService.saveRequest(memberId, dto);
     }
-
+    
     // Get retirement requests by member
     @GetMapping("/member/{memberId}")
     public List<RetirementRequestResponseDTO> getRetirementRequestsByMember(
@@ -51,38 +51,45 @@ public class RetirementRequestController {
     }
 
     // Submit retirement request
-    @PostMapping("/{requestId}/submit")
+    @PostMapping("/{requestNo}/submit")
     public RetirementRequestResponseDTO submitRequest(
-            @PathVariable Long requestId
+            @PathVariable String requestNo
     ) {
-        return retirementService.submitRequest(requestId);
+        return retirementService.submitRequest(requestNo);
     }
 
     // Mark incomplete
-    @PutMapping("/{requestId}/mark-incomplete")
+    @PutMapping("/{requestNo}/mark-incomplete")
     public RetirementRequestResponseDTO markIncomplete(
-            @PathVariable Long requestId,
+            @PathVariable String requestNo,
             @RequestBody Map<String, String> body
     ) {
         String reason = body.get("reason");
-        return retirementService.markIncomplete(requestId, reason);
+        return retirementService.markIncomplete(requestNo, reason);
     }
 
-    @PutMapping("/{requestId}/approve")
+    @PutMapping("/{requestNo}/approve")
     public RetirementRequestResponseDTO approveRequest(
-            @PathVariable Long requestId
+            @PathVariable String requestNo
     ) {
-        return retirementService.approveRequest(requestId);
+        return retirementService.approveRequest(requestNo);
     }
 
-    @PutMapping("/{requestId}/reject")
+    @PutMapping("/{requestNo}/reject")
     public RetirementRequestResponseDTO rejectRequest(
-            @PathVariable Long requestId,
+            @PathVariable String requestNo,
             @RequestBody Map<String, String> body
     ) {
         String reason = body.get("reason");
-        return retirementService.rejectRequest(requestId, reason);
+        return retirementService.rejectRequest(requestNo, reason);
     }
 
+    @PutMapping("/{requestNo}")
+    public RetirementRequestResponseDTO updateRetirementRequest(
+            @PathVariable String requestNo,
+            @RequestBody MemberRetirementRequestDTO dto
+    ) {
+        return retirementService.updateRequest(requestNo, dto);
+    }
    
 }

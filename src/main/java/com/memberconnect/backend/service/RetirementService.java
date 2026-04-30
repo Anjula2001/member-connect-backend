@@ -207,8 +207,8 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
-    public RetirementRequestResponseDTO submitRequest(Long requestId) {
-        RetirementRequest request = requestRepository.findById(requestId)
+    public RetirementRequestResponseDTO submitRequest(String requestNo) {
+        RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
 
         MemberRetirementValidationDTO validation = validateMemberForRetirement(request.getMemberId());
@@ -234,8 +234,8 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
-    public RetirementRequestResponseDTO markIncomplete(Long requestId, String reason) {
-        RetirementRequest request = requestRepository.findById(requestId)
+    public RetirementRequestResponseDTO markIncomplete(String requestNo, String reason) {
+        RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
 
         request.setStatus(RetirementRequestStatus.INCOMPLETE);
@@ -245,8 +245,8 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
-    public RetirementRequestResponseDTO approveRequest(Long requestId) {
-        RetirementRequest request = requestRepository.findById(requestId)
+    public RetirementRequestResponseDTO approveRequest(String requestNo) {
+        RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
 
         request.setStatus(RetirementRequestStatus.APPROVED);
@@ -259,8 +259,8 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
-    public RetirementRequestResponseDTO rejectRequest(Long requestId, String reason) {
-        RetirementRequest request = requestRepository.findById(requestId)
+    public RetirementRequestResponseDTO rejectRequest(String requestNo, String reason) {
+        RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
 
         request.setStatus(RetirementRequestStatus.REJECTED);
@@ -282,7 +282,7 @@ public class RetirementService {
                 .toList();
     }
 
-   private RetirementRequestResponseDTO mapToResponse(RetirementRequest request) {
+    private RetirementRequestResponseDTO mapToResponse(RetirementRequest request) {
         Member member = memberRepository.findByMemberId(request.getMemberId())
                 .orElse(null);
         
@@ -313,6 +313,51 @@ public class RetirementService {
                 hasIndirectObligations
         );
     }
-    
-    
+    public RetirementRequestResponseDTO updateRequest(
+            String requestNo,
+            MemberRetirementRequestDTO dto
+    ) {
+        RetirementRequest request = requestRepository.findByRequestNo(requestNo)
+                .orElseThrow(() -> new RuntimeException("Retirement request not found"));
+
+        if (request.getStatus() == RetirementRequestStatus.SUBMITTED_FOR_APPROVAL ||
+            request.getStatus() == RetirementRequestStatus.APPROVED ||
+            request.getStatus() == RetirementRequestStatus.REJECTED) {
+            throw new RuntimeException("Cannot edit submitted, approved or rejected request");
+        }
+
+        if (dto.getRequestedDate() == null || dto.getRequestedDate().isBlank()) {
+            throw new RuntimeException("Requested Date is required");
+        }
+
+        if (dto.getEffectiveDate() == null || dto.getEffectiveDate().isBlank()) {
+            throw new RuntimeException("Effective Date is required");
+        }
+
+        LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
+        LocalDate effectiveDate = LocalDate.parse(dto.getEffectiveDate());
+        LocalDate today = LocalDate.now();
+
+        if (requestedDate.isAfter(today)) {
+            throw new RuntimeException("Requested Date cannot be a future date");
+        }
+
+        if (effectiveDate.isAfter(today)) {
+            throw new RuntimeException("Effective Date cannot be a future date");
+        }
+
+        request.setRequestedDate(requestedDate);
+        request.setEffectiveDate(effectiveDate);
+        request.setComment(dto.getComment());
+
+        if (request.getStatus() == RetirementRequestStatus.INCOMPLETE) {
+            request.setStatus(RetirementRequestStatus.NEW);
+            request.setIncompleteReason(null);
+        }
+
+        RetirementRequest saved = requestRepository.save(request);
+
+        return mapToResponse(saved);
+    }
+       
 }
