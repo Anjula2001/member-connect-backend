@@ -29,4 +29,7 @@ public interface RetirementRequestRepository extends JpaRepository<RetirementReq
         nativeQuery = true
     )
     Optional<RetirementRequest> findLastRequestByPrefix(String prefix);
+
+    Optional<RetirementRequest> findByRequestNo(String requestNo);
+
 }
