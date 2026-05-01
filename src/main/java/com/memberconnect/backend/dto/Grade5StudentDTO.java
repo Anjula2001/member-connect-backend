@@ -11,6 +11,13 @@ public class Grade5StudentDTO{
     private Integer districtCutOffMark;
     private Integer marksObtained;
     private String requestedDate;
+    private Boolean minorAccountExists;
+    private String minorAccountNumber;
+    private Integer eligibleMonths;
+    private String disbursementOption;
+    private Integer memberAmount;
+    private Integer minorAmount;
+    private Boolean isDoubleAmount;
   
 
     // Getters & Setters
@@ -57,4 +64,25 @@ public class Grade5StudentDTO{
     public void setRequestedDate(String requestedDate) {
         this.requestedDate = requestedDate;
     }
+
+    public Boolean getMinorAccountExists() { return minorAccountExists; }
+    public void setMinorAccountExists(Boolean minorAccountExists) { this.minorAccountExists = minorAccountExists; }
+
+    public String getMinorAccountNumber() { return minorAccountNumber; }
+    public void setMinorAccountNumber(String minorAccountNumber) { this.minorAccountNumber = minorAccountNumber; }
+
+    public Integer getEligibleMonths() { return eligibleMonths; }
+    public void setEligibleMonths(Integer eligibleMonths) { this.eligibleMonths = eligibleMonths; }
+
+    public String getDisbursementOption() { return disbursementOption; }
+    public void setDisbursementOption(String disbursementOption) { this.disbursementOption = disbursementOption; }
+
+    public Integer getMemberAmount() { return memberAmount; }
+    public void setMemberAmount(Integer memberAmount) { this.memberAmount = memberAmount; }
+
+    public Integer getMinorAmount() { return minorAmount; }
+    public void setMinorAmount(Integer minorAmount) { this.minorAmount = minorAmount; }
+
+    public Boolean getIsDoubleAmount() { return isDoubleAmount; }
+    public void setIsDoubleAmount(Boolean isDoubleAmount) { this.isDoubleAmount = isDoubleAmount; }
 }

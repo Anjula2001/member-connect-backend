@@ -55,7 +55,8 @@ public class Grade5ScholarshipController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-
+    
+    // Get minor account details
     @GetMapping("/minor-account")
     public List<MinorSavingsAccount> getMinorAccount(
             @RequestParam String birthCertificateNo
@@ -63,6 +64,7 @@ public class Grade5ScholarshipController {
         return service.getMinorAccounts(birthCertificateNo);
     }
 
+    // Get fund disbursement details
     @GetMapping("/fund-details")
     public Map<String, Object> getFundDetails(
             @RequestParam String birthCertificateNo
@@ -70,7 +72,8 @@ public class Grade5ScholarshipController {
         return service.getFundDisbursementDetails(birthCertificateNo);
     }
 
-   @GetMapping("/{memberId}/request")
+    // Get latest request for member
+    @GetMapping("/{memberId}/request")
     public ResponseEntity<?> getLatestRequest(
             @PathVariable String memberId
     ) {
@@ -83,28 +86,93 @@ public class Grade5ScholarshipController {
         return ResponseEntity.ok(request);
     }
 
-    @PutMapping("/{requestId}/mark-incomplete")
+    // Mark incomplete
+    @PutMapping("/{requestNo}/mark-incomplete")
     public Grade5ScholarshipRequest markIncomplete(
-            @PathVariable Long requestId,
+            @PathVariable String requestNo,
             @RequestBody Map<String, String> body
     ) {
         String reason = body.get("reason");
-        return service.markIncomplete(requestId, reason);
+        return service.markIncomplete(requestNo, reason);
     }
-
-    @PutMapping("/{requestId}/submit")
+    
+    // Submit request
+    @PutMapping("/{requestNo}/submit")
     public ResponseEntity<?> submitRequest(
-            @PathVariable Long requestId,
+            @PathVariable String requestNo,
             @RequestBody Map<String, String> body
     ) {
         try {
             String status = body.get("status");
 
             Grade5ScholarshipRequest updated =
-                    service.submitRequest(requestId, status);
+                    service.submitRequest(requestNo, status);
 
             return ResponseEntity.ok(updated);
 
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // Get exam years for dropdown
+    @GetMapping("/exam-years")
+    public List<Integer> getExamYears() {
+        return service.getExamYears();
+    }
+
+    //get all created scholarship requests
+    @GetMapping("/requests/search")
+    public ResponseEntity<?> searchRequests(
+            @RequestParam(required = false) List<String> years,
+            @RequestParam(required = false) List<String> statuses,
+            @RequestParam(defaultValue = "ALL_DAYS") String receivedOn,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "REQUESTED_DATE") String sortBy,
+            @RequestParam(defaultValue = "ASC") String sortDirection
+    ) {
+        try {
+            return ResponseEntity.ok(
+                    service.searchRequests(
+                            years,
+                            statuses,
+                            receivedOn,
+                            fromDate,
+                            toDate,
+                            search,
+                            sortBy,
+                            sortDirection
+                    )
+            );
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/eligibility/validate")
+    public ResponseEntity<?> validateEligibility(
+            @RequestParam String memberId,
+            @RequestParam Integer examYear
+    ) {
+        try {
+            return ResponseEntity.ok(
+                    service.validateEligibility(memberId, examYear)
+            );
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PutMapping("/{requestNo}/update")
+    public ResponseEntity<?> updateRequest(
+            @PathVariable String requestNo,
+            @RequestBody Grade5StudentDTO dto
+    ) {
+        try {
+            Grade5ScholarshipRequest updated = service.updateRequest(requestNo, dto);
+            return ResponseEntity.ok(updated);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

@@ -275,13 +275,15 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
+    
     public List<RetirementRequestResponseDTO> getRequestsByMember(String memberId) {
         return requestRepository.findByMemberId(memberId)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
     }
-
+    
+    // Get latest request for member
     private RetirementRequestResponseDTO mapToResponse(RetirementRequest request) {
         Member member = memberRepository.findByMemberId(request.getMemberId())
                 .orElse(null);
