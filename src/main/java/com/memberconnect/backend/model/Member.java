@@ -13,7 +13,7 @@ import java.time.LocalDate;
 @Getter
 @Setter
 @Entity
-@Table(name = "Member")
+@Table(name = "member")
 public class Member {
 
     @Id
@@ -27,31 +27,31 @@ public class Member {
     @Column(unique = true)
     private String memberId;
 
-    @Column(name = "MemberType")
+    @Column(name = "member_type")
     private String memberType;
 
     @Enumerated(EnumType.STRING)
     private MemberStatus status;
 
-    @Column(name = "MembershipStartDate")
+    @Column(name = "membership_start_date")
     private LocalDate membershipStartDate;
 
-    @Column(name = "Nic")
+    @Column(name = "nic")
     private String nic;
 
-    @Column(name = "Title")
+    @Column(name = "title")
     private String title;
 
-    @Column(name = "FullName")
+    @Column(name = "full_name")
     private String fullName;
 
-    @Column(name = "NameAsInPayroll")
+    @Column(name = "name_as_in_payroll")
     private String nameAsInPayroll;
 
-    @Column(name = "NameWithInitials")
+    @Column(name = "name_with_initials")
     private String nameWithInitials;
 
-    @Column(name = "DateOfBirth")
+    @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
     @Enumerated(EnumType.STRING)
@@ -60,36 +60,49 @@ public class Member {
     @Enumerated(EnumType.STRING)
     private Language preferredLanguage;
 
-    @Column(name = "PermanentPrivateAddress")
+    @Column(name = "permanent_private_address")
     private String permanentPrivateAddress;
 
-    @Column(name = "PrivateTelephone")
+    @Column(name = "private_telephone")
     private String privateTelephone;
 
-    @Column(name = "MobileNumber")
+    @Column(name = "mobile_number")
     private String mobileNumber;
 
-    @Column(name = "EmailAddress")
+    @Column(name = "email_address")
     private String emailAddress;
+    @ManyToOne
+    @JoinColumn(name = "designation_id")
+    private Designation designation;
 
-    @Column(name = "ComputerNoInPayslip")
+    @ManyToOne
+    @JoinColumn(name = "nature_of_occupation_id")
+    private NatureOfOccupation natureOfOccupation;
+
+    @ManyToOne
+    @JoinColumn(name = "working_location_type_id")
+    private WorkingLocationType workingLocationType;
+
+    @ManyToOne
+    @JoinColumn(name = "working_location_id")
+    private WorkingLocation workingLocation;
+
+    @ManyToOne
+    @JoinColumn(name = "educational_zone_id")
+    private EducationalZone educationalZone;
+
+    @ManyToOne
+    @JoinColumn(name = "educational_district_id")
+    private EducationalDistrict educationalDistrict;
+
+    @Column(name = "working_location_address")
+    private String workingLocationAddress;
+
+    @Column(name = "computer_no_in_payslip")
     private String computerNoInPayslip;
 
-    @Column(name = "SalaryPayingOffice")
+    @Column(name = "salary_paying_office")
     private String salaryPayingOffice;
 
     public Member() {}
-
-    public Long getId() {
-        return id;
-    }
-    
-    public String getMemberId() {
-        return memberId;
-    }
-
-    public void setMemberId(String memberId) {
-        this.memberId = memberId;
-    }
-
 }

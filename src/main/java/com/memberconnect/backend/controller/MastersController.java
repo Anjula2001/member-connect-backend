@@ -2,10 +2,14 @@ package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.model.EducationalDistrict;
 import com.memberconnect.backend.model.EducationalZone;
+import com.memberconnect.backend.model.Designation;
+import com.memberconnect.backend.model.NatureOfOccupation;
 import com.memberconnect.backend.model.WorkingLocation;
 import com.memberconnect.backend.model.WorkingLocationType;
 import com.memberconnect.backend.repository.EducationalDistrictRepository;
 import com.memberconnect.backend.repository.EducationalZoneRepository;
+import com.memberconnect.backend.repository.DesignationRepository;
+import com.memberconnect.backend.repository.NatureOfOccupationRepository;
 import com.memberconnect.backend.repository.WorkingLocationRepository;
 import com.memberconnect.backend.repository.WorkingLocationTypeRepository;
 import org.springframework.web.bind.annotation.*;
@@ -20,17 +24,23 @@ public class MastersController {
     private final WorkingLocationTypeRepository workingLocationTypeRepository;
     private final EducationalDistrictRepository educationalDistrictRepository;
     private final EducationalZoneRepository educationalZoneRepository;
+    private final DesignationRepository designationRepository;
+    private final NatureOfOccupationRepository natureOfOccupationRepository;
     private final WorkingLocationRepository workingLocationRepository;
 
     public MastersController(
             WorkingLocationTypeRepository workingLocationTypeRepository,
             EducationalDistrictRepository educationalDistrictRepository,
             EducationalZoneRepository educationalZoneRepository,
+            DesignationRepository designationRepository,
+            NatureOfOccupationRepository natureOfOccupationRepository,
             WorkingLocationRepository workingLocationRepository
     ) {
         this.workingLocationTypeRepository = workingLocationTypeRepository;
         this.educationalDistrictRepository = educationalDistrictRepository;
         this.educationalZoneRepository = educationalZoneRepository;
+        this.designationRepository = designationRepository;
+        this.natureOfOccupationRepository = natureOfOccupationRepository;
         this.workingLocationRepository = workingLocationRepository;
     }
 
@@ -42,6 +52,16 @@ public class MastersController {
     @GetMapping("/districts")
     public List<EducationalDistrict> getDistricts() {
         return educationalDistrictRepository.findAll();
+    }
+
+    @GetMapping("/designations")
+    public List<Designation> getDesignations() {
+        return designationRepository.findAll();
+    }
+
+    @GetMapping("/nature-of-occupations")
+    public List<NatureOfOccupation> getNatureOfOccupations() {
+        return natureOfOccupationRepository.findAll();
     }
 
     @GetMapping("/educational-zones")
@@ -104,17 +124,17 @@ public class MastersController {
                 );
     }
 
-   private WorkingLocationType findWorkingLocationType(String type) {
-    Long typeId = parseLongOrNull(type);
+    private WorkingLocationType findWorkingLocationType(String type) {
+        Long typeId = parseLongOrNull(type);
 
-    if (typeId != null) {
-        return workingLocationTypeRepository.findById(typeId)
+        if (typeId != null) {
+            return workingLocationTypeRepository.findById(typeId)
+                    .orElseThrow(() -> new RuntimeException("Working location type not found"));
+        }
+
+        return workingLocationTypeRepository.findByNameIgnoreCase(type)
                 .orElseThrow(() -> new RuntimeException("Working location type not found"));
     }
-
-    return workingLocationTypeRepository.findByNameIgnoreCase(type)
-            .orElseThrow(() -> new RuntimeException("Working location type not found"));
-}
 
     private Long parseLongOrNull(String value) {
         try {
