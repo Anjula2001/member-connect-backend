@@ -6,6 +6,9 @@ public class MemberDTO {
     private String name;
     private String nic;
     private String status;
+    private String memberFullName;
+    private String nameWithInitials;
+
 
     public MemberDTO() {
     }
@@ -35,5 +38,13 @@ public class MemberDTO {
 
     public String getStatus() {
         return status;
+    }
+
+    public String getMemberFullName() {
+        return memberFullName;
+    }
+
+    public String getNameWithInitials() {
+        return nameWithInitials;
     }
 }

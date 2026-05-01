@@ -57,6 +57,27 @@ public class Grade5ScholarshipRequest {
     @Column(name = "IncompleteReason")
     private String incompleteReason;
 
+    @Column(name = "MinorAccountExists")
+    private Boolean minorAccountExists;
+
+    @Column(name = "MinorAccountNumber")
+    private String minorAccountNumber;
+
+    @Column(name = "EligibleMonths")
+    private Integer eligibleMonths;
+
+    @Column(name = "DisbursementOption")
+    private String disbursementOption;
+
+    @Column(name = "MemberAmount")
+    private Integer memberAmount;
+
+    @Column(name = "MinorAmount")
+    private Integer minorAmount;
+
+    @Column(name = "IsDoubleAmount")
+    private Boolean isDoubleAmount;
+
     public Integer getDistrictCutOffMark() {
         return districtCutOffMark;
     }
@@ -157,5 +178,26 @@ public class Grade5ScholarshipRequest {
     public void setIncompleteReason(String incompleteReason) {
         this.incompleteReason = incompleteReason;
     }
+
+    public Boolean getMinorAccountExists() { return minorAccountExists; }
+    public void setMinorAccountExists(Boolean minorAccountExists) { this.minorAccountExists = minorAccountExists; }
+
+    public String getMinorAccountNumber() { return minorAccountNumber; }
+    public void setMinorAccountNumber(String minorAccountNumber) { this.minorAccountNumber = minorAccountNumber; }
+
+    public Integer getEligibleMonths() { return eligibleMonths; }
+    public void setEligibleMonths(Integer eligibleMonths) { this.eligibleMonths = eligibleMonths; }
+
+    public String getDisbursementOption() { return disbursementOption; }
+    public void setDisbursementOption(String disbursementOption) { this.disbursementOption = disbursementOption; }
+
+    public Integer getMemberAmount() { return memberAmount; }
+    public void setMemberAmount(Integer memberAmount) { this.memberAmount = memberAmount; }
+
+    public Integer getMinorAmount() { return minorAmount; }
+    public void setMinorAmount(Integer minorAmount) { this.minorAmount = minorAmount; }
+
+    public Boolean getIsDoubleAmount() { return isDoubleAmount; }
+    public void setIsDoubleAmount(Boolean isDoubleAmount) { this.isDoubleAmount = isDoubleAmount; }
 }
 

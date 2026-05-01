@@ -11,8 +11,15 @@ public interface Grade5ScholarshipRepository
 
     boolean existsByExaminationNumber(String examinationNumber);
 
+    boolean existsByExaminationNumberAndRequestNoNot(
+            String examinationNumber,
+            String requestNo
+    );
+
     Optional<Grade5ScholarshipRequest>
         findTopByRequestNoStartingWithOrderByRequestNoDesc(String prefix);
 
     Optional<Grade5ScholarshipRequest> findTopByMemberIdOrderByIdDesc(String memberId);
+
+    Optional<Grade5ScholarshipRequest> findByRequestNo(String requestNo);
 }
