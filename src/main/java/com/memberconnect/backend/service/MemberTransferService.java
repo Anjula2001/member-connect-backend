@@ -68,8 +68,8 @@ public class MemberTransferService {
 
     private void applyDtoToEntity(MemberTransferDto dto, MemberTransferRequest request) {
 
-        if (StringUtils.hasText(dto.getMemberId())) {
-            Member member = memberRepository.findByMemberId(dto.getMemberId().trim())
+        if (dto.getMemberId() != null) {
+            Member member = memberRepository.findById(Long.valueOf(dto.getMemberId()))
                     .orElseThrow(() -> new RuntimeException("Member not found"));
             request.setMember(member);
         }

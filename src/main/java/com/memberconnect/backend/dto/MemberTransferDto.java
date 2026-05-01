@@ -9,7 +9,7 @@ import java.time.LocalDate;
 @Setter
 public class MemberTransferDto {
 
-    private String memberId;
+    private Long memberId;
     private LocalDate requestedDate;
 
     private Long newWorkingLocationTypeId;
