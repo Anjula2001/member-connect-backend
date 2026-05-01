@@ -16,4 +16,8 @@ public class WorkingLocationType {
 
     @Column(name = "name", nullable = false, unique = true)
     private String name;
+
+    @Column(name = "uses_zone", nullable = false)
+    private Boolean usesZone;
+    
 }
