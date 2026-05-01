@@ -31,8 +31,7 @@ public class MemberTransferService {
             EducationalZoneRepository educationalZoneRepository,
             WorkingLocationRepository workingLocationRepository,
             DesignationRepository designationRepository,
-            NatureOfOccupationRepository natureOfOccupationRepository
-    ) {
+            NatureOfOccupationRepository natureOfOccupationRepository) {
         this.memberTransferRepository = memberTransferRepository;
         this.memberRepository = memberRepository;
         this.workingLocationTypeRepository = workingLocationTypeRepository;
@@ -52,34 +51,8 @@ public class MemberTransferService {
                 .orElseThrow(() -> new RuntimeException("Member transfer request not found"));
     }
 
-    public MemberTransferRequest saveRequest(MemberTransferDto dto) {
-        MemberTransferRequest request = new MemberTransferRequest();
-        applyDtoToEntity(dto, request);
-
-        if (request.getStatus() == null) {
-            request.setStatus(MemberTransferStatus.INACTIVE);
-        }
-
-        return memberTransferRepository.save(request);
-    }
-
-    public MemberTransferRequest updateRequest(Long id, MemberTransferDto dto) {
-        MemberTransferRequest request = getRequestById(id);
-        applyDtoToEntity(dto, request);
-        return memberTransferRepository.save(request);
-    }
-
     public MemberTransferRequest submitRequest(MemberTransferDto dto) {
-        MemberTransferRequest request;
-
-        if (dto.getId() != null) {
-            request = getRequestById(dto.getId());
-        } else if (StringUtils.hasText(dto.getRequestId())) {
-            request = memberTransferRepository.findByRequestId(dto.getRequestId())
-                    .orElseThrow(() -> new RuntimeException("Member transfer request not found"));
-        } else {
-            request = new MemberTransferRequest();
-        }
+        MemberTransferRequest request = new MemberTransferRequest();
 
         applyDtoToEntity(dto, request);
 
@@ -108,22 +81,19 @@ public class MemberTransferService {
         if (dto.getNewWorkingLocationTypeId() != null) {
             request.setNewWorkingLocationType(
                     workingLocationTypeRepository.findById(dto.getNewWorkingLocationTypeId())
-                            .orElseThrow(() -> new RuntimeException("Working location type not found"))
-            );
+                            .orElseThrow(() -> new RuntimeException("Working location type not found")));
         }
 
         if (dto.getNewEducationalDistrictId() != null) {
             request.setNewEducationalDistrict(
                     educationalDistrictRepository.findById(dto.getNewEducationalDistrictId())
-                            .orElseThrow(() -> new RuntimeException("Educational district not found"))
-            );
+                            .orElseThrow(() -> new RuntimeException("Educational district not found")));
         }
 
         if (dto.getNewEducationalZoneId() != null) {
             request.setNewEducationalZone(
                     educationalZoneRepository.findById(dto.getNewEducationalZoneId())
-                            .orElseThrow(() -> new RuntimeException("Educational zone not found"))
-            );
+                            .orElseThrow(() -> new RuntimeException("Educational zone not found")));
         }
 
         if (dto.getNewWorkingLocationId() != null) {
@@ -139,15 +109,13 @@ public class MemberTransferService {
         if (dto.getNewDesignationId() != null) {
             request.setNewDesignation(
                     designationRepository.findById(dto.getNewDesignationId())
-                            .orElseThrow(() -> new RuntimeException("Designation not found"))
-            );
+                            .orElseThrow(() -> new RuntimeException("Designation not found")));
         }
 
         if (dto.getNewNatureOfOccupationId() != null) {
             request.setNewNatureOfOccupation(
                     natureOfOccupationRepository.findById(dto.getNewNatureOfOccupationId())
-                            .orElseThrow(() -> new RuntimeException("Nature of occupation not found"))
-            );
+                            .orElseThrow(() -> new RuntimeException("Nature of occupation not found")));
         }
 
         if (StringUtils.hasText(dto.getNewComputerNoInPayslip())) {

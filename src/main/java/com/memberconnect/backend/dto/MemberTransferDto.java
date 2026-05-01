@@ -9,8 +9,6 @@ import java.time.LocalDate;
 @Setter
 public class MemberTransferDto {
 
-    private Long id;
-    private String requestId;
     private String memberId;
     private LocalDate requestedDate;
 
