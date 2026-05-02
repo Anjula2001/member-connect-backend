@@ -1,8 +1,11 @@
 package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.dto.MemberDTO;
-import com.memberconnect.backend.service.MemberService;
+import com.memberconnect.backend.dto.MemberRetirementValidationDTO;
+import com.memberconnect.backend.dto.MemberSummaryDTO;
 import com.memberconnect.backend.enums.MemberStatus;
+import com.memberconnect.backend.service.MemberService;
+import com.memberconnect.backend.service.RetirementService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -11,10 +14,17 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/members")
-@CrossOrigin
+@CrossOrigin(origins = "http://localhost:3000")
 public class MemberController {
+
     @Autowired
     private MemberService memberService;
+
+    private final RetirementService retirementService;
+
+    public MemberController(RetirementService retirementService) {
+        this.retirementService = retirementService;
+    }
 
     @PostMapping("/createMember")
     public MemberDTO createMember(@RequestBody MemberDTO memberDTO) {
@@ -68,5 +78,17 @@ public class MemberController {
             @PathVariable Long id,
             @RequestParam MemberStatus status) {
         return memberService.updateStatus(id, status);
+    }
+
+    @GetMapping("/{memberId}")
+    public MemberSummaryDTO getMember(@PathVariable String memberId) {
+        return retirementService.getMemberSummary(memberId);
+    }
+
+    @GetMapping("/{memberId}/retirement-validation")
+    public MemberRetirementValidationDTO validateMemberForRetirement(
+            @PathVariable String memberId
+    ) {
+        return retirementService.validateMemberForRetirement(memberId);
     }
 }
