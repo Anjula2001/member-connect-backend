@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Getter
@@ -19,6 +20,18 @@ public class BoardApprovalList {
     @Column(unique = true)
     private String listId;
 
+    @Column(name = "BoardMeetingId")
+    private Long boardMeetingId;
+
+    @Column(name = "BoardMeetingDate")
+    private LocalDate boardMeetingDate;
+
+    @Column(name = "ApplicationIds", columnDefinition = "TEXT")
+    private String applicationIdsCsv;
+
+    @Column(name = "Status")
+    private String status;
+
     @Column(name = "CreatedAt")
     private LocalDateTime createdAt;
 
@@ -27,4 +40,16 @@ public class BoardApprovalList {
 
     @Column(name = "ProcessedBy")
     private String processedBy;
+
+    @Column(name = "ActualMeetingDate")
+    private LocalDate actualMeetingDate;
+
+    @Column(name = "Decision")
+    private String decision;
+
+    @Column(name = "RejectReason", length = 2000)
+    private String rejectReason;
+
+    @Column(name = "BoardRemarks", length = 2000)
+    private String boardRemarks;
 }
