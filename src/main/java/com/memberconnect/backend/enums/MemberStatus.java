@@ -4,5 +4,9 @@ public enum MemberStatus {
     ACTIVE,
     RETIREMENT_REQUESTED,
     RETIREMENT_APPROVED,
-    RETIRED
+    RETIRED,
+    INACTIVE,
+    RESIGNED,
+    TERMINATED,
+    DECEASED
 }
