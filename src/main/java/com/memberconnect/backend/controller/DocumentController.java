@@ -32,9 +32,11 @@ import com.memberconnect.backend.service.DocumentService;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final com.memberconnect.backend.service.S3Service s3Service;
 
-    public DocumentController(DocumentService documentService) {
+    public DocumentController(DocumentService documentService, com.memberconnect.backend.service.S3Service s3Service) {
         this.documentService = documentService;
+        this.s3Service = s3Service;
     }
 
     // --- Member application document endpoints ---
@@ -104,6 +106,18 @@ public class DocumentController {
         return documentService.getUploadedDocuments(requestId);
     }
 
+    @PostMapping("/file/upload")
+    public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) throws IOException {
+        String fileName = s3Service.uploadFile(file);
+        return ResponseEntity.ok(fileName);
+    }
+
+    @GetMapping("/file/download")
+    public ResponseEntity<byte[]> downloadGenericFile(@RequestParam("fileName") String fileName) {
+        byte[] fileBytes = s3Service.downloadFile(fileName);
+        return ResponseEntity.ok().body(fileBytes);
+    }
+
     @GetMapping("/{requestType}/{requestId}/documents/{requiredDocumentId}/uploaded")
     public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
             @PathVariable String requestType,
@@ -132,8 +146,7 @@ public class DocumentController {
         UploadedDocument document =
                 documentService.getUploadedDocumentById(uploadedDocumentId);
 
-        File file = new File(document.getFilePath());
-        byte[] fileBytes = Files.readAllBytes(file.toPath());
+        byte[] fileBytes = s3Service.downloadFile(document.getFilePath());
 
         return ResponseEntity.ok()
                 .header(

@@ -60,6 +60,9 @@ public class DocumentService {
     @Autowired
     private ModelMapper modelMapper;
 
+    @Autowired
+    private S3Service s3Service;
+
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -143,10 +146,9 @@ public class DocumentService {
 
         if (doc.getStoragePath() != null && !doc.getStoragePath().isBlank()) {
             try {
-                Path filePath = Paths.get(doc.getStoragePath());
-                Files.deleteIfExists(filePath);
-            } catch (IOException e) {
-                System.err.println("Warning: could not delete file at " + doc.getStoragePath() + ": " + e.getMessage());
+                s3Service.deleteFile(doc.getStoragePath());
+            } catch (Exception e) {
+                System.err.println("Warning: could not delete file from S3: " + e.getMessage());
             }
         }
 
@@ -200,40 +202,21 @@ public class DocumentService {
                 throw new RuntimeException("Please select a file to upload");
             }
 
-            String uploadDir = System.getProperty("user.dir")
-                    + File.separator + "uploads"
-                    + File.separator + applicationType.toLowerCase()
-                    + File.separator + requestId;
-
-            File dir = new File(uploadDir);
-
-            if (!dir.exists()) {
-                boolean created = dir.mkdirs();
-
-                if (!created) {
-                    throw new RuntimeException("Could not create upload folder");
-                }
-            }
-
             String originalFileName = file.getOriginalFilename();
-            String safeFileName = System.currentTimeMillis() + "_" + originalFileName;
-
-            File destinationFile = new File(dir, safeFileName);
-
-            file.transferTo(destinationFile);
+            String s3Key = s3Service.uploadFile(file);
 
             UploadedDocument uploaded = new UploadedDocument();
             uploaded.setRequestId(requestId);
             uploaded.setRequiredDocumentId(requiredDocumentId);
             uploaded.setFileName(originalFileName);
             uploaded.setFileType(file.getContentType());
-            uploaded.setFilePath(destinationFile.getAbsolutePath());
+            uploaded.setFilePath(s3Key);
             uploaded.setUploadedAt(LocalDateTime.now());
 
             return uploadedDocumentRepository.save(uploaded);
 
         } catch (IOException e) {
-            throw new RuntimeException("Failed to upload document: " + e.getMessage());
+            throw new RuntimeException("Failed to upload document to S3: " + e.getMessage());
         }
     }
 
@@ -252,6 +235,14 @@ public class DocumentService {
     }
 
     public void deleteUploadedDocument(Long uploadedDocumentId) {
+        UploadedDocument doc = uploadedDocumentRepository.findById(uploadedDocumentId).orElse(null);
+        if (doc != null && doc.getFilePath() != null) {
+            try {
+                s3Service.deleteFile(doc.getFilePath());
+            } catch (Exception e) {
+                System.err.println("Warning: could not delete file from S3: " + e.getMessage());
+            }
+        }
         uploadedDocumentRepository.deleteById(uploadedDocumentId);
     }
 
