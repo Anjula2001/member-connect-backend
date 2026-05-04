@@ -4,6 +4,7 @@ import com.memberconnect.backend.dto.MemberApplicationDTO;
 import com.memberconnect.backend.enums.ApplicationStatus;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.model.Member_Application;
+import com.memberconnect.backend.repository.EducationalDistrictZoneRepository;
 import com.memberconnect.backend.repository.MemberApplicationRepository;
 import com.memberconnect.backend.repository.MemberRepository;
 import org.modelmapper.ModelMapper;
@@ -36,10 +37,17 @@ public class MemberApplicationService {
     private MemberRepository memberRepository;
 
     @Autowired
+    private EducationalDistrictZoneRepository educationalDistrictZoneRepository;
+
+    @Autowired
     private ModelMapper modelMapper;
 
     public MemberApplicationDTO saveMemberApplication(MemberApplicationDTO memberApplicationDTO) {
         validateNicForPersistence(memberApplicationDTO.getNicNumber(), null);
+        validateDistrictZoneForPersistence(
+                memberApplicationDTO.getEducationalDistrict(),
+                memberApplicationDTO.getEducationalZone()
+        );
         Member_Application application = modelMapper.map(memberApplicationDTO, Member_Application.class);
         application.setApplicationID("APP-" + System.currentTimeMillis());
         Member_Application saved = memberApplicationRepository.save(application);
@@ -57,6 +65,7 @@ public class MemberApplicationService {
         if (dto.getNicNumber() != null) {
             validateNicForPersistence(dto.getNicNumber(), id);
         }
+        validateDistrictZoneOnUpdate(existing, dto);
         applyNonNullFields(existing, dto);
         Member_Application updated = memberApplicationRepository.save(existing);
         return modelMapper.map(updated, MemberApplicationDTO.class);
@@ -69,6 +78,7 @@ public class MemberApplicationService {
         if (dto.getNicNumber() != null) {
             validateNicForPersistence(dto.getNicNumber(), id);
         }
+        validateDistrictZoneOnUpdate(existing, dto);
         applyNonNullFields(existing, dto);
 
         Member_Application saved = memberApplicationRepository.save(existing);
@@ -202,6 +212,38 @@ public class MemberApplicationService {
         NicValidationResponseDTO validation = validateNic(nicNumber, excludeApplicationId);
         if (validation.isDuplicate()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, validation.getMessage());
+        }
+    }
+
+    private void validateDistrictZoneOnUpdate(Member_Application existing, MemberApplicationDTO dto) {
+        String district = dto.getEducationalDistrict() != null
+                ? dto.getEducationalDistrict()
+                : existing.getEducationalDistrict();
+        String zone = dto.getEducationalZone() != null
+                ? dto.getEducationalZone()
+                : existing.getEducationalZone();
+
+        validateDistrictZoneForPersistence(district, zone);
+    }
+
+    private void validateDistrictZoneForPersistence(String district, String zone) {
+        if (district == null || district.isBlank() || zone == null || zone.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Educational district and zone are required."
+            );
+        }
+
+        boolean exists = educationalDistrictZoneRepository.existsByDistrictIgnoreCaseAndZoneIgnoreCase(
+                district.trim(),
+                zone.trim()
+        );
+
+        if (!exists) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid educational district and zone combination."
+            );
         }
     }
 
