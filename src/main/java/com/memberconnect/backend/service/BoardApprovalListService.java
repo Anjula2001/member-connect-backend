@@ -41,7 +41,7 @@ public class BoardApprovalListService {
 		dto.setListId(entity.getListId());
 		dto.setBoardMeetingId(entity.getBoardMeetingId());
 		dto.setBoardMeetingDate(entity.getBoardMeetingDate());
-		dto.setApplicationIds(parseApplicationIds(entity.getApplicationIdsCsv()));
+		dto.setApplicationIds(entity.getApplications().stream().map(Member_Application::getApplicationID).collect(Collectors.toList()));
 		dto.setStatus(entity.getStatus());
 		dto.setCreatedAt(entity.getCreatedAt());
 		dto.setProcessedAt(entity.getProcessedAt());
@@ -51,20 +51,6 @@ public class BoardApprovalListService {
 		dto.setRejectReason(entity.getRejectReason());
 		dto.setBoardRemarks(entity.getBoardRemarks());
 		return dto;
-	}
-
-	private List<String> parseApplicationIds(String csv) {
-		if (csv == null || csv.trim().isEmpty()) {
-			return Collections.emptyList();
-		}
-		return Arrays.stream(csv.split(","))
-				.map(String::trim)
-				.filter(value -> !value.isEmpty())
-				.collect(Collectors.toList());
-	}
-
-	private String serializeApplicationIds(List<String> applicationIds) {
-		return String.join(",", applicationIds);
 	}
 
 	public BoardApprovalListDTO createBoardApprovalList(BoardApprovalListDTO dto) {
@@ -83,18 +69,18 @@ public class BoardApprovalListService {
 		entity.setListId("BAL-" + System.currentTimeMillis());
 		entity.setBoardMeetingId(boardMeeting.getId());
 		entity.setBoardMeetingDate(boardMeeting.getScheduledDate());
-		entity.setApplicationIdsCsv(serializeApplicationIds(dto.getApplicationIds()));
 		entity.setStatus("CREATED");
 		entity.setCreatedAt(LocalDateTime.now());
-
-		BoardApprovalList saved = boardApprovalListRepository.save(entity);
 
 		for (String applicationId : dto.getApplicationIds()) {
 			Member_Application application = memberApplicationRepository.findByApplicationID(applicationId)
 					.orElseThrow(() -> new RuntimeException("Application not found: " + applicationId));
 			application.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 			memberApplicationRepository.save(application);
+			entity.getApplications().add(application);
 		}
+
+		BoardApprovalList saved = boardApprovalListRepository.save(entity);
 
 		return toDto(saved);
 	}
@@ -115,56 +101,53 @@ public class BoardApprovalListService {
 		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
 				.orElseThrow(() -> new RuntimeException("Board approval list not found"));
 
-		List<String> applicationIds = parseApplicationIds(entity.getApplicationIdsCsv());
-		if (applicationIds.isEmpty()) {
+		if (entity.getApplications().isEmpty()) {
 			return Collections.emptyList();
 		}
 
-		return applicationIds.stream()
-				.map(applicationId -> memberApplicationRepository.findByApplicationID(applicationId)
-						.map(application -> {
-							MemberApplicationDTO applicationDTO = new MemberApplicationDTO();
-							applicationDTO.setId(application.getId());
-							applicationDTO.setApplicationID(application.getApplicationID());
-							applicationDTO.setStatus(application.getStatus());
-							applicationDTO.setTitle(application.getTitle());
-							applicationDTO.setFullName(application.getFullName());
-							applicationDTO.setApplicationDate(application.getApplicationDate());
-							applicationDTO.setNameAsInPayroll(application.getNameAsInPayroll());
-							applicationDTO.setNameWithInitials(application.getNameWithInitials());
-							applicationDTO.setNicNumber(application.getNicNumber());
-							applicationDTO.setDateOfBirth(application.getDateOfBirth());
-							applicationDTO.setGender(application.getGender());
-							applicationDTO.setPreferredLanguage(application.getPreferredLanguage());
-							applicationDTO.setPermanentPrivateAddress(application.getPermanentPrivateAddress());
-							applicationDTO.setWorkingLocationType(application.getWorkingLocationType());
-							applicationDTO.setDesignation(application.getDesignation());
-							applicationDTO.setNatureOfOccupation(application.getNatureOfOccupation());
-							applicationDTO.setEducationalDistrict(application.getEducationalDistrict());
-							applicationDTO.setEducationalZone(application.getEducationalZone());
-							applicationDTO.setWorkingLocation(application.getWorkingLocation());
-							applicationDTO.setWorkingLocationAddress(application.getWorkingLocationAddress());
-							applicationDTO.setComputerNoInPayslip(application.getComputerNoInPayslip());
-							applicationDTO.setSalaryPayingOffice(application.getSalaryPayingOffice());
-							applicationDTO.setOfficeTelephone(application.getOfficeTelephone());
-							applicationDTO.setPrivateTelephone(application.getPrivateTelephone());
-							applicationDTO.setMobileNumber(application.getMobileNumber());
-							applicationDTO.setEmailAddress(application.getEmailAddress());
-							applicationDTO.setNomineeFullName(application.getNomineeFullName());
-							applicationDTO.setNomineeRelationship(application.getNomineeRelationship());
-							applicationDTO.setIdentification(application.getIdentification());
-							applicationDTO.setIdentificationNumber(application.getIdentificationNumber());
-							applicationDTO.setIdentificationDetails(application.getIdentificationDetails());
-							applicationDTO.setNomineeAddress(application.getNomineeAddress());
-							applicationDTO.setShareAccountAmount(application.getShareAccountAmount());
-							applicationDTO.setSpecialDepositAmount(application.getSpecialDepositAmount());
-							applicationDTO.setFixedDepositAmount(application.getFixedDepositAmount());
-							applicationDTO.setScholarshipDeathDonationPensionAmount(application.getScholarshipDeathDonationPensionAmount());
-							applicationDTO.setRejoinFlag(application.getRejoinFlag());
-							writeBoardDecisionReason(applicationDTO, application.getBoardDecisionReason());
-							return applicationDTO;
-						})
-						.orElseThrow(() -> new RuntimeException("Application not found: " + applicationId)))
+		return entity.getApplications().stream()
+				.map(application -> {
+					MemberApplicationDTO applicationDTO = new MemberApplicationDTO();
+					applicationDTO.setId(application.getId());
+					applicationDTO.setApplicationID(application.getApplicationID());
+					applicationDTO.setStatus(application.getStatus());
+					applicationDTO.setTitle(application.getTitle());
+					applicationDTO.setFullName(application.getFullName());
+					applicationDTO.setApplicationDate(application.getApplicationDate());
+					applicationDTO.setNameAsInPayroll(application.getNameAsInPayroll());
+					applicationDTO.setNameWithInitials(application.getNameWithInitials());
+					applicationDTO.setNicNumber(application.getNicNumber());
+					applicationDTO.setDateOfBirth(application.getDateOfBirth());
+					applicationDTO.setGender(application.getGender());
+					applicationDTO.setPreferredLanguage(application.getPreferredLanguage());
+					applicationDTO.setPermanentPrivateAddress(application.getPermanentPrivateAddress());
+					applicationDTO.setWorkingLocationType(application.getWorkingLocationType());
+					applicationDTO.setDesignation(application.getDesignation());
+					applicationDTO.setNatureOfOccupation(application.getNatureOfOccupation());
+					applicationDTO.setEducationalDistrict(application.getEducationalDistrict());
+					applicationDTO.setEducationalZone(application.getEducationalZone());
+					applicationDTO.setWorkingLocation(application.getWorkingLocation());
+					applicationDTO.setWorkingLocationAddress(application.getWorkingLocationAddress());
+					applicationDTO.setComputerNoInPayslip(application.getComputerNoInPayslip());
+					applicationDTO.setSalaryPayingOffice(application.getSalaryPayingOffice());
+					applicationDTO.setOfficeTelephone(application.getOfficeTelephone());
+					applicationDTO.setPrivateTelephone(application.getPrivateTelephone());
+					applicationDTO.setMobileNumber(application.getMobileNumber());
+					applicationDTO.setEmailAddress(application.getEmailAddress());
+					applicationDTO.setNomineeFullName(application.getNomineeFullName());
+					applicationDTO.setNomineeRelationship(application.getNomineeRelationship());
+					applicationDTO.setIdentification(application.getIdentification());
+					applicationDTO.setIdentificationNumber(application.getIdentificationNumber());
+					applicationDTO.setIdentificationDetails(application.getIdentificationDetails());
+					applicationDTO.setNomineeAddress(application.getNomineeAddress());
+					applicationDTO.setShareAccountAmount(application.getShareAccountAmount());
+					applicationDTO.setSpecialDepositAmount(application.getSpecialDepositAmount());
+					applicationDTO.setFixedDepositAmount(application.getFixedDepositAmount());
+					applicationDTO.setScholarshipDeathDonationPensionAmount(application.getScholarshipDeathDonationPensionAmount());
+					applicationDTO.setRejoinFlag(application.getRejoinFlag());
+					writeBoardDecisionReason(applicationDTO, application.getBoardDecisionReason());
+					return applicationDTO;
+				})
 				.collect(Collectors.toList());
 	}
 
@@ -201,14 +184,8 @@ public class BoardApprovalListService {
 		String boardRemarks = dto.getBoardRemarks();
 		String rejectReason = rejected ? dto.getRejectReason().trim() : null;
 
-		List<String> applicationIds = parseApplicationIds(entity.getApplicationIdsCsv());
-		for (String applicationId : applicationIds) {
-			memberApplicationRepository.findByApplicationID(applicationId).ifPresent(application -> {
-				application.setStatus(approved ? ApplicationStatus.INACTIVE : ApplicationStatus.REJECTED);
-				application.setBoardDecisionReason(rejectReason);
-				memberApplicationRepository.save(application);
-			});
-		}
+		// Note: We deliberately DO NOT update individual Member_Application statuses here.
+		// The frontend handles per-application Approve/Reject updates via `updateMemberApplicationPartial`.
 
 		entity.setStatus("PROCESSED");
 		entity.setProcessedAt(LocalDateTime.now());
@@ -228,14 +205,11 @@ public class BoardApprovalListService {
 		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
 				.orElseThrow(() -> new RuntimeException("Board approval list not found"));
 
-		List<String> applicationIds = parseApplicationIds(entity.getApplicationIdsCsv());
-		for (String applicationId : applicationIds) {
-			memberApplicationRepository.findByApplicationID(applicationId).ifPresent(application -> {
-				if (application.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
-					application.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
-					memberApplicationRepository.save(application);
-				}
-			});
+		for (Member_Application application : entity.getApplications()) {
+			if (application.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
+				application.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+				memberApplicationRepository.save(application);
+			}
 		}
 
 		boardApprovalListRepository.delete(entity);
