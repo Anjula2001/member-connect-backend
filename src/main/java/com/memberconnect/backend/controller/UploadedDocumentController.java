@@ -26,6 +26,7 @@ public class UploadedDocumentController {
         this.service = service;
     }
 
+    // Endpoint to upload a document for a specific request and required document type
     @PostMapping("/upload")
     public ResponseEntity<UploadedDocumentUploadDto> upload(
             @RequestParam String requestId,
@@ -42,6 +43,7 @@ public class UploadedDocumentController {
         }
     }
 
+    // Endpoint to list uploaded documents for a specific request
     @GetMapping("/by-request")
     public ResponseEntity<?> listByRequest(@RequestParam String requestId) {
         try {
@@ -52,6 +54,7 @@ public class UploadedDocumentController {
         }
     }
 
+    // Endpoint to list uploaded documents for a specific request and required document type
     @GetMapping("/by-required")
     public ResponseEntity<?> listByRequired(@RequestParam String requestId, @RequestParam Long requiredDocumentId) {
         try {
@@ -62,6 +65,7 @@ public class UploadedDocumentController {
         }
     }
 
+    // Endpoint to download a specific uploaded document by ID and request ID
     @GetMapping("/download/{id}")
     public ResponseEntity<byte[]> download(@PathVariable Long id, @RequestParam String requestId) {
         try {
@@ -78,6 +82,7 @@ public class UploadedDocumentController {
         }
     }
 
+    // Endpoint to delete a specific uploaded document by ID and request ID
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id, @RequestParam String requestId) {
         try {

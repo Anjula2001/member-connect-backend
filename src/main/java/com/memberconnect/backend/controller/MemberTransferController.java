@@ -18,17 +18,19 @@ public class MemberTransferController {
         this.memberTransferService = memberTransferService;
     }
 
+    // Endpoint to get all member transfer requests
     @GetMapping
     public List<MemberTransferRequest> getAllRequests() {
         return memberTransferService.getAllRequests();
     }
 
+    // Endpoint to get a specific member transfer request by ID
     @GetMapping("/{id}")
     public MemberTransferRequest getRequestById(@PathVariable Long id) {
         return memberTransferService.getRequestById(id);
     }
 
-
+    // Endpoint to submit a new member transfer request
     @PostMapping("/submit")
     public MemberTransferRequest submitRequest(@RequestBody MemberTransferDto dto) {
         return memberTransferService.submitRequest(dto);

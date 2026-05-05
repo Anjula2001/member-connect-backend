@@ -17,6 +17,7 @@ public class RequiredDocumentTypeController {
         this.repository = repository;
     }
 
+    // Endpoint to get required document types by request type
     @GetMapping("/{requestType}")
     public List<RequiredDocumentType> getByRequestType(@PathVariable String requestType) {
         return repository.findByRequestType(requestType);

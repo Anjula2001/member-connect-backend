@@ -44,26 +44,31 @@ public class MastersController {
         this.workingLocationRepository = workingLocationRepository;
     }
 
+    // Endpoint to get all working location types
     @GetMapping("/working-location-types")
     public List<WorkingLocationType> getWorkingLocationTypes() {
         return workingLocationTypeRepository.findAll();
     }
 
+    // Endpoint to get all educational districts
     @GetMapping("/districts")
     public List<EducationalDistrict> getDistricts() {
         return educationalDistrictRepository.findAll();
     }
-
+ 
+    // Endpoint to get all designations
     @GetMapping("/designations")
     public List<Designation> getDesignations() {
         return designationRepository.findAll();
     }
 
+    // Endpoint to get all nature of occupations
     @GetMapping("/nature-of-occupations")
     public List<NatureOfOccupation> getNatureOfOccupations() {
         return natureOfOccupationRepository.findAll();
     }
 
+    // Endpoint to get educational zones by district ID or name
     @GetMapping("/educational-zones")
     public List<EducationalZone> getEducationalZonesByDistrict(
             @RequestParam String district
@@ -77,6 +82,7 @@ public class MastersController {
         return educationalZoneRepository.findByEducationalDistrictNameIgnoreCase(district);
     }
 
+    // Endpoint to get working locations by type, district, and optionally zone
     @GetMapping("/working-locations")
     public List<WorkingLocation> getWorkingLocations(
             @RequestParam String type,
@@ -124,6 +130,7 @@ public class MastersController {
                 );
     }
 
+    // Helper method to find working location type by ID or name
     private WorkingLocationType findWorkingLocationType(String type) {
         Long typeId = parseLongOrNull(type);
 

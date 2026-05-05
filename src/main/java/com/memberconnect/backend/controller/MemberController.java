@@ -15,7 +15,8 @@ public class MemberController {
     public MemberController(MemberRepository memberRepository) {
         this.memberRepository = memberRepository;
     }
-  
+   
+    // Endpoint to get member details by ID
     @GetMapping("/{id}")
     public ResponseEntity<?> getMemberById(@PathVariable Long id) {
         Member member = memberRepository.findById(id)

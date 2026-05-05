@@ -28,6 +28,7 @@ public class UniversityScholarshipController {
         this.service = service;
     }
 
+    // Endpoint to validate examination number
     @GetMapping("/validate-exam-no")
     public ResponseEntity<Map<String, Object>> validateExamNo(@RequestParam String ExamNumber) {
         boolean duplicate = service.isExamNoDuplicate(ExamNumber);
@@ -42,16 +43,19 @@ public class UniversityScholarshipController {
         );
     }
 
+    //Endpoint to get universities List 
     @GetMapping("/universities")
     public List<University> getUniversities() {
         return service.getAllUniversities();
     }
 
+    // Endpoint to get programs by university ID
     @GetMapping("/programs/{universityId}")
     public List<ProgramOptionDto> getProgramsByUniversity(@PathVariable Long universityId) {
         return service.getProgramsByUniversity(universityId);
     }
 
+    // Endpoint to get scholarship duration by university ID and program ID
     @GetMapping("/duration")
     public Integer getDuration(
             @RequestParam Long universityId,
@@ -60,6 +64,7 @@ public class UniversityScholarshipController {
         return service.getDuration(universityId, programId);
     }
 
+    // Endpoint to create a new scholarship request
     @PostMapping("/university-scholarships")
     public ResponseEntity<?> createRequest(@RequestBody UniversityScholarshipRequestDto dto) {
         try {
@@ -72,6 +77,7 @@ public class UniversityScholarshipController {
         }
     }
 
+    // Endpoint to update an existing scholarship request by request ID
     @PutMapping("/university-scholarships/{requestId}")
     public ResponseEntity<?> updateRequest(
             @PathVariable String requestId,
@@ -85,6 +91,7 @@ public class UniversityScholarshipController {
         }
     }
 
+    // Endpoint to submit a scholarship request by request ID
     @PostMapping("/university-scholarships/submit/{requestId}")
     public ResponseEntity<?> submitRequest(@PathVariable String requestId) {
         try {
@@ -94,6 +101,7 @@ public class UniversityScholarshipController {
         }
     }
 
+    // Endpoint to check minor account by birth certificate number
     @GetMapping("/minor-account/check")
     public ResponseEntity<Map<String, Object>> checkMinorAccount(
             @RequestParam String birthCertificateNumber
@@ -103,6 +111,7 @@ public class UniversityScholarshipController {
         );
     }
 
+    // Endpoint to mark a scholarship request as incomplete with a reason
     @PostMapping("/university-scholarships/incomplete/{requestId}")
     public ResponseEntity<?> markIncomplete(
             @PathVariable String requestId,
@@ -115,7 +124,7 @@ public class UniversityScholarshipController {
         return ResponseEntity.ok(updated);
     }
 
-
+    // Endpoint to approve a scholarship request by request ID
     @PostMapping("/university-scholarships/approve/{requestId}")
     public ResponseEntity<?> approveRequest(@PathVariable String requestId) {
         try {
@@ -126,11 +135,13 @@ public class UniversityScholarshipController {
         }
     }
 
+    // Endpoint to get all scholarship requests
     @GetMapping("/university-scholarships")
     public ResponseEntity<?> getAllRequests() {
         return ResponseEntity.ok(service.getAllScholarshipRequests());
     }
 
+    // Endpoint to get a scholarship request by request ID
     @GetMapping("/university-scholarships/{requestId}")
     public ResponseEntity<?> getRequestByRequestId(@PathVariable String requestId) {
         try {
@@ -140,12 +151,13 @@ public class UniversityScholarshipController {
         }
     }
 
+    // Endpoint to reject a scholarship request by request ID with a reason
     @PostMapping("/university-scholarships/reject/{requestId}")
     public ResponseEntity<UniversityScholarshipRequest> rejectScholarship(
             @PathVariable String requestId,
             @RequestBody Map<String, String> body
     ) {
-        String reason = body.get("decisionReason"); // frontend key stays same
+        String reason = body.get("decisionReason"); 
 
         UniversityScholarshipRequest request =
                 universityScholarshipRepository.findByUniversityScholarshipRequestID(requestId)

@@ -15,7 +15,6 @@ public class UniversityScholarshipRequestDto {
     private String examNo;
     private String zScore;
 
-    // These names must match frontend field names
     private String university;
     private String program;
 

@@ -25,11 +25,12 @@ public class UploadedDocumentService {
 
     @Value("${file.upload.dir:uploads}")
     private String uploadDir;
-
+    
     public UploadedDocumentService(UploadedDocumentRepository repository) {
         this.repository = repository;
     }
 
+    // Upload a document for a specific request and required document type
     public UploadedDocument upload(String requestId, Long requiredDocumentId, MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File is empty");
@@ -58,7 +59,8 @@ public class UploadedDocumentService {
 
         return repository.save(ud);
     }
-
+    
+    // List uploaded documents for a specific request
     public List<UploadedDocumentDisplayDto> listByRequest(String requestId) {
         return repository.findByRequestId(requestId)
                 .stream()
@@ -74,6 +76,7 @@ public class UploadedDocumentService {
                 .collect(Collectors.toList());
     }
 
+    // List uploaded documents for a specific request and required document type
     public List<UploadedDocumentDisplayDto> listByRequestAndRequired(String requestId, Long requiredDocumentId) {
         return repository.findByRequestIdAndRequiredDocumentId(requestId, requiredDocumentId)
                 .stream()
@@ -89,6 +92,7 @@ public class UploadedDocumentService {
                 .collect(Collectors.toList());
     }
 
+    // Download a specific uploaded document by ID and request ID
     public byte[] download(Long documentId, String requestId) throws IOException {
         Optional<UploadedDocument> opt = repository.findByIdAndRequestId(documentId, requestId);
         if (opt.isEmpty()) throw new IllegalArgumentException("Document not found");
@@ -98,11 +102,13 @@ public class UploadedDocumentService {
         return Files.readAllBytes(f.toPath());
     }
 
+    // Get details of a specific uploaded document by ID and request ID
     public UploadedDocument getDetails(Long documentId, String requestId) {
         return repository.findByIdAndRequestId(documentId, requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Document not found"));
     }
 
+    // Delete a specific uploaded document by ID and request ID
     public void delete(Long documentId, String requestId) throws IOException {
         Optional<UploadedDocument> opt = repository.findByIdAndRequestId(documentId, requestId);
         if (opt.isEmpty()) throw new IllegalArgumentException("Document not found");

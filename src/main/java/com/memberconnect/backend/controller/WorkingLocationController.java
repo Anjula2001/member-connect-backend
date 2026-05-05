@@ -17,6 +17,7 @@ public class WorkingLocationController {
         this.workingLocationRepository = workingLocationRepository;
     }
 
+    // Endpoint to get working location details by ID
     @GetMapping("/{id}")
     public WorkingLocation getWorkingLocationById(@PathVariable Long id) {
         return workingLocationRepository.findById(id)

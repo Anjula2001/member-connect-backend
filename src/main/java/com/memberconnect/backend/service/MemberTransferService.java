@@ -42,15 +42,18 @@ public class MemberTransferService {
         this.natureOfOccupationRepository = natureOfOccupationRepository;
     }
 
+    // Method to get all member transfer requests
     public List<MemberTransferRequest> getAllRequests() {
         return memberTransferRepository.findAll();
     }
 
+    // Method to get a specific member transfer request by ID
     public MemberTransferRequest getRequestById(Long id) {
         return memberTransferRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Member transfer request not found"));
     }
 
+    // Method to submit a new member transfer request
     public MemberTransferRequest submitRequest(MemberTransferDto dto) {
         MemberTransferRequest request = new MemberTransferRequest();
 
@@ -123,6 +126,7 @@ public class MemberTransferService {
         }
     }
 
+    //Generates a unique request ID 
     private String generateMemberTransferRequestId() {
         long nextNumber = memberTransferRepository.count() + 1;
         String candidate = String.format("MTR-%03d", nextNumber);

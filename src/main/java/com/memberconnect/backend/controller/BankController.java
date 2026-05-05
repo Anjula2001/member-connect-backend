@@ -20,12 +20,14 @@ public class BankController {
         this.bankRepository = bankRepository;
         this.branchRepository = branchRepository;
     }
-
+    
+    // Endpoint to get all banks
     @GetMapping("/banks")
     public List<Bank> getBanks() {
         return bankRepository.findAll();
     }
 
+    // Endpoint to get branches by bank ID
     @GetMapping("/branches/{bankId}")
     public List<Branch> getBranchesByBank(@PathVariable Long bankId) {
         return branchRepository.findByBankId(bankId);

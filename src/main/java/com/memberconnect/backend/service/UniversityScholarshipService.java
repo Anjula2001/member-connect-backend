@@ -86,6 +86,7 @@ public class UniversityScholarshipService {
         this.settlementRepository = settlementRepository;
     }
    
+    // Validate member active status 
     private void validateMemberActiveOnExamLastDate(UniversityScholarshipRequestDto dto) {
         
         Member member = memberRepository.findById(dto.getMemberId())
@@ -93,11 +94,12 @@ public class UniversityScholarshipService {
 
         if (member.getStatus() == null || !"ACTIVE".equalsIgnoreCase(member.getStatus().name())) {
             throw new RuntimeException(
-                    "The University Scholarship Request cannot be saved. The Member is not Active during the selected Exam"
+                    "The University Scholarship Request cannot be saved. The Member is not Active "
             );
         }
     }
     
+    // Validate membership duration of the member at the time of exam last date
     private void validateMembershipDuration(UniversityScholarshipRequestDto dto) {
 
         // Get exam last date
@@ -127,6 +129,7 @@ public class UniversityScholarshipService {
         }
     }
 
+     // Validate remittance months for the scholarship request
      private void validateScholarshipRemittanceMonths(UniversityScholarshipRequestDto dto) {
 
         UniversityScholarshipExamMaster examMaster = examMasterRepository
@@ -158,7 +161,8 @@ public class UniversityScholarshipService {
             );
         }
     }
-
+ 
+    // Validate that scholarship amounts were settled for the months where remittance was done
     private void validateRemainingMonthsSettled(UniversityScholarshipRequestDto dto) {
 
         UniversityScholarshipExamMaster examMaster = examMasterRepository
@@ -203,6 +207,7 @@ public class UniversityScholarshipService {
         }
     }
 
+    // Validate that no other scholarship was approved for the member within a year from the exam last date
     private void validateAnotherApprovedScholarshipWithinYear(UniversityScholarshipRequestDto dto) {
 
         UniversityScholarshipExamMaster examMaster = examMasterRepository
@@ -232,6 +237,7 @@ public class UniversityScholarshipService {
         }
     }
 
+    // Get all scholarship requests with member and university details
     public List<UniversityScholarshipListDto> getAllScholarshipRequests() {
         return scholarshipRequestRepository.findAll()
                 .stream()
@@ -263,8 +269,9 @@ public class UniversityScholarshipService {
                         request.getIncompleteReason() != null ? request.getIncompleteReason() : ""
                 ))
                 .toList();
-        }
+    }
 
+    // Get scholarship request by request ID with member and university details
     public UniversityScholarshipListDto getScholarshipRequestByRequestId(String requestId) {
         UniversityScholarshipRequest request = scholarshipRequestRepository
                 .findByUniversityScholarshipRequestID(requestId)
@@ -445,7 +452,7 @@ public class UniversityScholarshipService {
         // followDeviationProcess flag (optional, future UI/backend control)
         boolean followDeviation = Boolean.TRUE.equals(dto.getFollowDeviationProcess());
 
-        // Determine eligibility period (months) from ScholarshipConfig; default to 6 months
+        // Determine eligibility period from ScholarshipConfig
         int eligibilityMonths = scholarshipConfigRepository.findByConfigKey("scholarship.eligibility.period.months")
                 .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue)
                 .orElse(6);
@@ -493,112 +500,124 @@ public class UniversityScholarshipService {
         return scholarshipRequestRepository.save(request);
     }   
 
-        public UniversityScholarshipRequest updateRequestByRequestId(String requestId, UniversityScholarshipRequestDto dto) {
-                UniversityScholarshipRequest request = scholarshipRequestRepository
-                                .findByUniversityScholarshipRequestID(requestId)
-                                .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
+    public UniversityScholarshipRequest updateRequestByRequestId(String requestId, UniversityScholarshipRequestDto dto) {
+        UniversityScholarshipRequest request = scholarshipRequestRepository
+                        .findByUniversityScholarshipRequestID(requestId)
+                        .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
 
-                if (dto.getMemberId() != null) {
-                        Member member = memberRepository.findById(dto.getMemberId())
-                                        .orElseThrow(() -> new RuntimeException("Member not found"));
-                        request.setMember(member);
-                }
-
-                if (dto.getRequestDate() != null) {
-                        request.setRequestDate(dto.getRequestDate());
-                }
-                if (StringUtils.hasText(dto.getStudentName())) {
-                        request.setStudentName(dto.getStudentName().trim());
-                }
-                if (StringUtils.hasText(dto.getNic())) {
-                        request.setNic(dto.getNic().trim());
-                }
-                if (StringUtils.hasText(dto.getBcNo())) {
-                        request.setBcNo(dto.getBcNo().trim());
-                }
-                if (StringUtils.hasText(dto.getAddress())) {
-                        request.setAddress(dto.getAddress().trim());
-                }
-                if (StringUtils.hasText(dto.getMobile())) {
-                        request.setMobile(dto.getMobile().trim());
-                }
-                if (dto.getIsSchoolApplicant() != null) {
-                        request.setApplicantType(Boolean.TRUE.equals(dto.getIsSchoolApplicant())
-                                        ? ApplicantType.SCHOOL_APPICANT
-                                        : ApplicantType.PRIVATE_APPLICANT);
-                }
-                if (StringUtils.hasText(dto.getExamYear())) {
-                        request.setExamYear(dto.getExamYear().trim());
-                }
-                if (StringUtils.hasText(dto.getExamNo())) {
-                        String examNo = dto.getExamNo().trim();
-                        if (!examNo.equals(request.getExamNo()) && scholarshipRequestRepository.existsByExamNumber(examNo)) {
-                                throw new RuntimeException("Entered Examination Number is duplicating with another Scholarship Request");
-                        }
-                        request.setExamNo(examNo);
-                }
-                if (StringUtils.hasText(dto.getZScore())) {
-                        request.setZScore(dto.getZScore().trim());
-                }
-                if (StringUtils.hasText(dto.getDuration())) {
-                        request.setDuration(dto.getDuration().trim());
-                }
-                if (dto.getAcademicYearStart() != null) {
-                        request.setAcademicYearStart(dto.getAcademicYearStart());
-                }
-                if (StringUtils.hasText(dto.getAccountNo())) {
-                        request.setAccountNo(dto.getAccountNo().trim());
-                }
-
-                if (StringUtils.hasText(dto.getUniversity())) {
-                        University university = universityRepository.findById(Long.parseLong(dto.getUniversity().trim()))
-                                        .orElseThrow(() -> new RuntimeException("University not found"));
-                        request.setUniversity(university);
-                }
-
-                if (StringUtils.hasText(dto.getProgram())) {
-                        Program program = programRepository.findById(Long.parseLong(dto.getProgram().trim()))
-                                        .orElseThrow(() -> new RuntimeException("Program not found"));
-                        request.setProgram(program);
-                }
-
-                if (dto.getBank() != null) {
-                        if (StringUtils.hasText(dto.getBank())) {
-                                Bank bank = bankRepository.findById(Long.parseLong(dto.getBank().trim()))
-                                                .orElseThrow(() -> new RuntimeException("Bank not found"));
-                                request.setBank(bank);
-                        } else {
-                                request.setBank(null);
-                        }
-                }
-
-                if (dto.getBranch() != null) {
-                        if (StringUtils.hasText(dto.getBranch())) {
-                                Branch branch = branchRepository.findById(Long.parseLong(dto.getBranch().trim()))
-                                                .orElseThrow(() -> new RuntimeException("Branch not found"));
-                                request.setBranch(branch);
-                        } else {
-                                request.setBranch(null);
-                        }
-                }
-
-                if (StringUtils.hasText(dto.getHasMinorAccount())) {
-                        String hasMinor = dto.getHasMinorAccount().trim();
-                        request.setHasMinorAccount("YES".equalsIgnoreCase(hasMinor)
-                                        ? com.memberconnect.backend.enums.MinorAccount.YES
-                                        : com.memberconnect.backend.enums.MinorAccount.NO);
-                }
-
-                if (dto.getMinorAccountMonths() != null) {
-                        request.setMinorAccountMonths(dto.getMinorAccountMonths());
-                }
-
-                if (dto.getFollowDeviationProcess() != null) {
-                        request.setFollowDeviationProcess(dto.getFollowDeviationProcess());
-                }
-
-                return scholarshipRequestRepository.save(request);
+        if (dto.getMemberId() != null) {
+                Member member = memberRepository.findById(dto.getMemberId())
+                        .orElseThrow(() -> new RuntimeException("Member not found"));
+                request.setMember(member);
         }
+
+        if (dto.getRequestDate() != null) {
+                request.setRequestDate(dto.getRequestDate());
+        }
+
+        if (StringUtils.hasText(dto.getStudentName())) {
+                request.setStudentName(dto.getStudentName().trim());
+        }
+
+        if (StringUtils.hasText(dto.getNic())) {
+                request.setNic(dto.getNic().trim());
+        }
+
+        if (StringUtils.hasText(dto.getBcNo())) {
+                request.setBcNo(dto.getBcNo().trim());
+        }
+
+        if (StringUtils.hasText(dto.getAddress())) {
+                request.setAddress(dto.getAddress().trim());
+        }
+
+        if (StringUtils.hasText(dto.getMobile())) {
+                request.setMobile(dto.getMobile().trim());
+        }
+
+        if (dto.getIsSchoolApplicant() != null) {
+                request.setApplicantType(Boolean.TRUE.equals(dto.getIsSchoolApplicant())
+                        ? ApplicantType.SCHOOL_APPICANT
+                        : ApplicantType.PRIVATE_APPLICANT);
+        }
+
+        if (StringUtils.hasText(dto.getExamYear())) {
+                request.setExamYear(dto.getExamYear().trim());
+        }
+
+        if (StringUtils.hasText(dto.getExamNo())) {
+                String examNo = dto.getExamNo().trim();
+                if (!examNo.equals(request.getExamNo()) && scholarshipRequestRepository.existsByExamNumber(examNo)) {
+                        throw new RuntimeException("Entered Examination Number is duplicating with another Scholarship Request");
+                }
+                request.setExamNo(examNo);
+        }
+
+        if (StringUtils.hasText(dto.getZScore())) {
+                request.setZScore(dto.getZScore().trim());
+        }
+
+        if (StringUtils.hasText(dto.getDuration())) {
+                request.setDuration(dto.getDuration().trim());
+        }
+
+        if (dto.getAcademicYearStart() != null) {
+                request.setAcademicYearStart(dto.getAcademicYearStart());
+        }
+
+        if (StringUtils.hasText(dto.getAccountNo())) {
+                request.setAccountNo(dto.getAccountNo().trim());
+        }
+
+        if (StringUtils.hasText(dto.getUniversity())) {
+                University university = universityRepository.findById(Long.parseLong(dto.getUniversity().trim()))
+                        .orElseThrow(() -> new RuntimeException("University not found"));
+                request.setUniversity(university);
+        }
+
+        if (StringUtils.hasText(dto.getProgram())) {
+                Program program = programRepository.findById(Long.parseLong(dto.getProgram().trim()))
+                        .orElseThrow(() -> new RuntimeException("Program not found"));
+                request.setProgram(program);
+        }
+
+        if (dto.getBank() != null) {
+                if (StringUtils.hasText(dto.getBank())) {
+                        Bank bank = bankRepository.findById(Long.parseLong(dto.getBank().trim()))
+                                .orElseThrow(() -> new RuntimeException("Bank not found"));
+                        request.setBank(bank);
+                } else {
+                        request.setBank(null);
+                }
+        }
+
+        if (dto.getBranch() != null) {
+                if (StringUtils.hasText(dto.getBranch())) {
+                        Branch branch = branchRepository.findById(Long.parseLong(dto.getBranch().trim()))
+                                .orElseThrow(() -> new RuntimeException("Branch not found"));
+                        request.setBranch(branch);
+                } else {
+                        request.setBranch(null);
+                }
+        }
+
+        if (StringUtils.hasText(dto.getHasMinorAccount())) {
+                String hasMinor = dto.getHasMinorAccount().trim();
+                request.setHasMinorAccount("YES".equalsIgnoreCase(hasMinor)
+                        ? com.memberconnect.backend.enums.MinorAccount.YES
+                        : com.memberconnect.backend.enums.MinorAccount.NO);
+        }
+
+        if (dto.getMinorAccountMonths() != null) {
+                request.setMinorAccountMonths(dto.getMinorAccountMonths());
+        }
+
+        if (dto.getFollowDeviationProcess() != null) {
+                request.setFollowDeviationProcess(dto.getFollowDeviationProcess());
+        }
+
+        return scholarshipRequestRepository.save(request);
+     }
  
     // Submit university scholarship request
     public UniversityScholarshipRequest submitRequest(String requestId) {
@@ -617,12 +636,11 @@ public class UniversityScholarshipService {
         return scholarshipRequestRepository.save(request);
     }
 
-        // Approve request by committee and forward to appropriate board list
-        
-        public UniversityScholarshipRequest approveRequest(String requestId) {
-           UniversityScholarshipRequest request = scholarshipRequestRepository
-            .findByUniversityScholarshipRequestID(requestId)
-            .orElseThrow(() -> new RuntimeException("Request not found"));
+    // Approve request by committee and forward to appropriate board list
+    public UniversityScholarshipRequest approveRequest(String requestId) {
+                UniversityScholarshipRequest request = scholarshipRequestRepository
+                        .findByUniversityScholarshipRequestID(requestId)
+                        .orElseThrow(() -> new RuntimeException("Request not found"));
 
                 if (request.getStatus() != UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
                         throw new RuntimeException("Only requests submitted for committee approval can be approved");
@@ -635,9 +653,10 @@ public class UniversityScholarshipService {
                 }
 
                 return scholarshipRequestRepository.save(request);
-        }
+    }
     
-        public UniversityScholarshipRequest markAsIncomplete(String requestId, String reason) {
+    // Mark request as incomplete with reason
+    public UniversityScholarshipRequest markAsIncomplete(String requestId, String reason) {
                 UniversityScholarshipRequest request = scholarshipRequestRepository
                         .findByUniversityScholarshipRequestID(requestId)
                         .orElseThrow(() -> new RuntimeException("Request not found"));
@@ -650,5 +669,5 @@ public class UniversityScholarshipService {
                 request.setIncompleteReason(reason);
 
                 return scholarshipRequestRepository.save(request);
-        }
+    }
 }
