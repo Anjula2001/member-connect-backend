@@ -179,25 +179,52 @@ public class Grade5ScholarshipRequest {
         this.incompleteReason = incompleteReason;
     }
 
-    public Boolean getMinorAccountExists() { return minorAccountExists; }
-    public void setMinorAccountExists(Boolean minorAccountExists) { this.minorAccountExists = minorAccountExists; }
+    public Boolean getMinorAccountExists() { 
+        return minorAccountExists; 
+    }
+    public void setMinorAccountExists(Boolean minorAccountExists) { 
+        this.minorAccountExists = minorAccountExists;
+    }
 
-    public String getMinorAccountNumber() { return minorAccountNumber; }
-    public void setMinorAccountNumber(String minorAccountNumber) { this.minorAccountNumber = minorAccountNumber; }
+    public String getMinorAccountNumber() { 
+        return minorAccountNumber;
+    }
+    public void setMinorAccountNumber(String minorAccountNumber) {
+        this.minorAccountNumber = minorAccountNumber; 
+    }
 
-    public Integer getEligibleMonths() { return eligibleMonths; }
-    public void setEligibleMonths(Integer eligibleMonths) { this.eligibleMonths = eligibleMonths; }
+    public Integer getEligibleMonths() {
+        return eligibleMonths; 
+    }
+    public void setEligibleMonths(Integer eligibleMonths) {
+        this.eligibleMonths = eligibleMonths; 
+    }
 
-    public String getDisbursementOption() { return disbursementOption; }
-    public void setDisbursementOption(String disbursementOption) { this.disbursementOption = disbursementOption; }
+    public String getDisbursementOption() {
+        return disbursementOption; 
+    }
+    public void setDisbursementOption(String disbursementOption) { 
+        this.disbursementOption = disbursementOption; 
+    }
 
-    public Integer getMemberAmount() { return memberAmount; }
-    public void setMemberAmount(Integer memberAmount) { this.memberAmount = memberAmount; }
+    public Integer getMemberAmount() { 
+        return memberAmount; 
+    }
+    public void setMemberAmount(Integer memberAmount) { 
+        this.memberAmount = memberAmount; 
+    }
 
-    public Integer getMinorAmount() { return minorAmount; }
-    public void setMinorAmount(Integer minorAmount) { this.minorAmount = minorAmount; }
+    public Integer getMinorAmount() {
+        return minorAmount; 
+    }
+    public void setMinorAmount(Integer minorAmount) {
+        this.minorAmount = minorAmount; 
+    }
 
-    public Boolean getIsDoubleAmount() { return isDoubleAmount; }
-    public void setIsDoubleAmount(Boolean isDoubleAmount) { this.isDoubleAmount = isDoubleAmount; }
+    public Boolean getIsDoubleAmount() { 
+        return isDoubleAmount; 
+    }
+    public void setIsDoubleAmount(Boolean isDoubleAmount) { 
+        this.isDoubleAmount = isDoubleAmount; 
+    }
 }
-
