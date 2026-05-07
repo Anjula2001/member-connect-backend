@@ -43,6 +43,7 @@ public class RetirementService {
         this.documentService = documentService;
     }
 
+    // returns all retirement requests.
     public List<RetirementRequestResponseDTO> getAllRequests() {
         return requestRepository.findAll()
                 .stream()
@@ -68,6 +69,7 @@ public class RetirementService {
         );
     }
 
+    // Validate member for retirement request
     public MemberRetirementValidationDTO validateMemberForRetirement(String memberId) {
         List<Loan> ownLoans = loanRepository.findByMemberId(memberId);
         List<LoanObligation> obligations = obligationRepository.findByMemberId(memberId);
@@ -104,6 +106,7 @@ public class RetirementService {
         return dto;
     }
 
+    //generate request number 
     private String generateRequestNo() {
         int year = LocalDate.now().getYear();
         String prefix = "R-" + year + "-";
@@ -124,7 +127,7 @@ public class RetirementService {
 
    public RetirementRequestResponseDTO saveRequest(String memberId, MemberRetirementRequestDTO dto) {
 
-    //Get member
+        //Get member
         Member member = getMemberEntity(memberId);
 
         //Validate member status
@@ -169,7 +172,7 @@ public class RetirementService {
 
         if (existingRequest != null) {
 
-            // EDIT MODE
+            //EDIT MODE
             request = existingRequest;
 
             // Prevent editing after submit/approval/rejection
@@ -191,7 +194,7 @@ public class RetirementService {
             request.setStatus(RetirementRequestStatus.NEW);
         }
 
-        //Set / update values
+        //update values
         request.setRequestedDate(requestedDate);
         request.setEffectiveDate(effectiveDate);
         request.setComment(dto.getComment());
@@ -203,7 +206,6 @@ public class RetirementService {
         member.setStatus(MemberStatus.RETIREMENT_REQUESTED);
         memberRepository.save(member);
 
-        //Return response
         return mapToResponse(saved);
     }
 
@@ -217,12 +219,11 @@ public class RetirementService {
             throw new RuntimeException("Cannot submit: " + validation.getMessage());
         }
 
-        boolean allMandatoryUploaded =
-                documentService.allMandatoryDocumentsUploaded(
-                        request.getId(),
+        boolean allMandatoryUploaded = documentService.allMandatoryDocumentsUploaded(
+                        request.getRequestNo(),
                         request.getMemberId(),
                         "RETIREMENT"
-                );
+        );
 
         if (!allMandatoryUploaded) {
             throw new RuntimeException("Cannot submit. Mandatory documents are missing.");
@@ -234,6 +235,7 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
+    // Marks a retirement request as incomplete
     public RetirementRequestResponseDTO markIncomplete(String requestNo, String reason) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
@@ -245,6 +247,7 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
+    // Approve retirement request
     public RetirementRequestResponseDTO approveRequest(String requestNo) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
@@ -259,6 +262,7 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
+    //reject retirement request
     public RetirementRequestResponseDTO rejectRequest(String requestNo, String reason) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
@@ -275,7 +279,7 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
-    
+    // Get retirement requests for a member
     public List<RetirementRequestResponseDTO> getRequestsByMember(String memberId) {
         return requestRepository.findByMemberId(memberId)
                 .stream()
@@ -283,7 +287,6 @@ public class RetirementService {
                 .toList();
     }
     
-    // Get latest request for member
     private RetirementRequestResponseDTO mapToResponse(RetirementRequest request) {
         Member member = memberRepository.findByMemberId(request.getMemberId())
                 .orElse(null);
@@ -315,6 +318,8 @@ public class RetirementService {
                 hasIndirectObligations
         );
     }
+
+    // Update request details
     public RetirementRequestResponseDTO updateRequest(
             String requestNo,
             MemberRetirementRequestDTO dto
@@ -360,6 +365,78 @@ public class RetirementService {
         RetirementRequest saved = requestRepository.save(request);
 
         return mapToResponse(saved);
+    }   
+
+    //filtering rquests
+    public List<RetirementRequestResponseDTO> searchRequests(
+            List<String> statuses,
+            String fromDate,
+            String toDate,
+            String searchKey,
+            String sortBy,
+            String sortOrder
+    ) {
+        return requestRepository.findAll()
+                .stream()
+
+                //status filter
+                .filter(r -> statuses == null || statuses.isEmpty()
+                        || statuses.contains(r.getStatus().name()))
+                
+                //date filter
+                .filter(r -> {
+                    if (r.getRequestedDate() == null) return false;
+
+                    LocalDate date = r.getRequestedDate();
+
+                    if (fromDate != null && !fromDate.isBlank()) {
+                        LocalDate from = LocalDate.parse(fromDate);
+                        if (date.isBefore(from)) return false;
+                    }
+
+                    if (toDate != null && !toDate.isBlank()) {
+                        LocalDate to = LocalDate.parse(toDate);
+                        if (date.isAfter(to)) return false;
+                    }
+
+                    return true;
+                })
+
+                //search filter
+                .filter(r -> {
+                    if (searchKey == null || searchKey.isBlank()) return true;
+
+                    String key = searchKey.toLowerCase();
+
+                    Member member = memberRepository.findByMemberId(r.getMemberId())
+                            .orElse(null);
+
+                    return contains(r.getMemberId(), key)
+                            || (member != null && contains(member.getFullName(), key))
+                            || (member != null && contains(member.getNameAsInPayroll(), key))
+                            || (member != null && contains(member.getNameWithInitials(), key))
+                            || (member != null && contains(member.getNic(), key));
+                })
+
+                //sorting
+                .sorted((a, b) -> {
+                    int result;
+
+                    if ("status".equalsIgnoreCase(sortBy)) {
+                        result = a.getStatus().name().compareToIgnoreCase(b.getStatus().name());
+                    } else if ("memberId".equalsIgnoreCase(sortBy)) {
+                        result = a.getMemberId().compareToIgnoreCase(b.getMemberId());
+                    } else {
+                        result = a.getRequestedDate().compareTo(b.getRequestedDate());
+                    }
+
+                    return "desc".equalsIgnoreCase(sortOrder) ? -result : result;
+                })
+                .map(this::mapToResponse)
+                .toList();
     }
-       
+
+    private boolean contains(String value, String key) {
+        return value != null && value.toLowerCase().contains(key);
+    }
 }

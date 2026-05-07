@@ -18,8 +18,7 @@ public class RetirementRequestResponseDTO {
     private boolean hasLoanBalance;
     private boolean hasIndirectObligations;
 
-    public RetirementRequestResponseDTO() {
-    }
+    public RetirementRequestResponseDTO() {}
 
     public RetirementRequestResponseDTO(
             Long id,

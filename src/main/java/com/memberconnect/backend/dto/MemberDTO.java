@@ -10,8 +10,7 @@ public class MemberDTO {
     private String nameWithInitials;
 
 
-    public MemberDTO() {
-    }
+    public MemberDTO() {}
 
     public MemberDTO(String memberId, String name, String nic, String status) {
         this.memberId = memberId;
@@ -23,7 +22,6 @@ public class MemberDTO {
     public String getMemberId() {
         return memberId;
     }
-
     public void setMemberId(String memberId) {
         this.memberId = memberId;
     }
@@ -31,7 +29,7 @@ public class MemberDTO {
     public String getName() {
         return name;
     }
-
+    
     public String getNic() {
         return nic;
     }

@@ -21,12 +21,22 @@ public class Bank {
     @Column(name = "name")
     private String name;
 
-    public Long getId() { return id; }
+    public Long getId() { 
+        return id; 
+    }
 
-    public String getBankId() { return bankId; }
-    public void setBankId(String bankId) { this.bankId = bankId; }
+    public String getBankId() {
+        return bankId; 
+    }
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setBankId(String bankId) { 
+        this.bankId = bankId; 
+    }
 
+    public String getName() { 
+        return name; 
+    }
+    public void setName(String name) { 
+        this.name = name; 
+    }
 }

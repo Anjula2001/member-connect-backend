@@ -35,18 +35,56 @@ public class Grade5RequestListDTO {
         this.hasDeviation = hasDeviation;
     }
 
-    public Long getId() { return id; }
-    public String getRequestNo() { return requestNo; }
-    public String getMemberId() { return memberId; }
-    public String getMemberFullName() { return memberFullName; }
-    public String getNameWithInitials() { return nameWithInitials; }
-    public String getNic() { return nic; }
-    public String getRequestedDate() { return requestedDate; }
-    public String getStudentName() { return studentName; }
-    public String getExaminationNumber() { return examinationNumber; }
-    public Integer getExamYear() { return examYear; }
-    public String getStatus() { return status; }
-    public String getLocation() { return location; }
-    public boolean isHasDeviation() { return hasDeviation; }
+    public Long getId() { 
+        return id; 
+    }
+
+    public String getRequestNo() { 
+        return requestNo; 
+    }
+
+    public String getMemberId() { 
+        return memberId; 
+    }
+
+    public String getMemberFullName() { 
+        return memberFullName; 
+    }
+
+    public String getNameWithInitials() { 
+        return nameWithInitials; 
+    }
+
+    public String getNic() { 
+        return nic; 
+    }
+
+    public String getRequestedDate() { 
+        return requestedDate; 
+    }
+
+    public String getStudentName() { 
+        return studentName; 
+    }
+
+    public String getExaminationNumber() { 
+        return examinationNumber; 
+    }
+
+    public Integer getExamYear() {
+        return examYear;
+    }
+
+    public String getStatus() {
+        return status; 
+    }
+
+    public String getLocation() {
+        return location; 
+    }
+
+    public boolean isHasDeviation() { 
+        return hasDeviation; 
+    }
 
 }

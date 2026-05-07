@@ -10,8 +10,7 @@ public class MemberBankAccountResponseDTO {
     private String branchName;
     private String accountNumber;
 
-    public MemberBankAccountResponseDTO() {
-    }
+    public MemberBankAccountResponseDTO() {}
 
     public MemberBankAccountResponseDTO(
             Long id,
@@ -34,7 +33,6 @@ public class MemberBankAccountResponseDTO {
     public Long getId() {
         return id;
     }
-
     public void setId(Long id) {
         this.id = id;
     }
@@ -42,7 +40,6 @@ public class MemberBankAccountResponseDTO {
     public String getMemberId() {
         return memberId;
     }
-
     public void setMemberId(String memberId) {
         this.memberId = memberId;
     }
@@ -50,7 +47,6 @@ public class MemberBankAccountResponseDTO {
     public String getBankId() {
         return bankId;
     }
-
     public void setBankId(String bankId) {
         this.bankId = bankId;
     }
@@ -58,7 +54,6 @@ public class MemberBankAccountResponseDTO {
     public String getBankName() {
         return bankName;
     }
-
     public void setBankName(String bankName) {
         this.bankName = bankName;
     }
@@ -66,7 +61,6 @@ public class MemberBankAccountResponseDTO {
     public String getBranchId() {
         return branchId;
     }
-
     public void setBranchId(String branchId) {
         this.branchId = branchId;
     }
@@ -74,7 +68,6 @@ public class MemberBankAccountResponseDTO {
     public String getBranchName() {
         return branchName;
     }
-
     public void setBranchName(String branchName) {
         this.branchName = branchName;
     }
@@ -82,9 +75,7 @@ public class MemberBankAccountResponseDTO {
     public String getAccountNumber() {
         return accountNumber;
     }
-
     public void setAccountNumber(String accountNumber) {
         this.accountNumber = accountNumber;
     }
-
 }

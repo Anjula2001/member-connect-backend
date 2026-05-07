@@ -18,7 +18,6 @@ import com.memberconnect.backend.repository.UploadedDocumentRepository;
 
 @Service
 public class DocumentService {
-
     private final RequiredDocumentRepository requiredDocumentRepository;
     private final UploadedDocumentRepository uploadedDocumentRepository;
     private final MinorSavingsAccountRepository minorSavingsAccountRepository;
@@ -33,8 +32,9 @@ public class DocumentService {
         this.minorSavingsAccountRepository = minorSavingsAccountRepository;
     }
 
+    // Get required documents for a specific request
     public List<RequiredDocumentDTO> getRequiredDocuments(
-            Long requestId,
+            String requestNo,
             String memberId,
             String applicationType
     ) {
@@ -51,24 +51,24 @@ public class DocumentService {
             }
         }
 
-        List<RequiredDocument> requiredDocs =
-                requiredDocumentRepository.findByApplicationTypeIn(types);
+        List<RequiredDocument> requiredDocs = requiredDocumentRepository.findByApplicationTypeIn(types);
 
         return requiredDocs.stream()
                 .map(doc -> new RequiredDocumentDTO(
                         doc.getId(),
                         doc.getDocumentName(),
                         doc.isMandatory(),
-                        uploadedDocumentRepository.existsByRequestIdAndRequiredDocumentId(
-                                requestId,
+                        uploadedDocumentRepository.existsByRequestNoAndRequiredDocumentId(
+                                requestNo,
                                 doc.getId()
                         )
                 ))
                 .toList();
     }
 
+    // Upload a document for a specific required document
     public UploadedDocument uploadDocument(
-            Long requestId,
+            String requestNo,
             Long requiredDocumentId,
             MultipartFile file,
             String applicationType
@@ -81,7 +81,7 @@ public class DocumentService {
             String uploadDir = System.getProperty("user.dir")
                     + File.separator + "uploads"
                     + File.separator + applicationType.toLowerCase()
-                    + File.separator + requestId;
+                    + File.separator + requestNo;
 
             File dir = new File(uploadDir);
 
@@ -101,7 +101,7 @@ public class DocumentService {
             file.transferTo(destinationFile);
 
             UploadedDocument uploaded = new UploadedDocument();
-            uploaded.setRequestId(requestId);
+            uploaded.setRequestNo(requestNo);
             uploaded.setRequiredDocumentId(requiredDocumentId);
             uploaded.setFileName(originalFileName);
             uploaded.setFileType(file.getContentType());
@@ -115,31 +115,35 @@ public class DocumentService {
         }
     }
 
-    public List<UploadedDocument> getUploadedDocuments(Long requestId) {
-        return uploadedDocumentRepository.findByRequestId(requestId);
+    // Get uploaded documents for a specific request
+    public List<UploadedDocument> getUploadedDocuments(String requestNo) {
+        return uploadedDocumentRepository.findByRequestNo(requestNo);
     }
 
+    // Get uploaded documents for a specific required document
     public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
-            Long requestId,
+            String requestNo,
             Long requiredDocumentId
     ) {
-        return uploadedDocumentRepository.findByRequestIdAndRequiredDocumentId(
-                requestId,
+        return uploadedDocumentRepository.findByRequestNoAndRequiredDocumentId(
+                requestNo,
                 requiredDocumentId
         );
     }
 
+    //Delete uploaded document
     public void deleteUploadedDocument(Long uploadedDocumentId) {
         uploadedDocumentRepository.deleteById(uploadedDocumentId);
     }
-
+    
+    //check all mandatory document uploaded
     public boolean allMandatoryDocumentsUploaded(
-            Long requestId,
+            String requestNo,
             String memberId,
             String applicationType
     ) {
         List<RequiredDocumentDTO> docs =
-                getRequiredDocuments(requestId, memberId, applicationType);
+                getRequiredDocuments(requestNo, memberId, applicationType);
 
         return docs.stream()
                 .filter(RequiredDocumentDTO::isMandatory)
