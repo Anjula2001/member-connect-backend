@@ -1,6 +1,7 @@
 package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.dto.MemberApplicationDTO;
+import com.memberconnect.backend.dto.NicValidationResponseDTO;
 import com.memberconnect.backend.enums.ApplicationStatus;
 import com.memberconnect.backend.service.MemberApplicationService;
 
@@ -56,6 +57,13 @@ public class MemberApplicationController {
             @PathVariable Long id,
             @RequestParam ApplicationStatus status) {
         return service.updateStatus(id, status);
+    }
+
+    @GetMapping("/validate-nic")
+    public NicValidationResponseDTO validateNic(
+            @RequestParam String nicNumber,
+            @RequestParam(required = false) Long excludeApplicationId) {
+        return service.validateNic(nicNumber, excludeApplicationId);
     }
 
 }
