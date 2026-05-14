@@ -5,5 +5,6 @@ public enum ApplicationStatus {
     SUBMITTED_FOR_APPROVAL,
     ADDED_TO_BOARD_APPROVAL_LIST,
     REJECTED,
-    INACTIVE
+    INACTIVE,
+    PENDING,
 }

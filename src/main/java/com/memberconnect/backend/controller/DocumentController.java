@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -12,12 +13,16 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.memberconnect.backend.dto.DocumentSummaryDTO;
 import com.memberconnect.backend.dto.RequiredDocumentDTO;
+import com.memberconnect.backend.dto.UploadDocumentRequestDTO;
+import com.memberconnect.backend.dto.UploadDocumentResponseDTO;
 import com.memberconnect.backend.model.UploadedDocument;
 import com.memberconnect.backend.service.DocumentService;
 
@@ -32,8 +37,36 @@ public class DocumentController {
         this.documentService = documentService;
     }
 
+<<<<<<< HEAD
     // Get required documents for a specific request
     @GetMapping("/{requestType}/{requestNo}/required-documents")
+=======
+    // --- Member application document endpoints ---
+
+    @PostMapping("/documents/upload")
+    public UploadDocumentResponseDTO uploadDocumentMetadata(@RequestBody UploadDocumentRequestDTO requestDTO) {
+        return documentService.uploadDocumentMetadata(requestDTO);
+    }
+
+    @GetMapping("/documents/application/{applicationId}")
+    public List<UploadDocumentResponseDTO> getDocumentsByApplication(@PathVariable Long applicationId) {
+        return documentService.getDocumentsByApplication(applicationId);
+    }
+
+    @GetMapping("/documents/summary/{applicationId}")
+    public DocumentSummaryDTO getDocumentSummary(@PathVariable Long applicationId) {
+        return documentService.getDocumentSummary(applicationId);
+    }
+
+    @DeleteMapping("/documents/{id}")
+    public void deleteDocument(@PathVariable Long id) {
+        documentService.deleteDocument(id);
+    }
+
+    // --- Retirement / Grade5 document endpoints ---
+
+    @GetMapping("/{requestType}/{requestId}/required-documents")
+>>>>>>> 4a387f07f4d91b8e58ab1c67bde5db83107373d5
     public List<RequiredDocumentDTO> getRequiredDocuments(
             @PathVariable String requestType,
             @PathVariable String requestNo,
@@ -92,8 +125,12 @@ public class DocumentController {
         );
     }
 
+<<<<<<< HEAD
     // Delete an uploaded document
     @DeleteMapping("/{requestType}/documents/{uploadedDocumentId}")
+=======
+    @DeleteMapping("/{requestType}/documents/{uploadedDocumentId}/file")
+>>>>>>> 4a387f07f4d91b8e58ab1c67bde5db83107373d5
     public void deleteUploadedDocument(
             @PathVariable String requestType,
             @PathVariable Long uploadedDocumentId
