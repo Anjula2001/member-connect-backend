@@ -46,6 +46,15 @@ public class Grade5ScholarshipService {
 
     // Save request
     public Grade5ScholarshipRequest saveRequest(String memberId, Grade5StudentDTO dto)  {
+        
+        Member member = memberRepository.findByMemberId(memberId)
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        if (member.getStatus() != MemberStatus.ACTIVE) {
+            throw new RuntimeException(
+                "Grade 5 Scholarship Request can only be created for ACTIVE members."
+            );
+        }
 
         // Prevent duplicate
         if (repository.existsByExaminationNumber(dto.getExaminationNumber())) {
@@ -259,20 +268,20 @@ public class Grade5ScholarshipService {
                             || (member != null && contains(member.getMemberId(), key))
                             || (member != null && contains(member.getNic(), key));
                 })
-                .sorted((a, b) -> {
+                .sorted((result1, result2) -> {
                     int result;
 
                     if ("STATUS".equals(sortBy)) {
-                        result = safeString(a.getStatus()).compareToIgnoreCase(
-                                safeString(b.getStatus())
+                        result = safeString(result1.getStatus()).compareToIgnoreCase(
+                                safeString(result2.getStatus())
                         );
                     } else if ("MEMBER_ID".equals(sortBy)) {
-                        result = safeString(a.getMemberId()).compareToIgnoreCase(
-                                safeString(b.getMemberId())
+                        result = safeString(result1.getMemberId()).compareToIgnoreCase(
+                                safeString(result2.getMemberId())
                         );
                     } else {
-                        LocalDate dateA = a.getRequestedDate();
-                        LocalDate dateB = b.getRequestedDate();
+                        LocalDate dateA = result1.getRequestedDate();
+                        LocalDate dateB = result2.getRequestedDate();
 
                         if (dateA == null && dateB == null) {
                             result = 0;
@@ -318,39 +327,6 @@ public class Grade5ScholarshipService {
 
     private String safeString(String value) {
         return value == null ? "" : value;
-    }
-
-        public Map<String, Object> validateEligibility(String memberId, Integer examYear) {
-        Map<String, Object> result = new HashMap<>();
-
-        Member member = memberRepository.findByMemberId(memberId)
-                .orElseThrow(() -> new RuntimeException("Member not found"));
-
-        boolean memberActiveDuringExam =member.getStatus() == MemberStatus.ACTIVE;
-
-        boolean membershipPeriodValid = true;
-        boolean scholarshipRemittedPreviousMonth = true;
-        boolean continuousScholarshipRemittanceValid = true;
-
-        boolean eligible =
-                memberActiveDuringExam &&
-                membershipPeriodValid &&
-                scholarshipRemittedPreviousMonth &&
-                continuousScholarshipRemittanceValid;
-
-        result.put("eligible", eligible);
-        result.put("memberActiveDuringExam", memberActiveDuringExam);
-        result.put("membershipPeriodValid", membershipPeriodValid);
-        result.put("scholarshipRemittedPreviousMonth", scholarshipRemittedPreviousMonth);
-        result.put("continuousScholarshipRemittanceValid", continuousScholarshipRemittanceValid);
-
-        if (!eligible) {
-            result.put("message", "The Grade 5 Scholarship Request cannot be saved. Member is not eligible.");
-        } else {
-            result.put("message", "Member is eligible.");
-        }
-
-        return result;
     }
 
     // Update request

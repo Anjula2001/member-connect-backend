@@ -27,8 +27,7 @@ public class MemberBankAccount {
     @Column(name = "AccountNumber", nullable = false)
     private String accountNumber;
 
-    public MemberBankAccount() {
-    }
+    public MemberBankAccount() {}
 
     public MemberBankAccount(String memberId, String bankId, String branchId, String accountNumber) {
         this.memberId = memberId;

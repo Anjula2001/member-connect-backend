@@ -30,7 +30,7 @@ public class MemberBankAccountService {
         this.bankBranchRepository = bankBranchRepository;
     }
 
-    // GET
+    // Get bank account
     public List<MemberBankAccountResponseDTO> getMemberBankAccounts(String memberId) {
         return memberBankAccountRepository.findByMemberId(memberId)
                 .stream()
@@ -38,7 +38,7 @@ public class MemberBankAccountService {
                 .toList();
     }
 
-    // SAVE
+    // Save bank account
     public MemberBankAccountResponseDTO saveMemberBankAccount(
             String memberId,
             MemberBankAccountRequestDTO request
@@ -69,7 +69,7 @@ public class MemberBankAccountService {
         return mapToResponse(memberBankAccountRepository.save(account));
     }
 
-    // UPDATE 🔥
+    // UPDATE bank account
     public MemberBankAccountResponseDTO updateMemberBankAccount(
             String memberId,
             Long accountId,
@@ -98,6 +98,7 @@ public class MemberBankAccountService {
 
         return mapToResponse(memberBankAccountRepository.save(account));
     }
+
 
     private MemberBankAccountResponseDTO mapToResponse(MemberBankAccount account) {
         Bank bank = bankRepository.findByBankId(account.getBankId()).orElse(null);

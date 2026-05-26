@@ -26,6 +26,7 @@ public class BankController {
         this.bankBranchRepository = bankBranchRepository;
     }
 
+    // Get all banks
     @GetMapping
     public List<BankDTO> getBanks() {
         return bankRepository.findAll()
@@ -34,6 +35,7 @@ public class BankController {
                 .toList();
     }
 
+    // Get branches for a specific bank
     @GetMapping("/{bankId}/branches")
     public List<BankBranchDTO> getBranchesByBank(@PathVariable String bankId) {
         return bankBranchRepository.findByBankId(bankId)

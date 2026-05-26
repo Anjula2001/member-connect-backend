@@ -66,44 +66,47 @@ public class DocumentController {
     @GetMapping("/{requestType}/{requestId}/required-documents")
     public List<RequiredDocumentDTO> getRequiredDocuments(
             @PathVariable String requestType,
-            @PathVariable Long requestId,
+            @PathVariable String requestNo,
             @RequestParam String memberId
     ) {
         String applicationType = mapRequestTypeToApplicationType(requestType);
-        return documentService.getRequiredDocuments(requestId, memberId, applicationType);
+        return documentService.getRequiredDocuments(requestNo, memberId, applicationType);
     }
 
+    // Get required documents preview
     @GetMapping("/{requestType}/required-documents-preview")
     public List<RequiredDocumentDTO> getRequiredDocumentsPreview(
             @PathVariable String requestType,
             @RequestParam String memberId
     ) {
         String applicationType = mapRequestTypeToApplicationType(requestType);
-        return documentService.getRequiredDocuments(0L, memberId, applicationType);
+        return documentService.getRequiredDocuments("0", memberId, applicationType);
     }
 
-    @PostMapping("/{requestType}/{requestId}/documents/{requiredDocumentId}/upload")
+    // Upload a document for a specific required document
+    @PostMapping("/{requestType}/{requestNo}/documents/{requiredDocumentId}/upload")
     public UploadedDocument uploadDocument(
             @PathVariable String requestType,
-            @PathVariable Long requestId,
+            @PathVariable String requestNo,
             @PathVariable Long requiredDocumentId,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
         String applicationType = mapRequestTypeToApplicationType(requestType);
         return documentService.uploadDocument(
-                requestId,
+                requestNo,
                 requiredDocumentId,
                 file,
                 applicationType
         );
     }
 
-    @GetMapping("/{requestType}/{requestId}/uploaded-documents")
+    // Get uploaded documents for a specific request
+    @GetMapping("/{requestType}/{requestNo}/uploaded-documents")
     public List<UploadedDocument> getUploadedDocuments(
             @PathVariable String requestType,
-            @PathVariable Long requestId
+            @PathVariable String requestNo
     ) {
-        return documentService.getUploadedDocuments(requestId);
+        return documentService.getUploadedDocuments(requestNo);
     }
 
     @PostMapping("/file/upload")
@@ -121,11 +124,11 @@ public class DocumentController {
     @GetMapping("/{requestType}/{requestId}/documents/{requiredDocumentId}/uploaded")
     public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
             @PathVariable String requestType,
-            @PathVariable Long requestId,
+            @PathVariable String requestNo,
             @PathVariable Long requiredDocumentId
     ) {
         return documentService.getUploadedDocumentsByRequiredDocument(
-                requestId,
+                requestNo,
                 requiredDocumentId
         );
     }
@@ -138,6 +141,7 @@ public class DocumentController {
         documentService.deleteUploadedDocument(uploadedDocumentId);
     }
 
+    // Download an uploaded document
     @GetMapping("/{requestType}/documents/{uploadedDocumentId}/download")
     public ResponseEntity<byte[]> downloadDocument(
             @PathVariable String requestType,

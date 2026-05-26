@@ -18,7 +18,6 @@ public class MemberBankAccountRequestDTO {
     public String getBankId() {
         return bankId;
     }
-
     public void setBankId(String bankId) {
         this.bankId = bankId;
     }
@@ -26,7 +25,6 @@ public class MemberBankAccountRequestDTO {
     public String getBranchId() {
         return branchId;
     }
-
     public void setBranchId(String branchId) {
         this.branchId = branchId;
     }
@@ -34,7 +32,6 @@ public class MemberBankAccountRequestDTO {
     public String getAccountNumber() {
         return accountNumber;
     }
-
     public void setAccountNumber(String accountNumber) {
         this.accountNumber = accountNumber;
     }

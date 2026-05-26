@@ -22,6 +22,7 @@ public class MinorSavingsAccountController {
         this.service = service;
     }
 
+    // Get all minor savings accounts for a member
     @GetMapping("/{memberId}/minor-savings-accounts")
     public List<MinorSavingsAccount> getMinorSavingsAccounts(
             @PathVariable String memberId

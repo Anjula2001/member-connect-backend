@@ -1,4 +1,4 @@
 package com.memberconnect.backend.service;
 
-public class AuthServices {
+public class AuthService {
 }

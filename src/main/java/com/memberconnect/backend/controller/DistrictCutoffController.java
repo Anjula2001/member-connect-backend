@@ -21,7 +21,7 @@ public class DistrictCutoffController {
         this.service = service;
     }
 
-    // GET endpoint to fetch cutoff by district and exam year
+    //fetch cutoff by district and exam year
     @GetMapping("/api/cutoff")
     public DistrictCutoffDTO getCutoff(
             @RequestParam String district,
@@ -36,6 +36,6 @@ public class DistrictCutoffController {
                         dc.getExamYear(),
                         dc.getCutoffMarks()
                 ))
-                .orElse(new DistrictCutoffDTO(0L, district, year, 0)); // return default values if not found
+                .orElse(new DistrictCutoffDTO(0L, district, year, 0));
     }
 }
