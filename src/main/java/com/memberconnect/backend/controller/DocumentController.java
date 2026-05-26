@@ -32,15 +32,13 @@ import com.memberconnect.backend.service.DocumentService;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final com.memberconnect.backend.service.S3Service s3Service;
 
-    public DocumentController(DocumentService documentService) {
+    public DocumentController(DocumentService documentService, com.memberconnect.backend.service.S3Service s3Service) {
         this.documentService = documentService;
+        this.s3Service = s3Service;
     }
 
-<<<<<<< HEAD
-    // Get required documents for a specific request
-    @GetMapping("/{requestType}/{requestNo}/required-documents")
-=======
     // --- Member application document endpoints ---
 
     @PostMapping("/documents/upload")
@@ -66,7 +64,6 @@ public class DocumentController {
     // --- Retirement / Grade5 document endpoints ---
 
     @GetMapping("/{requestType}/{requestId}/required-documents")
->>>>>>> 4a387f07f4d91b8e58ab1c67bde5db83107373d5
     public List<RequiredDocumentDTO> getRequiredDocuments(
             @PathVariable String requestType,
             @PathVariable String requestNo,
@@ -112,8 +109,19 @@ public class DocumentController {
         return documentService.getUploadedDocuments(requestNo);
     }
 
-    // Get uploaded documents for a specific required document
-    @GetMapping("/{requestType}/{requestNo}/documents/{requiredDocumentId}/uploaded")
+    @PostMapping("/file/upload")
+    public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) throws IOException {
+        String fileName = s3Service.uploadFile(file);
+        return ResponseEntity.ok(fileName);
+    }
+
+    @GetMapping("/file/download")
+    public ResponseEntity<byte[]> downloadGenericFile(@RequestParam("fileName") String fileName) {
+        byte[] fileBytes = s3Service.downloadFile(fileName);
+        return ResponseEntity.ok().body(fileBytes);
+    }
+
+    @GetMapping("/{requestType}/{requestId}/documents/{requiredDocumentId}/uploaded")
     public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
             @PathVariable String requestType,
             @PathVariable String requestNo,
@@ -125,12 +133,7 @@ public class DocumentController {
         );
     }
 
-<<<<<<< HEAD
-    // Delete an uploaded document
-    @DeleteMapping("/{requestType}/documents/{uploadedDocumentId}")
-=======
     @DeleteMapping("/{requestType}/documents/{uploadedDocumentId}/file")
->>>>>>> 4a387f07f4d91b8e58ab1c67bde5db83107373d5
     public void deleteUploadedDocument(
             @PathVariable String requestType,
             @PathVariable Long uploadedDocumentId
@@ -147,8 +150,7 @@ public class DocumentController {
         UploadedDocument document =
                 documentService.getUploadedDocumentById(uploadedDocumentId);
 
-        File file = new File(document.getFilePath());
-        byte[] fileBytes = Files.readAllBytes(file.toPath());
+        byte[] fileBytes = s3Service.downloadFile(document.getFilePath());
 
         return ResponseEntity.ok()
                 .header(
