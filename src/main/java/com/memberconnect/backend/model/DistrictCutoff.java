@@ -26,7 +26,6 @@ public class DistrictCutoff {
 
     private int cutoffMarks;
 
-    // Constructors
     public DistrictCutoff() {}
 
     public DistrictCutoff(String district, int examYear, int cutoffMarks) {
@@ -35,7 +34,6 @@ public class DistrictCutoff {
         this.cutoffMarks = cutoffMarks;
     }
 
-    // Getters & Setters
     public Long getId() {
         return id;
     }

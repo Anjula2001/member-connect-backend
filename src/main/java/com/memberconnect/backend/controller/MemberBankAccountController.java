@@ -28,6 +28,7 @@ public class MemberBankAccountController {
         this.service = service;
     }
 
+    // Get all bank accounts for a member
     @GetMapping
     public List<MemberBankAccountResponseDTO> getMemberBankAccounts(
             @PathVariable String memberId
@@ -35,6 +36,7 @@ public class MemberBankAccountController {
         return service.getMemberBankAccounts(memberId);
     }
 
+    // Add a new bank account for a member
     @PostMapping
     public ResponseEntity<?> saveMemberBankAccount(
             @PathVariable String memberId,
@@ -50,7 +52,8 @@ public class MemberBankAccountController {
             );
         }
     }
-
+    
+    // Update an existing bank account for a member
     @PutMapping("/{accountId}")
     public ResponseEntity<?> updateMemberBankAccount(
             @PathVariable String memberId,

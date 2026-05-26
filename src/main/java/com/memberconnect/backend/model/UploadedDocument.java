@@ -26,6 +26,9 @@ public class UploadedDocument {
 
     private String fileType;
 
+    @Column(name = "request_no")
+    private String requestNo;
+
     @Column(columnDefinition = "TEXT")
     private String filePath;
 
@@ -46,7 +49,6 @@ public class UploadedDocument {
     public Long getRequiredDocumentId() {
         return requiredDocumentId;
     }
-
     public void setRequiredDocumentId(Long requiredDocumentId) {
         this.requiredDocumentId = requiredDocumentId;
     }
@@ -54,7 +56,6 @@ public class UploadedDocument {
     public String getFileName() {
         return fileName;
     }
-
     public void setFileName(String fileName) {
         this.fileName = fileName;
     }
@@ -62,7 +63,6 @@ public class UploadedDocument {
     public String getFileType() {
         return fileType;
     }
-
     public void setFileType(String fileType) {
         this.fileType = fileType;
     }
@@ -70,7 +70,6 @@ public class UploadedDocument {
     public String getFilePath() {
         return filePath;
     }
-
     public void setFilePath(String filePath) {
         this.filePath = filePath;
     }
@@ -78,10 +77,14 @@ public class UploadedDocument {
     public LocalDateTime getUploadedAt() {
         return uploadedAt;
     }
-
     public void setUploadedAt(LocalDateTime uploadedAt) {
         this.uploadedAt = uploadedAt;
     }
-}
 
-   
+    public String getRequestNo() {
+        return requestNo;
+    }
+    public void setRequestNo(String requestNo) {
+        this.requestNo = requestNo;
+    }
+}

@@ -135,36 +135,14 @@ public class Grade5ScholarshipController {
     ) {
         try {
             return ResponseEntity.ok(
-                    service.searchRequests(
-                            years,
-                            statuses,
-                            receivedOn,
-                            fromDate,
-                            toDate,
-                            search,
-                            sortBy,
-                            sortDirection
-                    )
+                    service.searchRequests(years,statuses,receivedOn,fromDate,toDate,search,sortBy,sortDirection)
             );
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
 
-    @GetMapping("/eligibility/validate")
-    public ResponseEntity<?> validateEligibility(
-            @RequestParam String memberId,
-            @RequestParam Integer examYear
-    ) {
-        try {
-            return ResponseEntity.ok(
-                    service.validateEligibility(memberId, examYear)
-            );
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
+    // Update request details
     @PutMapping("/{requestNo}/update")
     public ResponseEntity<?> updateRequest(
             @PathVariable String requestNo,

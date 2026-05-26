@@ -8,8 +8,7 @@ public class MemberSummaryDTO {
     private String nic;
     private String status;
 
-    public MemberSummaryDTO() {
-    }
+    public MemberSummaryDTO() {}
 
     public MemberSummaryDTO(
             String memberId,

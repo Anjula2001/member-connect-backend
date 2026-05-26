@@ -18,7 +18,6 @@ public class Grade5ExamMaster {
     @Column(name = "exam_date")
     private LocalDate examDate;
 
-    // Constructors
     public Grade5ExamMaster() {}
 
     public Grade5ExamMaster(Integer year, LocalDate examDate) {
@@ -26,7 +25,6 @@ public class Grade5ExamMaster {
         this.examDate = examDate;
     }
 
-    // Getters & Setters
     public Integer getYear() {
         return year;
     }

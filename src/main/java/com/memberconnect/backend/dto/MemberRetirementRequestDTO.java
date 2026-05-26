@@ -6,13 +6,11 @@ public class MemberRetirementRequestDTO {
     private String effectiveDate;
     private String comment;
 
-    public MemberRetirementRequestDTO() {
-    }
+    public MemberRetirementRequestDTO() {}
 
     public String getRequestedDate() {
         return requestedDate;
     }
-
     public void setRequestedDate(String requestedDate) {
         this.requestedDate = requestedDate;
     }
@@ -20,7 +18,6 @@ public class MemberRetirementRequestDTO {
     public String getEffectiveDate() {
         return effectiveDate;
     }
-
     public void setEffectiveDate(String effectiveDate) {
         this.effectiveDate = effectiveDate;
     }
@@ -28,7 +25,6 @@ public class MemberRetirementRequestDTO {
     public String getComment() {
         return comment;
     }
-
     public void setComment(String comment) {
         this.comment = comment;
     }

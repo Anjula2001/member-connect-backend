@@ -17,6 +17,7 @@ public class Bank {
     @Column(nullable = false, unique = true)
     private String name;
 
+<<<<<<< HEAD
     @OneToMany(mappedBy = "bank", cascade = CascadeType.ALL)
     private List<Branch> branches;
 
@@ -44,5 +45,24 @@ public class Bank {
 
     public void setBankCode(String bankCode) {
         this.bankCode = bankCode;
+=======
+    public Long getId() { 
+        return id; 
+    }
+
+    public String getBankId() {
+        return bankId; 
+    }
+
+    public void setBankId(String bankId) { 
+        this.bankId = bankId; 
+    }
+
+    public String getName() { 
+        return name; 
+    }
+    public void setName(String name) { 
+        this.name = name; 
+>>>>>>> origin/dev
     }
 }

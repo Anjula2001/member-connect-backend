@@ -80,11 +80,13 @@ public class MemberController {
         return memberService.updateStatus(id, status);
     }
 
+    // Get member summary information
     @GetMapping("/{memberId}")
     public MemberSummaryDTO getMember(@PathVariable String memberId) {
         return retirementService.getMemberSummary(memberId);
     }
 
+    // Validate a member for retirement
     @GetMapping("/{memberId}/retirement-validation")
     public MemberRetirementValidationDTO validateMemberForRetirement(
             @PathVariable String memberId
