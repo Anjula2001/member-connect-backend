@@ -1,13 +1,10 @@
 package com.memberconnect.backend.repository;
 
-import java.util.Optional;
-
+import com.memberconnect.backend.model.Bank;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import com.memberconnect.backend.model.Bank;
+import java.util.Optional;
 
 public interface BankRepository extends JpaRepository<Bank, Long> {
-
-    Optional<Bank> findByBankId(String bankId);
-
+    Optional<Bank> findByBankCode(String bankCode);
 }

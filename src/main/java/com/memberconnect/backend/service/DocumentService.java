@@ -77,7 +77,7 @@ public class DocumentService {
 
     public List<RequiredDocumentDTO> getRequiredDocuments(Long requestId, String memberId, String applicationType) {
         List<RequiredDocument> requiredDocuments = requiredDocumentRepository.findByApplicationTypeIn(List.of(applicationType));
-        Set<Long> uploadedRequiredDocumentIds = uploadedDocumentRepository.findByRequestId(requestId)
+        Set<Long> uploadedRequiredDocumentIds = uploadedDocumentRepository.findByRequestId(String.valueOf(requestId))
                 .stream()
                 .map(UploadedDocument::getRequiredDocumentId)
                 .filter(Objects::nonNull)
@@ -121,7 +121,7 @@ public class DocumentService {
         }
 
         List<UploadedDocument> existingDocuments = uploadedDocumentRepository.findByRequestIdAndRequiredDocumentId(
-                requestId,
+                String.valueOf(requestId),
                 requiredDocumentId
         );
 
@@ -136,7 +136,7 @@ public class DocumentService {
         String fileKey = s3Service.uploadFile(file);
 
         UploadedDocument uploadedDocument = new UploadedDocument();
-        uploadedDocument.setRequestId(requestId);
+        uploadedDocument.setRequestId(String.valueOf(requestId));
         uploadedDocument.setRequiredDocumentId(requiredDocumentId);
         uploadedDocument.setFileName(file.getOriginalFilename());
         uploadedDocument.setFileType(file.getContentType());
@@ -147,11 +147,11 @@ public class DocumentService {
     }
 
     public List<UploadedDocument> getUploadedDocuments(Long requestId) {
-        return uploadedDocumentRepository.findByRequestId(requestId);
+        return uploadedDocumentRepository.findByRequestId(String.valueOf(requestId));
     }
 
     public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(Long requestId, Long requiredDocumentId) {
-        return uploadedDocumentRepository.findByRequestIdAndRequiredDocumentId(requestId, requiredDocumentId);
+        return uploadedDocumentRepository.findByRequestIdAndRequiredDocumentId(String.valueOf(requestId), requiredDocumentId);
     }
 
     public void deleteUploadedDocument(Long uploadedDocumentId) {

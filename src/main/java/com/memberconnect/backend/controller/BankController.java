@@ -1,45 +1,35 @@
 package com.memberconnect.backend.controller;
 
+import com.memberconnect.backend.model.Bank;
+import com.memberconnect.backend.model.Branch;
+import com.memberconnect.backend.repository.BankRepository;
+import com.memberconnect.backend.repository.BranchRepository;
+import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import com.memberconnect.backend.dto.BankBranchDTO;
-import com.memberconnect.backend.dto.BankDTO;
-import com.memberconnect.backend.repository.BankBranchRepository;
-import com.memberconnect.backend.repository.BankRepository;
-
 @RestController
-@RequestMapping("/api/banks")
+@RequestMapping("/api")
 @CrossOrigin(origins = "http://localhost:3000")
 public class BankController {
 
     private final BankRepository bankRepository;
-    private final BankBranchRepository bankBranchRepository;
+    private final BranchRepository branchRepository;
 
-    public BankController(BankRepository bankRepository, BankBranchRepository bankBranchRepository) {
+    public BankController(BankRepository bankRepository, BranchRepository branchRepository) {
         this.bankRepository = bankRepository;
-        this.bankBranchRepository = bankBranchRepository;
+        this.branchRepository = branchRepository;
+    }
+    
+    // Endpoint to get all banks
+    @GetMapping("/banks")
+    public List<Bank> getBanks() {
+        return bankRepository.findAll();
     }
 
-    @GetMapping
-    public List<BankDTO> getBanks() {
-        return bankRepository.findAll()
-                .stream()
-                .map(bank -> new BankDTO(bank.getBankId(), bank.getName()))
-                .toList();
+    // Endpoint to get branches by bank ID
+    @GetMapping("/branches/{bankId}")
+    public List<Branch> getBranchesByBank(@PathVariable Long bankId) {
+        return branchRepository.findByBankId(bankId);
     }
-
-    @GetMapping("/{bankId}/branches")
-    public List<BankBranchDTO> getBranchesByBank(@PathVariable String bankId) {
-        return bankBranchRepository.findByBankId(bankId)
-                .stream()
-                .map(branch -> new BankBranchDTO(branch.getBranchId(), branch.getName()))
-                .toList();
-    }
-
 }

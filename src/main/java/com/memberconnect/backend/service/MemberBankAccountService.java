@@ -50,13 +50,13 @@ public class MemberBankAccountService {
                 throw new RuntimeException("Only one disbursement bank account is allowed");
             }
 
-        Bank bank = bankRepository.findByBankId(request.getBankId())
-                .orElseThrow(() -> new RuntimeException("Invalid bankId"));
+        Bank bank = bankRepository.findByBankCode(request.getBankId())
+                .orElseThrow(() -> new RuntimeException("Invalid bankCode"));
 
         BankBranch branch = bankBranchRepository.findByBranchId(request.getBranchId())
                 .orElseThrow(() -> new RuntimeException("Invalid branchId"));
 
-        if (!branch.getBankId().equals(bank.getBankId())) {
+        if (!branch.getBankId().equals(bank.getBankCode())) {
             throw new RuntimeException("Branch does not belong to bank");
         }
 
@@ -82,13 +82,13 @@ public class MemberBankAccountService {
             throw new RuntimeException("Invalid member access");
         }
 
-        Bank bank = bankRepository.findByBankId(request.getBankId())
-                .orElseThrow(() -> new RuntimeException("Invalid bankId"));
+        Bank bank = bankRepository.findByBankCode(request.getBankId())
+                .orElseThrow(() -> new RuntimeException("Invalid bankCode"));
 
         BankBranch branch = bankBranchRepository.findByBranchId(request.getBranchId())
                 .orElseThrow(() -> new RuntimeException("Invalid branchId"));
 
-        if (!branch.getBankId().equals(bank.getBankId())) {
+        if (!branch.getBankId().equals(bank.getBankCode())) {
             throw new RuntimeException("Branch does not belong to bank");
         }
 
@@ -100,7 +100,7 @@ public class MemberBankAccountService {
     }
 
     private MemberBankAccountResponseDTO mapToResponse(MemberBankAccount account) {
-        Bank bank = bankRepository.findByBankId(account.getBankId()).orElse(null);
+        Bank bank = bankRepository.findByBankCode(account.getBankId()).orElse(null);
         BankBranch branch = bankBranchRepository.findByBranchId(account.getBranchId()).orElse(null);
 
         return new MemberBankAccountResponseDTO(

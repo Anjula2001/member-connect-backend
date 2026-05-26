@@ -1,32 +1,48 @@
 package com.memberconnect.backend.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import java.util.List;
 
 @Entity
-@Table(name = "bank")
+@Table(name = "banks")
 public class Bank {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "bank_id")
-    private String bankId;
+    @Column(name = "bank_code", unique = true)
+    private String bankCode;
 
-    @Column(name = "name")
+    @Column(nullable = false, unique = true)
     private String name;
 
-    public Long getId() { return id; }
+    @OneToMany(mappedBy = "bank", cascade = CascadeType.ALL)
+    private List<Branch> branches;
 
-    public String getBankId() { return bankId; }
-    public void setBankId(String bankId) { this.bankId = bankId; }
+    public Bank() {}
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public Bank(String name) {
+        this.name = name;
+    }
 
+    public Long getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getBankCode() {
+        return bankCode;
+    }
+
+    public void setBankCode(String bankCode) {
+        this.bankCode = bankCode;
+    }
 }
