@@ -67,6 +67,9 @@ public class UniversityScholarshipController {
     // Endpoint to create a new scholarship request
     @PostMapping("/university-scholarships")
     public ResponseEntity<?> createRequest(@RequestBody UniversityScholarshipRequestDto dto) {
+        System.out.println("=== CREATE REQUEST DTO VALUES ===");
+        System.out.println("hasMinorAccount: " + dto.getHasMinorAccount());
+        System.out.println("minorAccountMonths: " + dto.getMinorAccountMonths());
         try {
             UniversityScholarshipRequest saved = service.saveRequest(dto);
             return ResponseEntity.ok(saved);
@@ -83,6 +86,9 @@ public class UniversityScholarshipController {
             @PathVariable String requestId,
             @RequestBody UniversityScholarshipRequestDto dto
     ) {
+        System.out.println("=== UPDATE REQUEST DTO VALUES ===");
+        System.out.println("hasMinorAccount: " + dto.getHasMinorAccount());
+        System.out.println("minorAccountMonths: " + dto.getMinorAccountMonths());
         try {
             UniversityScholarshipRequest updated = service.updateRequestByRequestId(requestId, dto);
             return ResponseEntity.ok(updated);

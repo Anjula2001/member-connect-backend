@@ -44,7 +44,7 @@ public class UploadedDocumentService {
     
     // List uploaded documents for a specific request
     public List<UploadedDocumentDisplayDto> listByRequest(String requestId) {
-        return repository.findByRequestId(requestId)
+        return repository.findByRequestNo(requestId)
                 .stream()
             .map(d -> new UploadedDocumentDisplayDto(
                 d.getId(),
@@ -60,7 +60,7 @@ public class UploadedDocumentService {
 
     // List uploaded documents for a specific request and required document type
     public List<UploadedDocumentDisplayDto> listByRequestAndRequired(String requestId, Long requiredDocumentId) {
-        return repository.findByRequestIdAndRequiredDocumentId(requestId, requiredDocumentId)
+        return repository.findByRequestNoAndRequiredDocumentId(requestId, requiredDocumentId)
                 .stream()
             .map(d -> new UploadedDocumentDisplayDto(
                 d.getId(),
@@ -76,7 +76,7 @@ public class UploadedDocumentService {
 
     // Download a specific uploaded document by ID and request ID
     public byte[] download(Long documentId, String requestId) throws IOException {
-        Optional<UploadedDocument> opt = repository.findByIdAndRequestId(documentId, requestId);
+        Optional<UploadedDocument> opt = repository.findByIdAndRequestNo(documentId, requestId);
         if (opt.isEmpty()) throw new IllegalArgumentException("Document not found");
         UploadedDocument d = opt.get();
         return s3Service.downloadFile(d.getFilePath());
@@ -84,13 +84,13 @@ public class UploadedDocumentService {
 
     // Get details of a specific uploaded document by ID and request ID
     public UploadedDocument getDetails(Long documentId, String requestId) {
-        return repository.findByIdAndRequestId(documentId, requestId)
+        return repository.findByIdAndRequestNo(documentId, requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Document not found"));
     }
 
     // Delete a specific uploaded document by ID and request ID
     public void delete(Long documentId, String requestId) throws IOException {
-        Optional<UploadedDocument> opt = repository.findByIdAndRequestId(documentId, requestId);
+        Optional<UploadedDocument> opt = repository.findByIdAndRequestNo(documentId, requestId);
         if (opt.isEmpty()) throw new IllegalArgumentException("Document not found");
         UploadedDocument d = opt.get();
         s3Service.deleteFile(d.getFilePath());

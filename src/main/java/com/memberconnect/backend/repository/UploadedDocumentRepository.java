@@ -15,4 +15,6 @@ public interface UploadedDocumentRepository extends JpaRepository<UploadedDocume
     List<UploadedDocument> findByRequestNoAndRequiredDocumentId(String requestNo,Long requiredDocumentId);
 
     boolean existsByRequestNoAndRequiredDocumentId(String requestNo,Long requiredDocumentId);
+
+    Optional<UploadedDocument> findByIdAndRequestNo(Long id, String requestNo);
 }

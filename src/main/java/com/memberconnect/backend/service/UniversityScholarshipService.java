@@ -89,7 +89,7 @@ public class UniversityScholarshipService {
     // Validate member active status 
     private void validateMemberActiveOnExamLastDate(UniversityScholarshipRequestDto dto) {
         
-        Member member = memberRepository.findById(dto.getMemberId())
+        Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
         if (member.getStatus() == null || !"ACTIVE".equalsIgnoreCase(member.getStatus().name())) {
@@ -110,7 +110,7 @@ public class UniversityScholarshipService {
         LocalDate examLastDate = examMaster.getExamLastDate();
 
         // Get member
-        Member member = memberRepository.findById(dto.getMemberId())
+        Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
         LocalDate membershipStartDate = member.getMembershipStartDate();
@@ -138,15 +138,16 @@ public class UniversityScholarshipService {
 
         LocalDate examLastDate = examMaster.getExamLastDate();
 
-        Member member = memberRepository.findById(dto.getMemberId())
+        Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
-        String endMonth = examLastDate.withDayOfMonth(1).toString().substring(0, 7);
+        String endMonth = examLastDate.withDayOfMonth(1).toString().substring(0, 7).replace('-', '.');
         String startMonth = examLastDate
                 .minusYears(lookbackYears)
                 .withDayOfMonth(1)
                 .toString()
-                .substring(0, 7);
+                .substring(0, 7)
+                .replace('-', '.');
 
         long remittedMonthCount =
                 remittanceRepository.countByMember_IdAndRemittedTrueAndRemittanceMonthBetween(
@@ -171,7 +172,7 @@ public class UniversityScholarshipService {
 
         LocalDate examLastDate = examMaster.getExamLastDate();
 
-        Member member = memberRepository.findById(dto.getMemberId())
+        Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
         LocalDate startDate = examLastDate
@@ -183,7 +184,7 @@ public class UniversityScholarshipService {
         LocalDate currentMonth = startDate;
 
         while (!currentMonth.isAfter(endDate)) {
-            String month = currentMonth.toString().substring(0, 7);
+            String month = currentMonth.toString().substring(0, 7).replace('-', '.');
 
             boolean remitted = remittanceRepository
                     .existsByMember_IdAndRemittanceMonthAndRemittedTrue(
@@ -216,7 +217,7 @@ public class UniversityScholarshipService {
 
         LocalDate examLastDate = examMaster.getExamLastDate();
 
-        Member member = memberRepository.findById(dto.getMemberId())
+        Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
         LocalDate startDate = examLastDate.minusYears(1);
@@ -374,7 +375,7 @@ public class UniversityScholarshipService {
     // Save university scholarship request
     public UniversityScholarshipRequest saveRequest(UniversityScholarshipRequestDto dto) {
         
-        Member member = memberRepository.findById(dto.getMemberId())
+        Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
         validateMemberActiveOnExamLastDate(dto);
@@ -485,15 +486,22 @@ public class UniversityScholarshipService {
         
         // Check minor account if hasMinorAccount is not provided
         if (dto.getHasMinorAccount() == null) {
-        Map<String, Object> minorData = checkMinorAccount(dto.getBcNo());
+            Map<String, Object> minorData = checkMinorAccount(dto.getBcNo());
 
-        request.setHasMinorAccount(
-            "YES".equals(minorData.get("hasMinorAccount"))
-                ? com.memberconnect.backend.enums.MinorAccount.YES
-                : com.memberconnect.backend.enums.MinorAccount.NO
-        );
+            request.setHasMinorAccount(
+                "YES".equals(minorData.get("hasMinorAccount"))
+                    ? com.memberconnect.backend.enums.MinorAccount.YES
+                    : com.memberconnect.backend.enums.MinorAccount.NO
+            );
 
-        request.setMinorAccountMonths((String) minorData.get("remittedMonths"));
+            request.setMinorAccountMonths((String) minorData.get("remittedMonths"));
+        } else {
+            request.setHasMinorAccount(
+                "YES".equalsIgnoreCase(dto.getHasMinorAccount().trim())
+                    ? com.memberconnect.backend.enums.MinorAccount.YES
+                    : com.memberconnect.backend.enums.MinorAccount.NO
+            );
+            request.setMinorAccountMonths(dto.getMinorAccountMonths());
         }
 
         request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
@@ -506,7 +514,7 @@ public class UniversityScholarshipService {
                         .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
 
         if (dto.getMemberId() != null) {
-                Member member = memberRepository.findById(dto.getMemberId())
+                Member member = memberRepository.findByMemberId(dto.getMemberId())
                         .orElseThrow(() -> new RuntimeException("Member not found"));
                 request.setMember(member);
         }

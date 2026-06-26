@@ -1,8 +1,10 @@
 package com.memberconnect.backend.service;
 
 import java.io.IOException;
+import java.io.File;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -77,7 +79,7 @@ public class DocumentService {
 
     public List<RequiredDocumentDTO> getRequiredDocuments(Long requestId, String memberId, String applicationType) {
         List<RequiredDocument> requiredDocuments = requiredDocumentRepository.findByApplicationTypeIn(List.of(applicationType));
-        Set<Long> uploadedRequiredDocumentIds = uploadedDocumentRepository.findByRequestId(String.valueOf(requestId))
+        Set<Long> uploadedRequiredDocumentIds = uploadedDocumentRepository.findByRequestNo(String.valueOf(requestId))
                 .stream()
                 .map(UploadedDocument::getRequiredDocumentId)
                 .filter(Objects::nonNull)
@@ -120,7 +122,7 @@ public class DocumentService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Required document does not match request type");
         }
 
-        List<UploadedDocument> existingDocuments = uploadedDocumentRepository.findByRequestIdAndRequiredDocumentId(
+        List<UploadedDocument> existingDocuments = uploadedDocumentRepository.findByRequestNoAndRequiredDocumentId(
                 String.valueOf(requestId),
                 requiredDocumentId
         );
@@ -147,11 +149,11 @@ public class DocumentService {
     }
 
     public List<UploadedDocument> getUploadedDocuments(Long requestId) {
-        return uploadedDocumentRepository.findByRequestId(String.valueOf(requestId));
+        return uploadedDocumentRepository.findByRequestNo(String.valueOf(requestId));
     }
 
     public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(Long requestId, Long requiredDocumentId) {
-        return uploadedDocumentRepository.findByRequestIdAndRequiredDocumentId(String.valueOf(requestId), requiredDocumentId);
+        return uploadedDocumentRepository.findByRequestNoAndRequiredDocumentId(String.valueOf(requestId), requiredDocumentId);
     }
 
     public void deleteUploadedDocument(Long uploadedDocumentId) {
@@ -174,6 +176,19 @@ public class DocumentService {
         return requiredDocuments.stream()
                 .filter(RequiredDocumentDTO::isMandatory)
                 .allMatch(RequiredDocumentDTO::isUploaded);
+    }
+
+    public boolean allMandatoryDocumentsUploaded(String requestNo, String memberId, String applicationType) {
+        List<UploadedDocument> uploadedDocuments = uploadedDocumentRepository.findByRequestNo(requestNo);
+        List<RequiredDocument> requiredDocuments = requiredDocumentRepository.findByApplicationType(applicationType);
+        
+        Set<Long> uploadedDocumentIds = uploadedDocuments.stream()
+                .map(UploadedDocument::getRequiredDocumentId)
+                .collect(Collectors.toSet());
+        
+        return requiredDocuments.stream()
+                .filter(RequiredDocument::isMandatory)
+                .allMatch(doc -> uploadedDocumentIds.contains(doc.getId()));
     }
 
     public UploadDocumentResponseDTO uploadDocumentMetadata(UploadDocumentRequestDTO requestDTO) {
@@ -340,29 +355,5 @@ public class DocumentService {
                 requestNo,
                 requiredDocumentId
         );
-    }
-
-    //Delete uploaded document
-    public void deleteUploadedDocument(Long uploadedDocumentId) {
-        uploadedDocumentRepository.deleteById(uploadedDocumentId);
-    }
-    
-    //check all mandatory document uploaded
-    public boolean allMandatoryDocumentsUploaded(
-            String requestNo,
-            String memberId,
-            String applicationType
-    ) {
-        List<RequiredDocumentDTO> docs =
-                getRequiredDocuments(requestNo, memberId, applicationType);
-
-        return docs.stream()
-                .filter(RequiredDocumentDTO::isMandatory)
-                .allMatch(RequiredDocumentDTO::isUploaded);
-    }
-
-    public UploadedDocument getUploadedDocumentById(Long uploadedDocumentId) {
-        return uploadedDocumentRepository.findById(uploadedDocumentId)
-                .orElseThrow(() -> new RuntimeException("Uploaded document not found"));
     }
 }

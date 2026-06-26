@@ -26,7 +26,7 @@ public class UniversityScholarshipRequestDto {
     private String hasMinorAccount;
     private String minorAccountMonths;
 
-    private Long memberId;
+    private String memberId;
     private Boolean followDeviationProcess;
 
     public UniversityScholarshipRequestDto() {}
@@ -183,11 +183,11 @@ public class UniversityScholarshipRequestDto {
         this.minorAccountMonths = minorAccountMonths;
     }
 
-    public Long getMemberId() {
+    public String getMemberId() {
         return memberId;
     }
 
-    public void setMemberId(Long memberId) {
+    public void setMemberId(String memberId) {
         this.memberId = memberId;
     }
 

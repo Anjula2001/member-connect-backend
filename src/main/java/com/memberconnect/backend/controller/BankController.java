@@ -21,14 +21,6 @@ public class BankController {
         this.branchRepository = branchRepository;
     }
 
-
-    // Get branches for a specific bank
-    @GetMapping("/{bankId}/branches")
-    public List<BankBranchDTO> getBranchesByBank(@PathVariable String bankId) {
-        return bankBranchRepository.findByBankId(bankId)
-                .stream()
-                .map(branch -> new BankBranchDTO(branch.getBranchId(), branch.getName()))
-                .toList();
     
     // Endpoint to get all banks
     @GetMapping("/banks")

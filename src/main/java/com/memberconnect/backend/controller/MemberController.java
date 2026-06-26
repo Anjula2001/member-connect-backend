@@ -41,6 +41,11 @@ public class MemberController {
         return ResponseEntity.ok(memberService.getMemberById(id));
     }
 
+    @GetMapping("/by-member-id/{memberId}")
+    public ResponseEntity<MemberDTO> getMemberByMemberId(@PathVariable String memberId) {
+        return ResponseEntity.ok(memberService.getMemberByMemberId(memberId));
+    }
+
     @GetMapping("/getMemberByNic/{nic}")
     public ResponseEntity<MemberDTO> getMemberByNic(@PathVariable String nic) {
         return ResponseEntity.ok(memberService.getMemberByNic(nic));
