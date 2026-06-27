@@ -63,7 +63,7 @@ public class DocumentController {
 
     // --- Retirement / Grade5 document endpoints ---
 
-    @GetMapping("/{requestType}/{requestId}/required-documents")
+    @GetMapping("/{requestType}/{requestNo}/required-documents")
     public List<RequiredDocumentDTO> getRequiredDocuments(
             @PathVariable String requestType,
             @PathVariable String requestNo,
@@ -121,7 +121,7 @@ public class DocumentController {
         return ResponseEntity.ok().body(fileBytes);
     }
 
-    @GetMapping("/{requestType}/{requestId}/documents/{requiredDocumentId}/uploaded")
+    @GetMapping("/{requestType}/{requestNo}/documents/{requiredDocumentId}/uploaded")
     public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
             @PathVariable String requestType,
             @PathVariable String requestNo,
@@ -155,7 +155,7 @@ public class DocumentController {
         return ResponseEntity.ok()
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + document.getFileName() + "\""
+                        "inline; filename=\"" + document.getFileName() + "\""
                 )
                 .header(HttpHeaders.CONTENT_TYPE, document.getFileType())
                 .body(fileBytes);
