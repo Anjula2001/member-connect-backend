@@ -699,6 +699,7 @@ public class UniversityScholarshipService {
                 return scholarshipRequestRepository.save(request);
     }
 
+    // Attach scholarship requests to a board meeting for approval
     @Transactional
     public void attachBoardMeeting(Map<String, Object> payload) {
         Object meetingIdObj = payload.get("boardMeetingId");
@@ -723,6 +724,7 @@ public class UniversityScholarshipService {
         }
     }
 
+    // Attach scholarship requests to a deviation board meeting for approval
     @Transactional
     public void attachDeviationBoardMeeting(Map<String, Object> payload) {
         Object meetingIdObj = payload.get("boardMeetingId");
