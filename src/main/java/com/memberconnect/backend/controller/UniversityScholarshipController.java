@@ -187,4 +187,15 @@ public class UniversityScholarshipController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
+
+    // Endpoint to delete a Normal Approval List and roll back attached requests
+    @DeleteMapping("/university-scholarships/approval-list/{boardMeetingId}")
+    public ResponseEntity<?> deleteApprovalList(@PathVariable Long boardMeetingId) {
+        try {
+            service.deleteApprovalList(boardMeetingId);
+            return ResponseEntity.ok(Map.of("message", "Approval list deleted and requests rolled back successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
 }

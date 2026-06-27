@@ -720,4 +720,29 @@ public class UniversityScholarshipService {
             scholarshipRequestRepository.save(request);
         }
     }
+
+    /**
+     * Deletes a Normal Approval List by rolling back all attached requests to
+     * SUBMITTED_FOR_NORMAL_BOARD_APPROVAL and detaching them from the board meeting.
+     */
+    @Transactional
+    public void deleteApprovalList(Long boardMeetingId) {
+        BoardMeeting boardMeeting = boardMeetingRepository.findById(boardMeetingId)
+                .orElseThrow(() -> new RuntimeException("Board Meeting not found: " + boardMeetingId));
+
+        List<UniversityScholarshipRequest> requests =
+                scholarshipRequestRepository.findByBoardMeeting(boardMeeting);
+
+        if (requests.isEmpty()) {
+            throw new RuntimeException("No approval list found for Board Meeting #" + boardMeetingId);
+        }
+
+        for (UniversityScholarshipRequest request : requests) {
+            if (request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST) {
+                request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_BOARD_APPROVAL);
+                request.setBoardMeeting(null);
+                scholarshipRequestRepository.save(request);
+            }
+        }
+    }
 }
