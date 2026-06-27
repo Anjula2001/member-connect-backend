@@ -99,6 +99,10 @@ public class UniversityScholarshipRequest {
     @Column(name = "reject_reason")
     private String rejectReason;
 
+    @ManyToOne
+    @JoinColumn(name = "board_meeting_id")
+    private BoardMeeting boardMeeting;
+
     public UniversityScholarshipRequest() {}
     
     public Long getId() { return id; }
@@ -282,6 +286,14 @@ public class UniversityScholarshipRequest {
 
     public void setStatus(UniversityScholarshipRequestStatus status) {
         this.status = status;
+    }
+
+    public BoardMeeting getBoardMeeting() {
+        return boardMeeting;
+    }
+
+    public void setBoardMeeting(BoardMeeting boardMeeting) {
+        this.boardMeeting = boardMeeting;
     }
 }
 

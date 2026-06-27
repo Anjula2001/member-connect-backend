@@ -177,5 +177,14 @@ public class UniversityScholarshipController {
 
         return ResponseEntity.ok(saved);
     }
-    
+
+    @PostMapping("/university-scholarships/attach-board-meeting")
+    public ResponseEntity<?> attachBoardMeeting(@RequestBody Map<String, Object> payload) {
+        try {
+            service.attachBoardMeeting(payload);
+            return ResponseEntity.ok(Map.of("message", "University Scholarship Requests successfully attached to Board Meeting"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
 }

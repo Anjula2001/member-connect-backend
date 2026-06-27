@@ -29,6 +29,8 @@ public class UniversityScholarshipListDto {
     private String branchName;
     private String accountNumber;
     private String incompleteReason;
+    private Long boardMeetingId;
+    private String boardMeetingName;
 
 
     public UniversityScholarshipListDto(
@@ -183,5 +185,21 @@ public class UniversityScholarshipListDto {
 
     public String getIncompleteReason() { 
         return incompleteReason; 
+    }
+
+    public Long getBoardMeetingId() {
+        return boardMeetingId;
+    }
+
+    public void setBoardMeetingId(Long boardMeetingId) {
+        this.boardMeetingId = boardMeetingId;
+    }
+
+    public String getBoardMeetingName() {
+        return boardMeetingName;
+    }
+
+    public void setBoardMeetingName(String boardMeetingName) {
+        this.boardMeetingName = boardMeetingName;
     }
 }

@@ -28,6 +28,9 @@ import com.memberconnect.backend.repository.ScholarshipRemittanceRepository;
 import org.springframework.beans.factory.annotation.Value;
 import com.memberconnect.backend.dto.UniversityScholarshipListDto;
 import org.springframework.util.StringUtils;
+import com.memberconnect.backend.model.BoardMeeting;
+import com.memberconnect.backend.repository.BoardmeetingRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -51,6 +54,7 @@ public class UniversityScholarshipService {
     private final int minimumMembershipYears = 5;
     private final ScholarshipRemittanceRepository remittanceRepository;
     private final ScholarshipMonthSettlementRepository settlementRepository;
+    private final BoardmeetingRepository boardMeetingRepository;
 
     @Value("${scholarship.required.remitted.months}")
     private int requiredRemittedMonths;
@@ -70,7 +74,8 @@ public class UniversityScholarshipService {
             UniversityScholarshipExamMasterRepository examMasterRepository,
             com.memberconnect.backend.repository.ScholarshipConfigRepository scholarshipConfigRepository,
             ScholarshipRemittanceRepository remittanceRepository,
-            ScholarshipMonthSettlementRepository settlementRepository
+            ScholarshipMonthSettlementRepository settlementRepository,
+            BoardmeetingRepository boardMeetingRepository
     ) {
         this.universityRepository = universityRepository;
         this.programRepository = programRepository;
@@ -81,9 +86,10 @@ public class UniversityScholarshipService {
         this.minorAccountRepository = minorAccountRepository;
         this.memberRepository = memberRepository;
         this.examMasterRepository = examMasterRepository;
-                this.scholarshipConfigRepository = scholarshipConfigRepository;
+        this.scholarshipConfigRepository = scholarshipConfigRepository;
         this.remittanceRepository = remittanceRepository;
         this.settlementRepository = settlementRepository;
+        this.boardMeetingRepository = boardMeetingRepository;
     }
    
     // Validate member active status 
@@ -242,7 +248,8 @@ public class UniversityScholarshipService {
     public List<UniversityScholarshipListDto> getAllScholarshipRequests() {
         return scholarshipRequestRepository.findAll()
                 .stream()
-                .map(request -> new UniversityScholarshipListDto(
+                .map(request -> {
+                    UniversityScholarshipListDto dto = new UniversityScholarshipListDto(
                         request.getId(),
                         request.getMember() != null ? request.getMember().getMemberId() : null,
                         request.getUniversityScholarshipRequestID(),
@@ -268,7 +275,13 @@ public class UniversityScholarshipService {
                         request.getBranch() != null ? request.getBranch().getName() : "",
                         request.getAccountNo() != null ? request.getAccountNo() : "",
                         request.getIncompleteReason() != null ? request.getIncompleteReason() : ""
-                ))
+                    );
+                    if (request.getBoardMeeting() != null) {
+                        dto.setBoardMeetingId(request.getBoardMeeting().getId());
+                        dto.setBoardMeetingName(request.getBoardMeeting().getBoardMeetingId());
+                    }
+                    return dto;
+                })
                 .toList();
     }
 
@@ -278,7 +291,7 @@ public class UniversityScholarshipService {
                 .findByUniversityScholarshipRequestID(requestId)
                 .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
 
-        return new UniversityScholarshipListDto(
+        UniversityScholarshipListDto dto = new UniversityScholarshipListDto(
                 request.getId(),
                 request.getMember() != null ? request.getMember().getMemberId() : null,
                 request.getUniversityScholarshipRequestID(),
@@ -305,6 +318,11 @@ public class UniversityScholarshipService {
                 request.getAccountNo() != null ? request.getAccountNo() : "",
                 request.getIncompleteReason() != null ? request.getIncompleteReason() : ""
         );
+        if (request.getBoardMeeting() != null) {
+            dto.setBoardMeetingId(request.getBoardMeeting().getId());
+            dto.setBoardMeetingName(request.getBoardMeeting().getBoardMeetingId());
+        }
+        return dto;
     }
 
     //Check minor account based on birth certificate number
@@ -677,5 +695,29 @@ public class UniversityScholarshipService {
                 request.setIncompleteReason(reason);
 
                 return scholarshipRequestRepository.save(request);
+    }
+
+    @Transactional
+    public void attachBoardMeeting(Map<String, Object> payload) {
+        Object meetingIdObj = payload.get("boardMeetingId");
+        if (meetingIdObj == null) {
+            throw new RuntimeException("Board Meeting ID is required");
+        }
+        Long boardMeetingId = Long.valueOf(meetingIdObj.toString());
+        BoardMeeting boardMeeting = boardMeetingRepository.findById(boardMeetingId)
+                .orElseThrow(() -> new RuntimeException("Board Meeting not found"));
+
+        java.util.List<String> requestIds = (java.util.List<String>) payload.get("requestIds");
+        if (requestIds == null || requestIds.isEmpty()) {
+            throw new RuntimeException("No scholarship requests specified");
+        }
+
+        for (String requestId : requestIds) {
+            UniversityScholarshipRequest request = scholarshipRequestRepository.findByUniversityScholarshipRequestID(requestId)
+                    .orElseThrow(() -> new RuntimeException("Scholarship Request not found: " + requestId));
+            request.setBoardMeeting(boardMeeting);
+            request.setStatus(UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST);
+            scholarshipRequestRepository.save(request);
+        }
     }
 }
