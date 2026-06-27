@@ -147,13 +147,12 @@ public class UniversityScholarshipService {
         Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
-        String endMonth = examLastDate.withDayOfMonth(1).toString().substring(0, 7).replace('-', '.');
+        String endMonth = examLastDate.withDayOfMonth(1).toString().substring(0, 7);
         String startMonth = examLastDate
                 .minusYears(lookbackYears)
                 .withDayOfMonth(1)
                 .toString()
-                .substring(0, 7)
-                .replace('-', '.');
+                .substring(0, 7);
 
         long remittedMonthCount =
                 remittanceRepository.countByMember_IdAndRemittedTrueAndRemittanceMonthBetween(
@@ -190,7 +189,7 @@ public class UniversityScholarshipService {
         LocalDate currentMonth = startDate;
 
         while (!currentMonth.isAfter(endDate)) {
-            String month = currentMonth.toString().substring(0, 7).replace('-', '.');
+            String month = currentMonth.toString().substring(0, 7);
 
             boolean remitted = remittanceRepository
                     .existsByMember_IdAndRemittanceMonthAndRemittedTrue(
