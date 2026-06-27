@@ -662,23 +662,26 @@ public class UniversityScholarshipService {
         return scholarshipRequestRepository.save(request);
     }
 
-    // Approve request by committee and forward to appropriate board list
+    // Approve request by committee and forward to appropriate board list, or approve from board list
     public UniversityScholarshipRequest approveRequest(String requestId) {
-                UniversityScholarshipRequest request = scholarshipRequestRepository
-                        .findByUniversityScholarshipRequestID(requestId)
-                        .orElseThrow(() -> new RuntimeException("Request not found"));
+                 UniversityScholarshipRequest request = scholarshipRequestRepository
+                         .findByUniversityScholarshipRequestID(requestId)
+                         .orElseThrow(() -> new RuntimeException("Request not found"));
 
-                if (request.getStatus() != UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
-                        throw new RuntimeException("Only requests submitted for committee approval can be approved");
-                }
+                 if (request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST ||
+                     request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST) {
+                         request.setStatus(UniversityScholarshipRequestStatus.APPROVED);
+                 } else if (request.getStatus() == UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
+                         if (Boolean.TRUE.equals(request.getFollowDeviationProcess())) {
+                                 request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL);
+                         } else {
+                                 request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_BOARD_APPROVAL);
+                         }
+                 } else {
+                         throw new RuntimeException("Only requests submitted for committee approval or added to board approval list can be approved");
+                 }
 
-                if (Boolean.TRUE.equals(request.getFollowDeviationProcess())) {
-                        request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL);
-                } else {
-                        request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_BOARD_APPROVAL);
-                }
-
-                return scholarshipRequestRepository.save(request);
+                 return scholarshipRequestRepository.save(request);
     }
     
     // Mark request as incomplete with reason
@@ -721,6 +724,30 @@ public class UniversityScholarshipService {
         }
     }
 
+    @Transactional
+    public void attachDeviationBoardMeeting(Map<String, Object> payload) {
+        Object meetingIdObj = payload.get("boardMeetingId");
+        if (meetingIdObj == null) {
+            throw new RuntimeException("Board Meeting ID is required");
+        }
+        Long boardMeetingId = Long.valueOf(meetingIdObj.toString());
+        BoardMeeting boardMeeting = boardMeetingRepository.findById(boardMeetingId)
+                .orElseThrow(() -> new RuntimeException("Board Meeting not found"));
+
+        java.util.List<String> requestIds = (java.util.List<String>) payload.get("requestIds");
+        if (requestIds == null || requestIds.isEmpty()) {
+            throw new RuntimeException("No scholarship requests specified");
+        }
+
+        for (String requestId : requestIds) {
+            UniversityScholarshipRequest request = scholarshipRequestRepository.findByUniversityScholarshipRequestID(requestId)
+                    .orElseThrow(() -> new RuntimeException("Scholarship Request not found: " + requestId));
+            request.setBoardMeeting(boardMeeting);
+            request.setStatus(UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST);
+            scholarshipRequestRepository.save(request);
+        }
+    }
+
     /**
      * Deletes a Normal Approval List by rolling back all attached requests to
      * SUBMITTED_FOR_NORMAL_BOARD_APPROVAL and detaching them from the board meeting.
@@ -740,6 +767,31 @@ public class UniversityScholarshipService {
         for (UniversityScholarshipRequest request : requests) {
             if (request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST) {
                 request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_BOARD_APPROVAL);
+                request.setBoardMeeting(null);
+                scholarshipRequestRepository.save(request);
+            }
+        }
+    }
+
+    /**
+     * Deletes a Deviation Approval List by rolling back all attached requests to
+     * SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL and detaching them from the board meeting.
+     */
+    @Transactional
+    public void deleteDeviationApprovalList(Long boardMeetingId) {
+        BoardMeeting boardMeeting = boardMeetingRepository.findById(boardMeetingId)
+                .orElseThrow(() -> new RuntimeException("Board Meeting not found: " + boardMeetingId));
+
+        List<UniversityScholarshipRequest> requests =
+                scholarshipRequestRepository.findByBoardMeeting(boardMeeting);
+
+        if (requests.isEmpty()) {
+            throw new RuntimeException("No deviation approval list found for Board Meeting #" + boardMeetingId);
+        }
+
+        for (UniversityScholarshipRequest request : requests) {
+            if (request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST) {
+                request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL);
                 request.setBoardMeeting(null);
                 scholarshipRequestRepository.save(request);
             }

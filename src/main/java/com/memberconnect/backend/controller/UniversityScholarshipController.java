@@ -188,6 +188,16 @@ public class UniversityScholarshipController {
         }
     }
 
+    @PostMapping("/university-scholarships/attach-deviation-board-meeting")
+    public ResponseEntity<?> attachDeviationBoardMeeting(@RequestBody Map<String, Object> payload) {
+        try {
+            service.attachDeviationBoardMeeting(payload);
+            return ResponseEntity.ok(Map.of("message", "University Scholarship Requests successfully attached to Deviation Board Meeting"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
     // Endpoint to delete a Normal Approval List and roll back attached requests
     @DeleteMapping("/university-scholarships/approval-list/{boardMeetingId}")
     public ResponseEntity<?> deleteApprovalList(@PathVariable Long boardMeetingId) {
@@ -198,4 +208,15 @@ public class UniversityScholarshipController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
-}
+
+    // Endpoint to delete a Deviation Approval List and roll back attached requests
+    @DeleteMapping("/university-scholarships/deviation-approval-list/{boardMeetingId}")
+    public ResponseEntity<?> deleteDeviationApprovalList(@PathVariable Long boardMeetingId) {
+        try {
+            service.deleteDeviationApprovalList(boardMeetingId);
+            return ResponseEntity.ok(Map.of("message", "Deviation approval list deleted and requests rolled back successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+}
