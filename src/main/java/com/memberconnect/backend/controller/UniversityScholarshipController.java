@@ -178,6 +178,7 @@ public class UniversityScholarshipController {
         return ResponseEntity.ok(saved);
     }
 
+    // Endpoint to attach scholarship requests to a normal board meeting
     @PostMapping("/university-scholarships/attach-board-meeting")
     public ResponseEntity<?> attachBoardMeeting(@RequestBody Map<String, Object> payload) {
         try {
@@ -188,6 +189,7 @@ public class UniversityScholarshipController {
         }
     }
 
+    // Endpoint to attach scholarship requests to a deviation board meeting
     @PostMapping("/university-scholarships/attach-deviation-board-meeting")
     public ResponseEntity<?> attachDeviationBoardMeeting(@RequestBody Map<String, Object> payload) {
         try {
@@ -219,4 +221,4 @@ public class UniversityScholarshipController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
-}
+}
