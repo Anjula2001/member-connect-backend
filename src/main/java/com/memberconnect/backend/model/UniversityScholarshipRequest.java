@@ -90,6 +90,12 @@ public class UniversityScholarshipRequest {
     @Column(name = "AccountNumber")
     private String accountNumber;
 
+    @Column(name = "SpecialDegree")
+    private Boolean specialDegree;
+
+    @Column(name = "total_scholarship_amount")
+    private Double totalScholarshipAmount;
+
     @Column(name = "incomplete_reason")
     private String incompleteReason;
 
@@ -198,6 +204,22 @@ public class UniversityScholarshipRequest {
 
     public void setAccountNo(String accountNo) { 
         this.accountNumber = accountNo; 
+    }
+
+    public Boolean getSpecialDegree() {
+        return specialDegree;
+    }
+
+    public void setSpecialDegree(Boolean specialDegree) {
+        this.specialDegree = specialDegree;
+    }
+
+    public Double getTotalScholarshipAmount() {
+        return totalScholarshipAmount;
+    }
+
+    public void setTotalScholarshipAmount(Double totalScholarshipAmount) {
+        this.totalScholarshipAmount = totalScholarshipAmount;
     }
 
     public Bank getBank() { 

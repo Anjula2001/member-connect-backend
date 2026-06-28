@@ -1,6 +1,7 @@
 package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.dto.ProgramOptionDto;
+import com.memberconnect.backend.dto.UniversityScholarshipFundRequestDto;
 import com.memberconnect.backend.dto.UniversityScholarshipRequestDto;
 import com.memberconnect.backend.enums.UniversityScholarshipRequestStatus;
 import com.memberconnect.backend.model.University;
@@ -97,6 +98,20 @@ public class UniversityScholarshipController {
         }
     }
 
+    // Endpoint to update the approved-only editable scholarship details
+    @PutMapping("/university-scholarships/{requestId}/approved-details")
+    public ResponseEntity<?> updateApprovedDetails(
+            @PathVariable String requestId,
+            @RequestBody UniversityScholarshipRequestDto dto
+    ) {
+        try {
+            service.updateApprovedDetailsByRequestId(requestId, dto);
+            return ResponseEntity.ok(service.getScholarshipRequestByRequestId(requestId));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
     // Endpoint to submit a scholarship request by request ID
     @PostMapping("/university-scholarships/submit/{requestId}")
     public ResponseEntity<?> submitRequest(@PathVariable String requestId) {
@@ -147,11 +162,43 @@ public class UniversityScholarshipController {
         return ResponseEntity.ok(service.getAllScholarshipRequests());
     }
 
+    // Endpoint to get all university scholarship requests for a member
+    @GetMapping("/university-scholarships/member/{memberId}")
+    public ResponseEntity<?> getRequestsByMember(@PathVariable String memberId) {
+        return ResponseEntity.ok(service.getScholarshipRequestsByMemberId(memberId));
+    }
+
     // Endpoint to get a scholarship request by request ID
     @GetMapping("/university-scholarships/{requestId}")
     public ResponseEntity<?> getRequestByRequestId(@PathVariable String requestId) {
         try {
             return ResponseEntity.ok(service.getScholarshipRequestByRequestId(requestId));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // Endpoint to save or update a University Scholarship Fund Request
+    @PostMapping("/university-scholarships/{requestId}/fund-requests")
+    public ResponseEntity<?> saveFundRequest(
+            @PathVariable String requestId,
+            @RequestBody UniversityScholarshipFundRequestDto dto
+    ) {
+        try {
+            return ResponseEntity.ok(service.saveFundRequest(requestId, dto));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // Endpoint to submit a University Scholarship Fund Request
+    @PostMapping("/university-scholarships/{requestId}/fund-requests/{fundRequestId}/submit")
+    public ResponseEntity<?> submitFundRequest(
+            @PathVariable String requestId,
+            @PathVariable String fundRequestId
+    ) {
+        try {
+            return ResponseEntity.ok(service.submitFundRequest(requestId, fundRequestId));
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
         }

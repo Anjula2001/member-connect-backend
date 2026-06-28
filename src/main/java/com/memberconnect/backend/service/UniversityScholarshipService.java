@@ -1,8 +1,10 @@
 package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.ProgramOptionDto;
+import com.memberconnect.backend.dto.UniversityScholarshipFundRequestDto;
 import com.memberconnect.backend.dto.UniversityScholarshipRequestDto;
 import com.memberconnect.backend.enums.ApplicantType;
+import com.memberconnect.backend.enums.UniversityScholarshipFundRequestStatus;
 import com.memberconnect.backend.enums.UniversityScholarshipRequestStatus;
 import com.memberconnect.backend.model.Bank;
 import com.memberconnect.backend.model.Branch;
@@ -10,6 +12,7 @@ import com.memberconnect.backend.model.MinorAccount;
 import com.memberconnect.backend.model.Program;
 import com.memberconnect.backend.model.University;
 import com.memberconnect.backend.model.UniversityProgram;
+import com.memberconnect.backend.model.UniversityScholarshipFundRequest;
 import com.memberconnect.backend.model.UniversityScholarshipExamMaster;
 import com.memberconnect.backend.model.UniversityScholarshipRequest;
 import com.memberconnect.backend.repository.BankRepository;
@@ -20,6 +23,7 @@ import com.memberconnect.backend.repository.ScholarshipMonthSettlementRepository
 import com.memberconnect.backend.repository.UniversityProgramRepository;
 import com.memberconnect.backend.repository.UniversityRepository;
 import com.memberconnect.backend.repository.UniversityScholarshipExamMasterRepository;
+import com.memberconnect.backend.repository.UniversityScholarshipFundRequestRepository;
 import com.memberconnect.backend.repository.UniversityScholarshipRequestRepository;
 import org.springframework.stereotype.Service;
 import com.memberconnect.backend.model.Member;
@@ -55,6 +59,7 @@ public class UniversityScholarshipService {
     private final ScholarshipRemittanceRepository remittanceRepository;
     private final ScholarshipMonthSettlementRepository settlementRepository;
     private final BoardmeetingRepository boardMeetingRepository;
+    private final UniversityScholarshipFundRequestRepository fundRequestRepository;
 
     @Value("${scholarship.required.remitted.months}")
     private int requiredRemittedMonths;
@@ -84,7 +89,8 @@ public class UniversityScholarshipService {
             com.memberconnect.backend.repository.ScholarshipConfigRepository scholarshipConfigRepository,
             ScholarshipRemittanceRepository remittanceRepository,
             ScholarshipMonthSettlementRepository settlementRepository,
-            BoardmeetingRepository boardMeetingRepository
+            BoardmeetingRepository boardMeetingRepository,
+            UniversityScholarshipFundRequestRepository fundRequestRepository
     ) {
         this.universityRepository = universityRepository;
         this.programRepository = programRepository;
@@ -99,6 +105,7 @@ public class UniversityScholarshipService {
         this.remittanceRepository = remittanceRepository;
         this.settlementRepository = settlementRepository;
         this.boardMeetingRepository = boardMeetingRepository;
+        this.fundRequestRepository = fundRequestRepository;
     }
    
     // Validate member active status 
@@ -295,16 +302,57 @@ public class UniversityScholarshipService {
                 request.getBank() != null ? request.getBank().getName() : "",
                 request.getBranch() != null ? request.getBranch().getName() : "",
                 request.getAccountNo() != null ? request.getAccountNo() : "",
+                request.getSpecialDegree(),
                 request.getIncompleteReason() != null ? request.getIncompleteReason() : ""
         );
         if (request.getBoardMeeting() != null) {
             dto.setBoardMeetingId(request.getBoardMeeting().getId());
             dto.setBoardMeetingName(request.getBoardMeeting().getBoardMeetingId());
         }
-        dto.setTotalScholarshipAmount(calculateTotalScholarshipAmount(request));
-        dto.setTotalDisbursedAmount(0.0);
-        dto.setLastDisbursementDate(null);
+        List<UniversityScholarshipFundRequest> fundRequests =
+                fundRequestRepository.findByUniversityScholarshipRequest(request);
+        dto.setTotalScholarshipAmount(getStoredTotalScholarshipAmount(request));
+        dto.setTotalDisbursedAmount(calculateTotalDisbursedAmount(fundRequests));
+        dto.setLastDisbursementDate(getLastDisbursementDate(fundRequests));
+        dto.setAvailablePeriod(calculateAvailablePeriod(request, null));
+        dto.setFundRequests(fundRequests.stream().map(this::toFundRequestDto).toList());
+        dto.setTotalUniversityScholarships(countApprovedUniversityScholarships(request));
         return dto;
+    }
+
+    public List<UniversityScholarshipListDto> getScholarshipRequestsByMemberId(String memberId) {
+        return scholarshipRequestRepository.findByMember_MemberIdAndStatus(
+                        memberId,
+                        UniversityScholarshipRequestStatus.APPROVED
+                )
+                .stream()
+                .map(this::toListDto)
+                .toList();
+    }
+
+    private int countApprovedUniversityScholarships(UniversityScholarshipRequest request) {
+        if (request.getMember() == null || !StringUtils.hasText(request.getMember().getMemberId())) {
+            return 0;
+        }
+
+        return (int) scholarshipRequestRepository.countByMember_MemberIdAndStatus(
+                request.getMember().getMemberId(),
+                UniversityScholarshipRequestStatus.APPROVED
+        );
+    }
+
+    private Double getStoredTotalScholarshipAmount(UniversityScholarshipRequest request) {
+        if (request.getTotalScholarshipAmount() != null && request.getTotalScholarshipAmount() > 0) {
+            return request.getTotalScholarshipAmount();
+        }
+
+        Double calculatedAmount = calculateTotalScholarshipAmount(request);
+        if (calculatedAmount != null && calculatedAmount > 0) {
+            request.setTotalScholarshipAmount(calculatedAmount);
+            scholarshipRequestRepository.save(request);
+        }
+
+        return calculatedAmount;
     }
 
     private Double calculateTotalScholarshipAmount(UniversityScholarshipRequest request) {
@@ -334,6 +382,10 @@ public class UniversityScholarshipService {
         return baseAmount;
     }
 
+    private void updateTotalScholarshipAmount(UniversityScholarshipRequest request) {
+        request.setTotalScholarshipAmount(calculateTotalScholarshipAmount(request));
+    }
+
     private int parseInt(String input) {
         if (input == null) {
             return 0;
@@ -343,6 +395,154 @@ public class UniversityScholarshipService {
         } catch (NumberFormatException ex) {
             return 0;
         }
+    }
+
+    private Double calculateTotalDisbursedAmount(List<UniversityScholarshipFundRequest> fundRequests) {
+        return fundRequests.stream()
+                .map(UniversityScholarshipFundRequest::getDisbursedAmount)
+                .filter(amount -> amount != null)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+    }
+
+    private LocalDate getLastDisbursementDate(List<UniversityScholarshipFundRequest> fundRequests) {
+        return fundRequests.stream()
+                .map(UniversityScholarshipFundRequest::getDisbursementDate)
+                .filter(date -> date != null)
+                .max(LocalDate::compareTo)
+                .orElse(null);
+    }
+
+    private Integer calculateAvailablePeriod(UniversityScholarshipRequest request, UniversityScholarshipFundRequest excludedRequest) {
+        int years = parseInt(request.getDuration());
+        if (years <= 0) {
+            return null;
+        }
+
+        int totalPeriods = years * 2;
+        long requestedPeriods = fundRequestRepository.findByUniversityScholarshipRequest(request)
+                .stream()
+                .filter(fundRequest -> excludedRequest == null
+                        || fundRequest.getId() == null
+                        || !fundRequest.getId().equals(excludedRequest.getId()))
+                .filter(fundRequest -> fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.REJECTED
+                        && fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.INACTIVE)
+                .count();
+
+        return Math.max(0, totalPeriods - (int) requestedPeriods);
+    }
+
+    private int parseRequestedPeriod(String requestedPeriod) {
+        if (!StringUtils.hasText(requestedPeriod)) {
+            return 0;
+        }
+
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("(?i)^Year\\s+([1-9][0-9]*)\\s+Semester\\s+([1-2])$")
+                .matcher(requestedPeriod.trim());
+
+        if (!matcher.matches()) {
+            return 0;
+        }
+
+        int year = Integer.parseInt(matcher.group(1));
+        int semester = Integer.parseInt(matcher.group(2));
+        return (year - 1) * 2 + semester;
+    }
+
+    private UniversityScholarshipFundRequestDto toFundRequestDto(UniversityScholarshipFundRequest request) {
+        UniversityScholarshipFundRequestDto dto = new UniversityScholarshipFundRequestDto();
+        dto.setId(request.getId());
+        dto.setRequestId(request.getFundRequestId());
+        dto.setScholarshipRequestId(request.getUniversityScholarshipRequest() != null
+                ? request.getUniversityScholarshipRequest().getUniversityScholarshipRequestID()
+                : null);
+        dto.setRequestedDate(request.getRequestedDate());
+        dto.setRequestedPeriod(request.getRequestedPeriod());
+        dto.setRequestedAmount(request.getRequestedAmount());
+        dto.setDisbursedAmount(request.getDisbursedAmount());
+        dto.setDisbursementDate(request.getDisbursementDate());
+        dto.setStatus(request.getStatus() != null ? request.getStatus().name() : null);
+        return dto;
+    }
+
+    private String generateFundRequestId() {
+        long nextNumber = fundRequestRepository.count() + 1;
+        return String.format("USFR-%03d", nextNumber);
+    }
+
+    public UniversityScholarshipFundRequestDto saveFundRequest(
+            String scholarshipRequestId,
+            UniversityScholarshipFundRequestDto dto
+    ) {
+        UniversityScholarshipRequest scholarshipRequest = scholarshipRequestRepository
+                .findByUniversityScholarshipRequestID(scholarshipRequestId)
+                .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
+
+        if (scholarshipRequest.getStatus() != UniversityScholarshipRequestStatus.APPROVED) {
+            throw new RuntimeException("Fund Requests can be created only for approved University Scholarships");
+        }
+
+        UniversityScholarshipFundRequest fundRequest = null;
+        if (StringUtils.hasText(dto.getRequestId())) {
+            fundRequest = fundRequestRepository.findByFundRequestId(dto.getRequestId().trim()).orElse(null);
+        } else if (dto.getId() != null) {
+            fundRequest = fundRequestRepository.findById(dto.getId()).orElse(null);
+        }
+
+        if (fundRequest == null) {
+            fundRequest = new UniversityScholarshipFundRequest();
+            fundRequest.setFundRequestId(generateFundRequestId());
+            fundRequest.setUniversityScholarshipRequest(scholarshipRequest);
+            fundRequest.setStatus(UniversityScholarshipFundRequestStatus.NEW);
+        } else if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.NEW
+                && fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.INCOMPLETE) {
+            throw new RuntimeException("Only New or Incomplete Fund Requests can be edited");
+        }
+
+        int requestedPeriod = parseRequestedPeriod(dto.getRequestedPeriod());
+        Integer availablePeriod = calculateAvailablePeriod(scholarshipRequest, fundRequest);
+        if (requestedPeriod <= 0 || (availablePeriod != null && requestedPeriod > availablePeriod)) {
+            throw new RuntimeException("Requested Period cannot be more than the Available Period");
+        }
+
+        double requestedAmount = dto.getRequestedAmount() != null ? dto.getRequestedAmount() : 0.0;
+        double balanceAmount = getStoredTotalScholarshipAmount(scholarshipRequest)
+                - calculateTotalDisbursedAmount(fundRequestRepository.findByUniversityScholarshipRequest(scholarshipRequest));
+
+        if (requestedAmount <= 0 || requestedAmount > balanceAmount) {
+            throw new RuntimeException("Amount cannot be more than the Balance Amount");
+        }
+
+        fundRequest.setRequestedDate(dto.getRequestedDate());
+        fundRequest.setRequestedPeriod(dto.getRequestedPeriod());
+        fundRequest.setRequestedAmount(requestedAmount);
+        fundRequest.setDisbursedAmount(fundRequest.getDisbursedAmount());
+        fundRequest.setDisbursementDate(fundRequest.getDisbursementDate());
+
+        return toFundRequestDto(fundRequestRepository.save(fundRequest));
+    }
+
+    public UniversityScholarshipFundRequestDto submitFundRequest(String scholarshipRequestId, String fundRequestId) {
+        UniversityScholarshipRequest scholarshipRequest = scholarshipRequestRepository
+                .findByUniversityScholarshipRequestID(scholarshipRequestId)
+                .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
+
+        UniversityScholarshipFundRequest fundRequest = fundRequestRepository.findByFundRequestId(fundRequestId)
+                .orElseThrow(() -> new RuntimeException("Fund request not found"));
+
+        if (fundRequest.getUniversityScholarshipRequest() == null
+                || !fundRequest.getUniversityScholarshipRequest().getId().equals(scholarshipRequest.getId())) {
+            throw new RuntimeException("Fund request does not belong to the selected scholarship");
+        }
+
+        if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.NEW
+                && fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.INCOMPLETE) {
+            throw new RuntimeException("Only New or Incomplete Fund Requests can be submitted");
+        }
+
+        fundRequest.setStatus(UniversityScholarshipFundRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL);
+        return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
 
     //Check minor account based on birth certificate number
@@ -484,6 +684,7 @@ public class UniversityScholarshipService {
 
         request.setAcademicYearStart(dto.getAcademicYearStart());
         request.setAccountNo(dto.getAccountNo());
+        request.setSpecialDegree(Boolean.TRUE.equals(dto.getSpecialDegree()));
 
         request.setBank(bank);
         request.setBranch(branch);
@@ -542,6 +743,7 @@ public class UniversityScholarshipService {
             request.setMinorAccountMonths(dto.getMinorAccountMonths());
         }
 
+        updateTotalScholarshipAmount(request);
         request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
         return scholarshipRequestRepository.save(request);
     }   
@@ -550,6 +752,10 @@ public class UniversityScholarshipService {
         UniversityScholarshipRequest request = scholarshipRequestRepository
                         .findByUniversityScholarshipRequestID(requestId)
                         .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
+
+        if (request.getStatus() == UniversityScholarshipRequestStatus.APPROVED) {
+                throw new RuntimeException("Approved University Scholarship records cannot be edited from the normal edit screen");
+        }
 
         if (dto.getMemberId() != null) {
                 Member member = memberRepository.findByMemberId(dto.getMemberId())
@@ -662,6 +868,67 @@ public class UniversityScholarshipService {
                 request.setFollowDeviationProcess(dto.getFollowDeviationProcess());
         }
 
+        if (dto.getSpecialDegree() != null) {
+                request.setSpecialDegree(dto.getSpecialDegree());
+        }
+
+        updateTotalScholarshipAmount(request);
+        return scholarshipRequestRepository.save(request);
+     }
+
+    public UniversityScholarshipRequest updateApprovedDetailsByRequestId(String requestId, UniversityScholarshipRequestDto dto) {
+        UniversityScholarshipRequest request = scholarshipRequestRepository
+                .findByUniversityScholarshipRequestID(requestId)
+                .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
+
+        if (request.getStatus() != UniversityScholarshipRequestStatus.APPROVED) {
+                throw new RuntimeException("Only approved University Scholarship records can be updated from this screen");
+        }
+
+        if (dto.getAcademicYearStart() != null) {
+                request.setAcademicYearStart(dto.getAcademicYearStart());
+        }
+
+        if (dto.getBank() != null) {
+                if (StringUtils.hasText(dto.getBank())) {
+                        Bank bank = bankRepository.findById(Long.parseLong(dto.getBank().trim()))
+                                .orElseThrow(() -> new RuntimeException("Bank not found"));
+                        request.setBank(bank);
+                } else {
+                        request.setBank(null);
+                }
+        }
+
+        if (dto.getBranch() != null) {
+                if (StringUtils.hasText(dto.getBranch())) {
+                        Branch branch = branchRepository.findById(Long.parseLong(dto.getBranch().trim()))
+                                .orElseThrow(() -> new RuntimeException("Branch not found"));
+                        request.setBranch(branch);
+                } else {
+                        request.setBranch(null);
+                }
+        }
+
+        if (dto.getAccountNo() != null) {
+                request.setAccountNo(dto.getAccountNo().trim());
+        }
+
+        if (StringUtils.hasText(dto.getHasMinorAccount())) {
+                String hasMinor = dto.getHasMinorAccount().trim();
+                request.setHasMinorAccount("YES".equalsIgnoreCase(hasMinor)
+                        ? com.memberconnect.backend.enums.MinorAccount.YES
+                        : com.memberconnect.backend.enums.MinorAccount.NO);
+        }
+
+        if (dto.getMinorAccountMonths() != null) {
+                request.setMinorAccountMonths(dto.getMinorAccountMonths().trim());
+        }
+
+        if (dto.getSpecialDegree() != null) {
+                request.setSpecialDegree(dto.getSpecialDegree());
+        }
+
+        updateTotalScholarshipAmount(request);
         return scholarshipRequestRepository.save(request);
      }
  

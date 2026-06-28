@@ -27,4 +27,16 @@ public interface UniversityScholarshipRequestRepository
 
 
     List<UniversityScholarshipRequest> findByBoardMeeting(BoardMeeting boardMeeting);
+
+    List<UniversityScholarshipRequest> findByMember_MemberId(String memberId);
+
+    List<UniversityScholarshipRequest> findByMember_MemberIdAndStatus(
+            String memberId,
+            UniversityScholarshipRequestStatus status
+    );
+
+    long countByMember_MemberIdAndStatus(
+            String memberId,
+            UniversityScholarshipRequestStatus status
+    );
 }
