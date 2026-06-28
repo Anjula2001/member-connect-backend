@@ -31,6 +31,9 @@ public class UniversityScholarshipListDto {
     private String incompleteReason;
     private Long boardMeetingId;
     private String boardMeetingName;
+    private Double totalScholarshipAmount;
+    private Double totalDisbursedAmount;
+    private LocalDate lastDisbursementDate;
 
 
     public UniversityScholarshipListDto(
@@ -201,5 +204,29 @@ public class UniversityScholarshipListDto {
 
     public void setBoardMeetingName(String boardMeetingName) {
         this.boardMeetingName = boardMeetingName;
+    }
+
+    public Double getTotalScholarshipAmount() {
+        return totalScholarshipAmount;
+    }
+
+    public void setTotalScholarshipAmount(Double totalScholarshipAmount) {
+        this.totalScholarshipAmount = totalScholarshipAmount;
+    }
+
+    public Double getTotalDisbursedAmount() {
+        return totalDisbursedAmount;
+    }
+
+    public void setTotalDisbursedAmount(Double totalDisbursedAmount) {
+        this.totalDisbursedAmount = totalDisbursedAmount;
+    }
+
+    public LocalDate getLastDisbursementDate() {
+        return lastDisbursementDate;
+    }
+
+    public void setLastDisbursementDate(LocalDate lastDisbursementDate) {
+        this.lastDisbursementDate = lastDisbursementDate;
     }
 }

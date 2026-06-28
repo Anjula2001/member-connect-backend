@@ -62,6 +62,15 @@ public class UniversityScholarshipService {
     @Value("${scholarship.lookback.years}")
     private int lookbackYears;
 
+    @Value("${university.scholarship.minor.required.amount:500}")
+    private int minorRequiredAmount;
+
+    @Value("${university.scholarship.minor.required.months:120}")
+    private int minorRequiredMonths;
+
+    @Value("${university.scholarship.minor.multiplier.percent:150}")
+    private int minorMultiplierPercent;
+
     public UniversityScholarshipService(
             UniversityRepository universityRepository,
             ProgramRepository programRepository,
@@ -247,40 +256,7 @@ public class UniversityScholarshipService {
     public List<UniversityScholarshipListDto> getAllScholarshipRequests() {
         return scholarshipRequestRepository.findAll()
                 .stream()
-                .map(request -> {
-                    UniversityScholarshipListDto dto = new UniversityScholarshipListDto(
-                        request.getId(),
-                        request.getMember() != null ? request.getMember().getMemberId() : null,
-                        request.getUniversityScholarshipRequestID(),
-                        request.getStudentName(),
-                        request.getMember() != null ? request.getMember().getFullName() : "",
-                        request.getUniversity() != null ? request.getUniversity().getName() : "",
-                        request.getStatus() != null ? request.getStatus().name() : "",
-                        request.getNic() != null ? request.getNic() : "",
-                        request.getBcNo() != null ? request.getBcNo() : "",
-                        request.getAddress() != null ? request.getAddress() : "",
-                        request.getMobile() != null ? request.getMobile() : "",
-                        request.getApplicantType() != null ? request.getApplicantType().name() : "",
-                        request.getExamYear() != null ? request.getExamYear() : "",
-                        request.getExamNo() != null ? request.getExamNo() : "",
-                        request.getZScore() != null ? request.getZScore() : "",
-                        request.getProgram() != null ? request.getProgram().getName() : "",
-                        request.getDuration() != null ? request.getDuration() : "",
-                        request.getRequestDate(),
-                        request.getAcademicYearStart(),
-                        request.getHasMinorAccount() != null ? request.getHasMinorAccount().name() : "",
-                        request.getMinorAccountMonths() != null ? request.getMinorAccountMonths() : "",
-                        request.getBank() != null ? request.getBank().getName() : "",
-                        request.getBranch() != null ? request.getBranch().getName() : "",
-                        request.getAccountNo() != null ? request.getAccountNo() : "",
-                        request.getIncompleteReason() != null ? request.getIncompleteReason() : ""
-                    );
-                    if (request.getBoardMeeting() != null) {
-                        dto.setBoardMeetingId(request.getBoardMeeting().getId());
-                        dto.setBoardMeetingName(request.getBoardMeeting().getBoardMeetingId());
-                    }
-                    return dto;
-                })
+                .map(this::toListDto)
                 .toList();
     }
 
@@ -290,6 +266,10 @@ public class UniversityScholarshipService {
                 .findByUniversityScholarshipRequestID(requestId)
                 .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
 
+        return toListDto(request);
+    }
+
+    private UniversityScholarshipListDto toListDto(UniversityScholarshipRequest request) {
         UniversityScholarshipListDto dto = new UniversityScholarshipListDto(
                 request.getId(),
                 request.getMember() != null ? request.getMember().getMemberId() : null,
@@ -321,7 +301,48 @@ public class UniversityScholarshipService {
             dto.setBoardMeetingId(request.getBoardMeeting().getId());
             dto.setBoardMeetingName(request.getBoardMeeting().getBoardMeetingId());
         }
+        dto.setTotalScholarshipAmount(calculateTotalScholarshipAmount(request));
+        dto.setTotalDisbursedAmount(0.0);
+        dto.setLastDisbursementDate(null);
         return dto;
+    }
+
+    private Double calculateTotalScholarshipAmount(UniversityScholarshipRequest request) {
+        if (request.getUniversity() == null || request.getProgram() == null) {
+            return 0.0;
+        }
+
+        Optional<UniversityProgram> universityProgram = universityProgramRepository
+                .findByUniversityIdAndProgramId(request.getUniversity().getId(), request.getProgram().getId());
+
+        double baseAmount = universityProgram
+                .map(UniversityProgram::getScholarshipAmount)
+                .orElse(0.0);
+
+        if (baseAmount <= 0) {
+            return 0.0;
+        }
+
+        boolean hasMinorAccount = request.getHasMinorAccount() != null
+                && "YES".equalsIgnoreCase(request.getHasMinorAccount().name());
+        int remittedMonths = parseInt(request.getMinorAccountMonths());
+
+        if (hasMinorAccount && remittedMonths >= minorRequiredMonths) {
+            return baseAmount * minorMultiplierPercent / 100.0;
+        }
+
+        return baseAmount;
+    }
+
+    private int parseInt(String input) {
+        if (input == null) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(input.replaceAll("[^0-9]", ""));
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
     }
 
     //Check minor account based on birth certificate number
