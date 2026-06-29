@@ -28,7 +28,16 @@ public class UniversityScholarshipListDto {
     private String bankName;
     private String branchName;
     private String accountNumber;
+    private Boolean specialDegree;
     private String incompleteReason;
+    private Long boardMeetingId;
+    private String boardMeetingName;
+    private Double totalScholarshipAmount;
+    private Double totalDisbursedAmount;
+    private LocalDate lastDisbursementDate;
+    private Integer availablePeriod;
+    private Integer totalUniversityScholarships;
+    private java.util.List<UniversityScholarshipFundRequestDto> fundRequests;
 
 
     public UniversityScholarshipListDto(
@@ -56,6 +65,7 @@ public class UniversityScholarshipListDto {
             String bankName,
             String branchName,
             String accountNumber,
+            Boolean specialDegree,
             String incompleteReason
     ) {
         this.id = id;
@@ -82,6 +92,7 @@ public class UniversityScholarshipListDto {
         this.bankName = bankName;
         this.branchName = branchName;
         this.accountNumber = accountNumber;
+        this.specialDegree = specialDegree;
         this.incompleteReason = incompleteReason;
     }
 
@@ -181,7 +192,75 @@ public class UniversityScholarshipListDto {
         return accountNumber; 
     }
 
+    public Boolean getSpecialDegree() {
+        return specialDegree;
+    }
+
     public String getIncompleteReason() { 
         return incompleteReason; 
+    }
+
+    public Long getBoardMeetingId() {
+        return boardMeetingId;
+    }
+
+    public void setBoardMeetingId(Long boardMeetingId) {
+        this.boardMeetingId = boardMeetingId;
+    }
+
+    public String getBoardMeetingName() {
+        return boardMeetingName;
+    }
+
+    public void setBoardMeetingName(String boardMeetingName) {
+        this.boardMeetingName = boardMeetingName;
+    }
+
+    public Double getTotalScholarshipAmount() {
+        return totalScholarshipAmount;
+    }
+
+    public void setTotalScholarshipAmount(Double totalScholarshipAmount) {
+        this.totalScholarshipAmount = totalScholarshipAmount;
+    }
+
+    public Double getTotalDisbursedAmount() {
+        return totalDisbursedAmount;
+    }
+
+    public void setTotalDisbursedAmount(Double totalDisbursedAmount) {
+        this.totalDisbursedAmount = totalDisbursedAmount;
+    }
+
+    public LocalDate getLastDisbursementDate() {
+        return lastDisbursementDate;
+    }
+
+    public void setLastDisbursementDate(LocalDate lastDisbursementDate) {
+        this.lastDisbursementDate = lastDisbursementDate;
+    }
+
+    public Integer getAvailablePeriod() {
+        return availablePeriod;
+    }
+
+    public void setAvailablePeriod(Integer availablePeriod) {
+        this.availablePeriod = availablePeriod;
+    }
+
+    public Integer getTotalUniversityScholarships() {
+        return totalUniversityScholarships;
+    }
+
+    public void setTotalUniversityScholarships(Integer totalUniversityScholarships) {
+        this.totalUniversityScholarships = totalUniversityScholarships;
+    }
+
+    public java.util.List<UniversityScholarshipFundRequestDto> getFundRequests() {
+        return fundRequests;
+    }
+
+    public void setFundRequests(java.util.List<UniversityScholarshipFundRequestDto> fundRequests) {
+        this.fundRequests = fundRequests;
     }
 }
