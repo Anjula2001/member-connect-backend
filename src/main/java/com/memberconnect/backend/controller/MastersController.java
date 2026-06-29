@@ -15,6 +15,7 @@ import com.memberconnect.backend.repository.WorkingLocationTypeRepository;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/masters")
@@ -66,6 +67,17 @@ public class MastersController {
     @GetMapping("/nature-of-occupations")
     public List<NatureOfOccupation> getNatureOfOccupations() {
         return natureOfOccupationRepository.findAll();
+    }
+
+    // Endpoint to get termination reasons
+    @GetMapping("/termination-reasons")
+    public List<Map<String, String>> getTerminationReasons() {
+        return List.of(
+                Map.of("id", "1", "name", "Resignation from Post"),
+                Map.of("id", "2", "name", "Disciplinary Action"),
+                Map.of("id", "3", "name", "Transfer to Another Organization"),
+                Map.of("id", "4", "name", "Other")
+        );
     }
 
     // Endpoint to get educational zones by district ID or name
