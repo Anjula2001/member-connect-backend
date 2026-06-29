@@ -165,6 +165,7 @@ public class DocumentController {
         return switch (requestType) {
             case "retirement-requests" -> "RETIREMENT";
             case "grade5-requests" -> "GRADE5";
+            case "termination-requests" -> "TERMINATION";
             default -> throw new RuntimeException(
                     "Invalid request type: " + requestType
             );
