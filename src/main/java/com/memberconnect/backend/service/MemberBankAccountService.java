@@ -7,9 +7,9 @@ import org.springframework.stereotype.Service;
 import com.memberconnect.backend.dto.MemberBankAccountRequestDTO;
 import com.memberconnect.backend.dto.MemberBankAccountResponseDTO;
 import com.memberconnect.backend.model.Bank;
-import com.memberconnect.backend.model.BankBranch;
+import com.memberconnect.backend.model.Branch;
 import com.memberconnect.backend.model.MemberBankAccount;
-import com.memberconnect.backend.repository.BankBranchRepository;
+import com.memberconnect.backend.repository.BranchRepository;
 import com.memberconnect.backend.repository.BankRepository;
 import com.memberconnect.backend.repository.MemberBankAccountRepository;
 
@@ -18,16 +18,16 @@ public class MemberBankAccountService {
 
     private final MemberBankAccountRepository memberBankAccountRepository;
     private final BankRepository bankRepository;
-    private final BankBranchRepository bankBranchRepository;
+    private final BranchRepository branchRepository;
 
     public MemberBankAccountService(
             MemberBankAccountRepository memberBankAccountRepository,
             BankRepository bankRepository,
-            BankBranchRepository bankBranchRepository
+            BranchRepository branchRepository
     ) {
         this.memberBankAccountRepository = memberBankAccountRepository;
         this.bankRepository = bankRepository;
-        this.bankBranchRepository = bankBranchRepository;
+        this.branchRepository = branchRepository;
     }
 
     // Get bank account
@@ -50,13 +50,19 @@ public class MemberBankAccountService {
                 throw new RuntimeException("Only one disbursement bank account is allowed");
             }
 
-        Bank bank = bankRepository.findByBankCode(request.getBankId())
-                .orElseThrow(() -> new RuntimeException("Invalid bankCode"));
+        Bank bank;
+        try {
+            bank = bankRepository.findById(Long.parseLong(request.getBankId()))
+                    .orElseThrow(() -> new RuntimeException("Invalid bank"));
+        } catch (NumberFormatException e) {
+            bank = bankRepository.findByBankCode(request.getBankId())
+                    .orElseThrow(() -> new RuntimeException("Invalid bankCode"));
+        }
 
-        BankBranch branch = bankBranchRepository.findByBranchId(request.getBranchId())
+        Branch branch = branchRepository.findById(Long.parseLong(request.getBranchId()))
                 .orElseThrow(() -> new RuntimeException("Invalid branchId"));
 
-        if (!branch.getBankId().equals(bank.getBankCode())) {
+        if (!branch.getBank().getId().equals(bank.getId())) {
             throw new RuntimeException("Branch does not belong to bank");
         }
 
@@ -82,13 +88,19 @@ public class MemberBankAccountService {
             throw new RuntimeException("Invalid member access");
         }
 
-        Bank bank = bankRepository.findByBankCode(request.getBankId())
-                .orElseThrow(() -> new RuntimeException("Invalid bankCode"));
+        Bank bank;
+        try {
+            bank = bankRepository.findById(Long.parseLong(request.getBankId()))
+                    .orElseThrow(() -> new RuntimeException("Invalid bank"));
+        } catch (NumberFormatException e) {
+            bank = bankRepository.findByBankCode(request.getBankId())
+                    .orElseThrow(() -> new RuntimeException("Invalid bankCode"));
+        }
 
-        BankBranch branch = bankBranchRepository.findByBranchId(request.getBranchId())
+        Branch branch = branchRepository.findById(Long.parseLong(request.getBranchId()))
                 .orElseThrow(() -> new RuntimeException("Invalid branchId"));
 
-        if (!branch.getBankId().equals(bank.getBankCode())) {
+        if (!branch.getBank().getId().equals(bank.getId())) {
             throw new RuntimeException("Branch does not belong to bank");
         }
 
@@ -101,8 +113,19 @@ public class MemberBankAccountService {
 
 
     private MemberBankAccountResponseDTO mapToResponse(MemberBankAccount account) {
-        Bank bank = bankRepository.findByBankCode(account.getBankId()).orElse(null);
-        BankBranch branch = bankBranchRepository.findByBranchId(account.getBranchId()).orElse(null);
+        Bank bank = null;
+        try {
+            bank = bankRepository.findById(Long.parseLong(account.getBankId())).orElse(null);
+        } catch (NumberFormatException e) {
+            bank = bankRepository.findByBankCode(account.getBankId()).orElse(null);
+        }
+
+        Branch branch = null;
+        try {
+            branch = branchRepository.findById(Long.parseLong(account.getBranchId())).orElse(null);
+        } catch (NumberFormatException e) {
+            // fallback
+        }
 
         return new MemberBankAccountResponseDTO(
                 account.getId(),

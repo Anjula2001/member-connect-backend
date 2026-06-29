@@ -33,7 +33,7 @@ public class NameChangeRequestController {
     public NameChangeRequestDTO saveNameChangeRequest(@RequestBody NameChangeRequestDTO nameChangeRequestDTO){
         return nameChangeRequstServices.addNameChangeRequestService(nameChangeRequestDTO);
     }
-    @PutMapping("/updatenamechange")
+    @PutMapping("/updatenamechange/{id}")
     public NameChangeRequestDTO updateNameChangeRequest(@PathVariable Integer id , @RequestBody NameChangeRequestDTO nameChangeRequestDTO){
         return nameChangeRequstServices.updateNameChangeRequestService(id,nameChangeRequestDTO);
     }

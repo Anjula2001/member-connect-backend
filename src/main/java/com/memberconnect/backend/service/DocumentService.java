@@ -179,16 +179,10 @@ public class DocumentService {
     }
 
     public boolean allMandatoryDocumentsUploaded(String requestNo, String memberId, String applicationType) {
-        List<UploadedDocument> uploadedDocuments = uploadedDocumentRepository.findByRequestNo(requestNo);
-        List<RequiredDocument> requiredDocuments = requiredDocumentRepository.findByApplicationType(applicationType);
-        
-        Set<Long> uploadedDocumentIds = uploadedDocuments.stream()
-                .map(UploadedDocument::getRequiredDocumentId)
-                .collect(Collectors.toSet());
-        
+        List<RequiredDocumentDTO> requiredDocuments = getRequiredDocuments(requestNo, memberId, applicationType);
         return requiredDocuments.stream()
-                .filter(RequiredDocument::isMandatory)
-                .allMatch(doc -> uploadedDocumentIds.contains(doc.getId()));
+                .filter(RequiredDocumentDTO::isMandatory)
+                .allMatch(RequiredDocumentDTO::isUploaded);
     }
 
     public UploadDocumentResponseDTO uploadDocumentMetadata(UploadDocumentRequestDTO requestDTO) {
@@ -277,6 +271,15 @@ public class DocumentService {
             }
         }
 
+        if ("TERMINATION".equals(applicationType)) {
+            boolean hasMinorSavings =
+                    !minorSavingsAccountRepository.findByMemberId(memberId).isEmpty();
+
+            if (hasMinorSavings) {
+                types.add("TERMINATION_MINOR");
+            }
+        }
+
         List<RequiredDocument> requiredDocs = requiredDocumentRepository.findByApplicationTypeIn(types);
 
         return requiredDocs.stream()
@@ -304,34 +307,27 @@ public class DocumentService {
                 throw new RuntimeException("Please select a file to upload");
             }
 
-            String uploadDir = System.getProperty("user.dir")
-                    + File.separator + "uploads"
-                    + File.separator + applicationType.toLowerCase()
-                    + File.separator + requestNo;
+            List<UploadedDocument> existingDocuments = uploadedDocumentRepository.findByRequestNoAndRequiredDocumentId(
+                    requestNo,
+                    requiredDocumentId
+            );
 
-            File dir = new File(uploadDir);
-
-            if (!dir.exists()) {
-                boolean created = dir.mkdirs();
-
-                if (!created) {
-                    throw new RuntimeException("Could not create upload folder");
+            if (!existingDocuments.isEmpty()) {
+                UploadedDocument existingDocument = existingDocuments.getFirst();
+                if (existingDocument.getFilePath() != null && !existingDocument.getFilePath().isBlank()) {
+                    s3Service.deleteFile(existingDocument.getFilePath());
                 }
+                uploadedDocumentRepository.delete(existingDocument);
             }
 
-            String originalFileName = file.getOriginalFilename();
-            String safeFileName = System.currentTimeMillis() + "_" + originalFileName;
-
-            File destinationFile = new File(dir, safeFileName);
-
-            file.transferTo(destinationFile);
+            String fileKey = s3Service.uploadFile(file);
 
             UploadedDocument uploaded = new UploadedDocument();
             uploaded.setRequestNo(requestNo);
             uploaded.setRequiredDocumentId(requiredDocumentId);
-            uploaded.setFileName(originalFileName);
+            uploaded.setFileName(file.getOriginalFilename());
             uploaded.setFileType(file.getContentType());
-            uploaded.setFilePath(destinationFile.getAbsolutePath());
+            uploaded.setFilePath(fileKey);
             uploaded.setUploadedAt(LocalDateTime.now());
 
             return uploadedDocumentRepository.save(uploaded);

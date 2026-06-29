@@ -30,7 +30,7 @@ public class NommineChangeRequestController {
     public NommineChangeRequestDTO saveNommineChangeRequest(@RequestBody NommineChangeRequestDTO dto){
         return nommineChangeRequestServices.NommineChangeRequestaddService(dto);
     }
-    @PutMapping("/updateNommine")
+    @PutMapping("/updateNommine/{id}")
     public NommineChangeRequestDTO updateNommineChangeRequest(@PathVariable Integer id , @RequestBody NommineChangeRequestDTO dto){
         return nommineChangeRequestServices.updateNommineChange(id, dto);
     }
