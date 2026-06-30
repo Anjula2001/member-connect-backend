@@ -121,6 +121,21 @@ public class Grade5ScholarshipController {
         return service.getExamYears();
     }
 
+    // Check deviation info for a requested date and exam year
+    @GetMapping("/check-deviation")
+    public ResponseEntity<?> checkDeviation(
+            @RequestParam String requestedDate,
+            @RequestParam Integer examYear
+    ) {
+        try {
+            java.time.LocalDate reqDate = java.time.LocalDate.parse(requestedDate);
+            Map<String, Object> info = service.computeDeviationInfo(reqDate, examYear);
+            return ResponseEntity.ok(info);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
     //get all created scholarship requests
     @GetMapping("/requests/search")
     public ResponseEntity<?> searchRequests(

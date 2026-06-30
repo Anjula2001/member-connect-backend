@@ -54,6 +54,9 @@ public class Grade5ScholarshipRequest {
     @Column(name = "DistrictCutOffMark")
     private Integer districtCutOffMark;
 
+    @Column(name = "has_deviation")
+    private Boolean hasDeviation;
+
     @Column(name = "IncompleteReason")
     private String incompleteReason;
 
@@ -84,6 +87,14 @@ public class Grade5ScholarshipRequest {
 
     public void setDistrictCutOffMark(Integer districtCutOffMark) {
         this.districtCutOffMark = districtCutOffMark;
+    }
+
+    public Boolean getHasDeviation() {
+        return hasDeviation;
+    }
+
+    public void setHasDeviation(Boolean hasDeviation) {
+        this.hasDeviation = hasDeviation;
     }
     
     public Long getId() { 

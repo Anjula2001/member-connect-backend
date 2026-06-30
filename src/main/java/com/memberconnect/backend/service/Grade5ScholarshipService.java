@@ -44,17 +44,81 @@ public class Grade5ScholarshipService {
         return minorRepo.findByBirthCertificateNo(birthCertificateNo);
     }
 
+    private void validateMemberActiveOnExamLastDate(String memberId, Integer examYear) {
+        Member member = memberRepository.findByMemberId(memberId)
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        if (examYear == null) {
+            throw new RuntimeException("Selected exam year is required");
+        }
+
+        Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear)
+                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
+
+        LocalDate examLastDate = examMaster.getExamDate();
+
+        if (examLastDate == null) {
+            throw new RuntimeException("Selected exam date not found in Exam Master");
+        }
+
+        if (member.getStatus() != MemberStatus.ACTIVE
+                || member.getMembershipStartDate() == null
+                || member.getMembershipStartDate().isAfter(examLastDate)) {
+            throw new RuntimeException(
+                    "The Grade 5 Scholarship Request cannot be saved. The Member is not Active during the selected Exam"
+            );
+        }
+    }
+
+    private boolean shouldFollowDeviationProcess(LocalDate requestedDate, Integer examYear) {
+        if (requestedDate == null || examYear == null) {
+            return false;
+        }
+
+        Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear).orElse(null);
+        if (examMaster == null || examMaster.getExamDate() == null) {
+            return false;
+        }
+
+        LocalDate examDate = examMaster.getExamDate();
+        LocalDate latestAllowed = examDate.plusYears(1);
+
+        return requestedDate.isBefore(examDate) || requestedDate.isAfter(latestAllowed);
+    }
+
+    public Map<String, Object> computeDeviationInfo(LocalDate requestedDate, Integer examYear) {
+        Map<String, Object> result = new HashMap<>();
+
+        result.put("deviation", false);
+
+        if (requestedDate == null || examYear == null) {
+            return result;
+        }
+
+        Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear).orElse(null);
+        if (examMaster == null || examMaster.getExamDate() == null) {
+            return result;
+        }
+
+        LocalDate examDate = examMaster.getExamDate();
+        LocalDate latestAllowed = examDate.plusYears(1);
+
+        boolean deviation = requestedDate.isBefore(examDate) || requestedDate.isAfter(latestAllowed);
+
+        result.put("deviation", deviation);
+        result.put("examDate", examDate.toString());
+        result.put("latestAllowed", latestAllowed.toString());
+
+        return result;
+    }
+
     // Save request
     public Grade5ScholarshipRequest saveRequest(String memberId, Grade5StudentDTO dto)  {
         
         Member member = memberRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
-        if (member.getStatus() != MemberStatus.ACTIVE) {
-            throw new RuntimeException(
-                "Grade 5 Scholarship Request can only be created for ACTIVE members."
-            );
-        }
+        validateMemberActiveOnExamLastDate(memberId, dto.getExamYear());
 
         // Prevent duplicate
         if (repository.existsByExaminationNumber(dto.getExaminationNumber())) {
@@ -62,9 +126,10 @@ public class Grade5ScholarshipService {
         }
 
         Grade5ScholarshipRequest entity = new Grade5ScholarshipRequest();
+        LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
         
         entity.setRequestNo(generateRequestNo());
-        entity.setRequestedDate(LocalDate.parse(dto.getRequestedDate()));
+        entity.setRequestedDate(requestedDate);
         entity.setMemberId(memberId);
         entity.setStatus("NEW");
         entity.setStudentName(dto.getStudentName());
@@ -82,6 +147,7 @@ public class Grade5ScholarshipService {
         entity.setMemberAmount(dto.getMemberAmount());
         entity.setMinorAmount(dto.getMinorAmount());
         entity.setIsDoubleAmount(dto.getIsDoubleAmount());
+        entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
        
         List<MinorSavingsAccount> accounts =
                 minorRepo.findByBirthCertificateNo(dto.getBirthCertificateNumber());
@@ -178,12 +244,15 @@ public class Grade5ScholarshipService {
             throw new RuntimeException("Only NEW or INCOMPLETE requests can be submitted");
         }
 
-        if (!ScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_APPROVAL.name().equals(status)
-                && !ScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_APPROVAL.name().equals(status)) {
-            throw new RuntimeException("Invalid submit status");
-        }
+        // Decide final submit status on the server to avoid relying on client-provided values.
+        boolean isDeviation = Boolean.TRUE.equals(request.getHasDeviation())
+                || shouldFollowDeviationProcess(request.getRequestedDate(), request.getExamYear());
 
-        request.setStatus(status);
+        String finalStatus = isDeviation
+                ? ScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_APPROVAL.name()
+                : ScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_APPROVAL.name();
+
+        request.setStatus(finalStatus);
         request.setIncompleteReason(null);
 
         return repository.save(request);
@@ -313,8 +382,7 @@ public class Grade5ScholarshipService {
                             r.getExamYear(),
                             r.getStatus(),
                             r.getDistrict(),
-                            r.getDistrictCutOffMark() != null
-                                    && r.getMarksObtained() >= r.getDistrictCutOffMark()
+                            Boolean.TRUE.equals(r.getHasDeviation())
                 
                     );
                 })
@@ -334,6 +402,8 @@ public class Grade5ScholarshipService {
         Grade5ScholarshipRequest entity = repository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
 
+        validateMemberActiveOnExamLastDate(entity.getMemberId(), dto.getExamYear());
+
         if (repository.existsByExaminationNumberAndRequestNoNot(
                 dto.getExaminationNumber(),
                 requestNo
@@ -341,7 +411,9 @@ public class Grade5ScholarshipService {
             throw new RuntimeException("Examination number already exists");
         }
 
-        entity.setRequestedDate(LocalDate.parse(dto.getRequestedDate()));
+        LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
+
+        entity.setRequestedDate(requestedDate);
         entity.setStudentName(dto.getStudentName());
         entity.setExaminationNumber(dto.getExaminationNumber());
         entity.setExamYear(dto.getExamYear());
@@ -358,6 +430,7 @@ public class Grade5ScholarshipService {
         entity.setMemberAmount(dto.getMemberAmount());
         entity.setMinorAmount(dto.getMinorAmount());
         entity.setIsDoubleAmount(dto.getIsDoubleAmount());
+        entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
 
         entity.setIncompleteReason(null);
 
