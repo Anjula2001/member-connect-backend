@@ -68,6 +68,25 @@ public class Grade5ScholarshipService {
                     "The Grade 5 Scholarship Request cannot be saved. The Member is not Active during the selected Exam"
             );
         }
+
+        LocalDate membershipStartDate = member.getMembershipStartDate();
+        if (membershipStartDate != null) {
+            LocalDate start = membershipStartDate.withDayOfMonth(1);
+            
+            // Validate membership age today
+            LocalDate today = LocalDate.now().withDayOfMonth(1);
+            long monthsToday = java.time.temporal.ChronoUnit.MONTHS.between(start, today);
+            if (monthsToday < 36) {
+                throw new RuntimeException("The required continues Membership period does not comply (36 months)");
+            }
+
+            // Validate membership age as of the exam date
+            LocalDate end = examLastDate.withDayOfMonth(1);
+            long monthsExam = java.time.temporal.ChronoUnit.MONTHS.between(start, end);
+            if (monthsExam < 36) {
+                throw new RuntimeException("The required continues Membership period does not comply (36 months)");
+            }
+        }
     }
 
     private boolean shouldFollowDeviationProcess(LocalDate requestedDate, Integer examYear) {
@@ -253,6 +272,7 @@ public class Grade5ScholarshipService {
                 : ScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_APPROVAL.name();
 
         request.setStatus(finalStatus);
+        request.setHasDeviation(isDeviation);
         request.setIncompleteReason(null);
 
         return repository.save(request);
@@ -436,5 +456,63 @@ public class Grade5ScholarshipService {
 
         return repository.save(entity);
     }
-    
-}
+
+    // Change Grade 5 Scholarship request status (view mode)
+    public Grade5ScholarshipRequest changeRequestStatus(String requestNo, String newStatusStr) {
+        Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo)
+                .orElseThrow(() -> new RuntimeException("Grade 5 Scholarship request not found"));
+
+        ScholarshipRequestStatus newStatus;
+        try {
+            newStatus = ScholarshipRequestStatus.valueOf(newStatusStr);
+        } catch (IllegalArgumentException ex) {
+            throw new RuntimeException("Invalid status: " + newStatusStr);
+        }
+
+        ScholarshipRequestStatus currentStatus;
+        try {
+            currentStatus = ScholarshipRequestStatus.valueOf(request.getStatus());
+        } catch (IllegalArgumentException ex) {
+            throw new RuntimeException("Current request status is unrecognized: " + request.getStatus());
+        }
+
+        if (currentStatus == newStatus) {
+            return request;
+        }
+
+        if (!isGrade5StatusTransitionAllowed(currentStatus, newStatus)) {
+            throw new RuntimeException(
+                    "Cannot change status from " + currentStatus + " to " + newStatus
+            );
+        }
+
+        request.setStatus(newStatus.name());
+
+        // Clear reasons when returning to New
+        if (newStatus == ScholarshipRequestStatus.NEW) {
+            request.setIncompleteReason(null);
+        }
+
+        return repository.save(request);
+    }
+
+    private boolean isGrade5StatusTransitionAllowed(ScholarshipRequestStatus current, ScholarshipRequestStatus next) {
+        switch (current) {
+            case NEW:
+                return next == ScholarshipRequestStatus.INACTIVE;
+            case INCOMPLETE:
+                return next == ScholarshipRequestStatus.NEW || next == ScholarshipRequestStatus.INACTIVE;
+            case SUBMITTED_FOR_NORMAL_APPROVAL:
+                return next == ScholarshipRequestStatus.NEW || next == ScholarshipRequestStatus.INACTIVE;
+            case SUBMITTED_FOR_DEVIATION_APPROVAL:
+                return next == ScholarshipRequestStatus.NEW || next == ScholarshipRequestStatus.INACTIVE;
+            case REJECTED:
+                return next == ScholarshipRequestStatus.INACTIVE || next == ScholarshipRequestStatus.NEW;
+            case INACTIVE:
+                return next == ScholarshipRequestStatus.NEW;
+            default:
+                return false;
+        }
+    }
+
+}

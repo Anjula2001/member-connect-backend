@@ -81,6 +81,29 @@ public class Grade5ScholarshipRequest {
     @Column(name = "IsDoubleAmount")
     private Boolean isDoubleAmount;
 
+    @Column(name = "ApprovalListId")
+    private String approvalListId;
+
+    @Column(name = "OriginalStatus")
+    private String originalStatus;
+
+    public String getApprovalListId() {
+        return approvalListId;
+    }
+
+    public void setApprovalListId(String approvalListId) {
+        this.approvalListId = approvalListId;
+    }
+
+    public String getOriginalStatus() {
+        return originalStatus;
+    }
+
+    public void setOriginalStatus(String originalStatus) {
+        this.originalStatus = originalStatus;
+    }
+
+
     public Integer getDistrictCutOffMark() {
         return districtCutOffMark;
     }
@@ -90,6 +113,12 @@ public class Grade5ScholarshipRequest {
     }
 
     public Boolean getHasDeviation() {
+        if ("SUBMITTED_FOR_DEVIATION_APPROVAL".equals(status) || "ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST".equals(status)) {
+            return true;
+        }
+        if ("SUBMITTED_FOR_NORMAL_APPROVAL".equals(status) || "ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST".equals(status)) {
+            return false;
+        }
         return hasDeviation;
     }
 

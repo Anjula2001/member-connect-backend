@@ -134,4 +134,40 @@ class Grade5ScholarshipServiceTest {
 
         assertEquals("SUBMITTED_FOR_NORMAL_APPROVAL", result.getStatus());
     }
+
+    @Test
+    void saveRequestShouldRejectWhenMembershipPeriodLessThan36Months() {
+        Member member = new Member();
+        member.setMemberId("M-001");
+        member.setStatus(MemberStatus.ACTIVE);
+        member.setMembershipStartDate(LocalDate.of(2024, 1, 1));
+
+        Grade5ExamMaster examMaster = new Grade5ExamMaster();
+        examMaster.setYear(2024);
+        examMaster.setExamDate(LocalDate.of(2024, 12, 31));
+
+        Grade5StudentDTO dto = new Grade5StudentDTO();
+        dto.setRequestedDate("2025-01-02");
+        dto.setStudentName("Test Student");
+        dto.setBirthCertificateNumber("BC123456");
+        dto.setStudentSchool("Test School");
+        dto.setSchoolDistrict("Colombo");
+        dto.setExamYear(2024);
+        dto.setExaminationNumber("EXAM123456");
+        dto.setDistrictCutOffMark(100);
+        dto.setMarksObtained(120);
+
+        when(memberRepository.findByMemberId("M-001")).thenReturn(Optional.of(member));
+        when(examMasterRepository.findById(2024)).thenReturn(Optional.of(examMaster));
+
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> service.saveRequest("M-001", dto)
+        );
+
+        assertEquals(
+                "The required continues Membership period does not comply (36 months)",
+                exception.getMessage()
+        );
+    }
 }

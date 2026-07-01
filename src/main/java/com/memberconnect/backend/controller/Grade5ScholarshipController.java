@@ -170,4 +170,19 @@ public class Grade5ScholarshipController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-}
+
+    // Change request status (view mode)
+    @PutMapping("/{requestNo}/status")
+    public ResponseEntity<?> changeRequestStatus(
+            @PathVariable String requestNo,
+            @RequestBody Map<String, String> body
+    ) {
+        try {
+            String status = body.get("status");
+            Grade5ScholarshipRequest updated = service.changeRequestStatus(requestNo, status);
+            return ResponseEntity.ok(updated);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+}
