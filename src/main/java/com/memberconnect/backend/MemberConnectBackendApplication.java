@@ -23,6 +23,13 @@ public class MemberConnectBackendApplication {
 			} catch (Exception e) {
 				System.err.println("FAILED TO DROP member_status_check CONSTRAINT: " + e.getMessage());
 			}
+
+			try {
+				jdbcTemplate.execute("ALTER TABLE death_donation_request DROP CONSTRAINT IF EXISTS death_donation_request_status_check;");
+				System.out.println("SUCCESSFULLY DROPPED death_donation_request_status_check CONSTRAINT!");
+			} catch (Exception e) {
+				System.err.println("FAILED TO DROP death_donation_request_status_check CONSTRAINT: " + e.getMessage());
+			}
 		};
 	}
 }

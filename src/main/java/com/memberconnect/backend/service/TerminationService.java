@@ -199,6 +199,42 @@ public class TerminationService {
         return mapToResponse(saved);
     }
 
+    public TerminationRequestResponseDTO approveRequest(String requestNo) {
+        TerminationRequest request = requestRepository.findByRequestNo(requestNo)
+                .orElseThrow(() -> new RuntimeException("Termination request not found"));
+
+        request.setStatus(TerminationRequestStatus.APPROVED);
+        TerminationRequest saved = requestRepository.save(request);
+
+        Member member = memberRepository.findByMemberId(request.getMemberId())
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+        member.setStatus(MemberStatus.TERMINATED);
+        memberRepository.save(member);
+
+        return mapToResponse(saved);
+    }
+
+    public TerminationRequestResponseDTO rejectRequest(String requestNo, String reason) {
+        TerminationRequest request = requestRepository.findByRequestNo(requestNo)
+                .orElseThrow(() -> new RuntimeException("Termination request not found"));
+
+        request.setStatus(TerminationRequestStatus.REJECTED);
+        request.setRejectReason(reason);
+
+        TerminationRequest saved = requestRepository.save(request);
+
+        Member member = memberRepository.findByMemberId(request.getMemberId())
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+        member.setStatus(MemberStatus.ACTIVE);
+        memberRepository.save(member);
+
+        return mapToResponse(saved);
+    }
+
+    public TerminationRequestResponseDTO mapRequestToResponse(TerminationRequest request) {
+        return mapToResponse(request);
+    }
+
     public List<TerminationRequestResponseDTO> searchRequests(
             List<String> statuses,
             String fromDate,

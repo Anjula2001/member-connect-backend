@@ -85,4 +85,18 @@ public class TerminationRequestController {
     ) {
         return terminationService.updateRequest(requestNo, dto);
     }
+
+    @PutMapping("/{requestNo}/approve")
+    public TerminationRequestResponseDTO approveRequest(@PathVariable String requestNo) {
+        return terminationService.approveRequest(requestNo);
+    }
+
+    @PutMapping("/{requestNo}/reject")
+    public TerminationRequestResponseDTO rejectRequest(
+            @PathVariable String requestNo,
+            @RequestBody Map<String, String> body
+    ) {
+        String reason = body.get("reason");
+        return terminationService.rejectRequest(requestNo, reason);
+    }
 }
