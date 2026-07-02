@@ -204,6 +204,43 @@ public class UniversityScholarshipController {
         }
     }
 
+    // Endpoint to mark a University Scholarship Fund Request as incomplete
+    @PostMapping("/university-scholarships/{requestId}/fund-requests/{fundRequestId}/incomplete")
+    public ResponseEntity<?> markFundRequestIncomplete(
+            @PathVariable String requestId,
+            @PathVariable String fundRequestId,
+            @RequestBody Map<String, String> body
+    ) {
+        try {
+            return ResponseEntity.ok(service.markFundRequestIncomplete(
+                    requestId,
+                    fundRequestId,
+                    body.get("reason")
+            ));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    // Endpoint to change allowed University Scholarship Fund Request statuses
+    @PatchMapping("/university-scholarships/{requestId}/fund-requests/{fundRequestId}/status")
+    public ResponseEntity<?> updateFundRequestStatus(
+            @PathVariable String requestId,
+            @PathVariable String fundRequestId,
+            @RequestBody Map<String, String> body
+    ) {
+        try {
+            return ResponseEntity.ok(service.updateFundRequestStatus(
+                    requestId,
+                    fundRequestId,
+                    body.get("status"),
+                    body.getOrDefault("reason", body.get("incompleteReason"))
+            ));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
     // Endpoint to reject a scholarship request by request ID with a reason
     @PostMapping("/university-scholarships/reject/{requestId}")
     public ResponseEntity<UniversityScholarshipRequest> rejectScholarship(

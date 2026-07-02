@@ -463,6 +463,8 @@ public class UniversityScholarshipService {
         dto.setDisbursedAmount(request.getDisbursedAmount());
         dto.setDisbursementDate(request.getDisbursementDate());
         dto.setStatus(request.getStatus() != null ? request.getStatus().name() : null);
+        dto.setIncompleteReason(request.getIncompleteReason());
+        dto.setDecisionReason(request.getDecisionReason());
         return dto;
     }
 
@@ -520,10 +522,20 @@ public class UniversityScholarshipService {
         fundRequest.setDisbursedAmount(fundRequest.getDisbursedAmount());
         fundRequest.setDisbursementDate(fundRequest.getDisbursementDate());
 
+        if (StringUtils.hasText(dto.getStatus())
+                && UniversityScholarshipFundRequestStatus.INCOMPLETE.name().equals(dto.getStatus().trim().toUpperCase())) {
+            if (!StringUtils.hasText(dto.getIncompleteReason())) {
+                throw new RuntimeException("Incomplete reason is required");
+            }
+
+            fundRequest.setStatus(UniversityScholarshipFundRequestStatus.INCOMPLETE);
+            fundRequest.setIncompleteReason(dto.getIncompleteReason().trim());
+        }
+
         return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
 
-    public UniversityScholarshipFundRequestDto submitFundRequest(String scholarshipRequestId, String fundRequestId) {
+    private UniversityScholarshipFundRequest findFundRequestForScholarship(String scholarshipRequestId, String fundRequestId) {
         UniversityScholarshipRequest scholarshipRequest = scholarshipRequestRepository
                 .findByUniversityScholarshipRequestID(scholarshipRequestId)
                 .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
@@ -536,12 +548,106 @@ public class UniversityScholarshipService {
             throw new RuntimeException("Fund request does not belong to the selected scholarship");
         }
 
+        return fundRequest;
+    }
+
+    public UniversityScholarshipFundRequestDto submitFundRequest(String scholarshipRequestId, String fundRequestId) {
+        UniversityScholarshipFundRequest fundRequest = findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
+
         if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.NEW
                 && fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.INCOMPLETE) {
             throw new RuntimeException("Only New or Incomplete Fund Requests can be submitted");
         }
 
         fundRequest.setStatus(UniversityScholarshipFundRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL);
+        fundRequest.setIncompleteReason(null);
+        return toFundRequestDto(fundRequestRepository.save(fundRequest));
+    }
+
+    public UniversityScholarshipFundRequestDto markFundRequestIncomplete(
+            String scholarshipRequestId,
+            String fundRequestId,
+            String reason
+    ) {
+        if (!StringUtils.hasText(reason)) {
+            throw new RuntimeException("Incomplete reason is required");
+        }
+
+        UniversityScholarshipFundRequest fundRequest = findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
+
+        if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.NEW
+                && fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.INCOMPLETE) {
+            throw new RuntimeException("Only New or Incomplete Fund Requests can be marked as incomplete");
+        }
+
+        fundRequest.setStatus(UniversityScholarshipFundRequestStatus.INCOMPLETE);
+        fundRequest.setIncompleteReason(reason.trim());
+        return toFundRequestDto(fundRequestRepository.save(fundRequest));
+    }
+
+    public UniversityScholarshipFundRequestDto updateFundRequestStatus(
+            String scholarshipRequestId,
+            String fundRequestId,
+            String status,
+            String reason
+    ) {
+        if (!StringUtils.hasText(status)) {
+            throw new RuntimeException("Status is required");
+        }
+
+        UniversityScholarshipFundRequest fundRequest = findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
+        UniversityScholarshipFundRequestStatus nextStatus;
+
+        try {
+            nextStatus = UniversityScholarshipFundRequestStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new RuntimeException("Invalid fund request status");
+        }
+
+        if (nextStatus == UniversityScholarshipFundRequestStatus.INCOMPLETE) {
+            if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.NEW
+                    && fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.INCOMPLETE) {
+                throw new RuntimeException("Only New or Incomplete Fund Requests can be marked as incomplete");
+            }
+
+            if (!StringUtils.hasText(reason)) {
+                throw new RuntimeException("Incomplete reason is required");
+            }
+
+            fundRequest.setStatus(UniversityScholarshipFundRequestStatus.INCOMPLETE);
+            fundRequest.setIncompleteReason(reason.trim());
+            return toFundRequestDto(fundRequestRepository.save(fundRequest));
+        }
+
+        if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
+            throw new RuntimeException("Only Submitted for Approval Fund Requests can be approved or rejected");
+        }
+
+        if (nextStatus == UniversityScholarshipFundRequestStatus.APPROVED) {
+            fundRequest.setStatus(UniversityScholarshipFundRequestStatus.APPROVED);
+            fundRequest.setIncompleteReason(null);
+            fundRequest.setDecisionReason(null);
+            return toFundRequestDto(fundRequestRepository.save(fundRequest));
+        }
+
+        if (nextStatus == UniversityScholarshipFundRequestStatus.REJECTED) {
+            if (!StringUtils.hasText(reason)) {
+                throw new RuntimeException("Rejection reason is required");
+            }
+
+            fundRequest.setStatus(UniversityScholarshipFundRequestStatus.REJECTED);
+            fundRequest.setIncompleteReason(null);
+            fundRequest.setDecisionReason(reason.trim());
+            return toFundRequestDto(fundRequestRepository.save(fundRequest));
+        }
+
+        if (nextStatus != UniversityScholarshipFundRequestStatus.NEW) {
+            throw new RuntimeException("Invalid status change for Submitted for Approval Fund Requests");
+        }
+
+        fundRequest.setStatus(UniversityScholarshipFundRequestStatus.NEW);
+        fundRequest.setIncompleteReason(null);
+        fundRequest.setDecisionReason(null);
         return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
 
