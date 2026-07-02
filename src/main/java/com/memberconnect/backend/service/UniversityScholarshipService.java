@@ -1192,4 +1192,5 @@ public class UniversityScholarshipService {
             }
         }
     }
+
 }
