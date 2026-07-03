@@ -306,13 +306,4 @@ public class UniversityScholarshipController {
         }
     }
 
-    // Endpoint to process approve/reject decisions for a University Scholarship Approval List
-    @PostMapping("/university-scholarships/approval-list/process")
-    public ResponseEntity<?> processApprovalList(@RequestBody Map<String, Object> payload) {
-        try {
-            return ResponseEntity.ok(service.processUniversityScholarshipApprovalList(payload));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-        }
-    }
 }
