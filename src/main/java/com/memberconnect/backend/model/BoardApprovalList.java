@@ -29,6 +29,12 @@ public class BoardApprovalList {
     @Column(name = "ApplicationIds", columnDefinition = "TEXT")
     private String applicationIdsCsv;
 
+    @Column(name = "NameChangeRequestIds", columnDefinition = "TEXT")
+    private String nameChangeRequestIdsCsv;
+
+    @Column(name = "NomineeChangeRequestIds", columnDefinition = "TEXT")
+    private String nomineeChangeRequestIdsCsv;
+
     @Column(name = "Status")
     private String status;
 

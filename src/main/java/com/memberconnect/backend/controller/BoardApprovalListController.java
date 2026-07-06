@@ -2,6 +2,8 @@ package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.dto.BoardApprovalListDTO;
 import com.memberconnect.backend.dto.MemberApplicationDTO;
+import com.memberconnect.backend.dto.NameChangeRequestDTO;
+import com.memberconnect.backend.dto.NommineChangeRequestDTO;
 import com.memberconnect.backend.service.BoardApprovalListService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -34,6 +36,16 @@ public class BoardApprovalListController {
 	@GetMapping("/getApplicationsByListId/{listId}")
 	public List<MemberApplicationDTO> getApplicationsByListId(@PathVariable String listId) {
 		return boardApprovalListService.getApplicationsByListId(listId);
+	}
+
+	@GetMapping("/getNameChangeRequestsByListId/{listId}")
+	public List<NameChangeRequestDTO> getNameChangeRequestsByListId(@PathVariable String listId) {
+		return boardApprovalListService.getNameChangeRequestsByListId(listId);
+	}
+
+	@GetMapping("/getNomineeChangeRequestsByListId/{listId}")
+	public List<NommineChangeRequestDTO> getNomineeChangeRequestsByListId(@PathVariable String listId) {
+		return boardApprovalListService.getNomineeChangeRequestsByListId(listId);
 	}
 
 	@PatchMapping("/processBoardApprovalList/{listId}")

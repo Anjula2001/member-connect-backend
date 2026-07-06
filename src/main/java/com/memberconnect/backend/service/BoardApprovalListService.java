@@ -2,13 +2,19 @@ package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.BoardApprovalListDTO;
 import com.memberconnect.backend.dto.MemberApplicationDTO;
+import com.memberconnect.backend.dto.NameChangeRequestDTO;
+import com.memberconnect.backend.dto.NommineChangeRequestDTO;
 import com.memberconnect.backend.enums.ApplicationStatus;
 import com.memberconnect.backend.model.BoardApprovalList;
 import com.memberconnect.backend.model.Member_Application;
+import com.memberconnect.backend.model.NameChangeRequest;
+import com.memberconnect.backend.model.NommineChangeRequests;
 import com.memberconnect.backend.model.BoardMeeting;
 import com.memberconnect.backend.repository.BoardApprovalListRepository;
 import com.memberconnect.backend.repository.BoardmeetingRepository;
 import com.memberconnect.backend.repository.MemberApplicationRepository;
+import com.memberconnect.backend.repository.NameChangeRequestRepo;
+import com.memberconnect.backend.repository.NominneChangeRequestRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,13 +41,56 @@ public class BoardApprovalListService {
 	@Autowired
 	private MemberApplicationRepository memberApplicationRepository;
 
+	@Autowired
+	private NameChangeRequestRepo nameChangeRequestRepo;
+
+	@Autowired
+	private NominneChangeRequestRepo nomineeChangeRequestRepo;
+
+	// ── CSV helpers ──────────────────────────────────────────────────────
+
+	private List<String> parseCsv(String csv) {
+		if (csv == null || csv.trim().isEmpty()) {
+			return Collections.emptyList();
+		}
+		return Arrays.stream(csv.split(","))
+				.map(String::trim)
+				.filter(value -> !value.isEmpty())
+				.collect(Collectors.toList());
+	}
+
+	private List<Integer> parseCsvAsIntegers(String csv) {
+		if (csv == null || csv.trim().isEmpty()) {
+			return Collections.emptyList();
+		}
+		return Arrays.stream(csv.split(","))
+				.map(String::trim)
+				.filter(value -> !value.isEmpty())
+				.map(Integer::parseInt)
+				.collect(Collectors.toList());
+	}
+
+	private String serializeStringIds(List<String> ids) {
+		if (ids == null || ids.isEmpty()) return null;
+		return String.join(",", ids);
+	}
+
+	private String serializeIntegerIds(List<Integer> ids) {
+		if (ids == null || ids.isEmpty()) return null;
+		return ids.stream().map(String::valueOf).collect(Collectors.joining(","));
+	}
+
+	// ── toDto ────────────────────────────────────────────────────────────
+
 	private BoardApprovalListDTO toDto(BoardApprovalList entity) {
 		BoardApprovalListDTO dto = new BoardApprovalListDTO();
 		dto.setId(entity.getId());
 		dto.setListId(entity.getListId());
 		dto.setBoardMeetingId(entity.getBoardMeetingId());
 		dto.setBoardMeetingDate(entity.getBoardMeetingDate());
-		dto.setApplicationIds(parseApplicationIds(entity.getApplicationIdsCsv()));
+		dto.setApplicationIds(parseCsv(entity.getApplicationIdsCsv()));
+		dto.setNameChangeRequestIds(parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv()));
+		dto.setNomineeChangeRequestIds(parseCsvAsIntegers(entity.getNomineeChangeRequestIdsCsv()));
 		dto.setStatus(entity.getStatus());
 		dto.setCreatedAt(entity.getCreatedAt());
 		dto.setProcessedAt(entity.getProcessedAt());
@@ -53,23 +102,15 @@ public class BoardApprovalListService {
 		return dto;
 	}
 
-	private List<String> parseApplicationIds(String csv) {
-		if (csv == null || csv.trim().isEmpty()) {
-			return Collections.emptyList();
-		}
-		return Arrays.stream(csv.split(","))
-				.map(String::trim)
-				.filter(value -> !value.isEmpty())
-				.collect(Collectors.toList());
-	}
-
-	private String serializeApplicationIds(List<String> applicationIds) {
-		return String.join(",", applicationIds);
-	}
+	// ── Create ───────────────────────────────────────────────────────────
 
 	public BoardApprovalListDTO createBoardApprovalList(BoardApprovalListDTO dto) {
-		if (dto.getApplicationIds() == null || dto.getApplicationIds().isEmpty()) {
-			throw new RuntimeException("No applications selected for board approval list");
+		boolean hasApplications = dto.getApplicationIds() != null && !dto.getApplicationIds().isEmpty();
+		boolean hasNameChangeRequests = dto.getNameChangeRequestIds() != null && !dto.getNameChangeRequestIds().isEmpty();
+		boolean hasNomineeChangeRequests = dto.getNomineeChangeRequestIds() != null && !dto.getNomineeChangeRequestIds().isEmpty();
+
+		if (!hasApplications && !hasNameChangeRequests && !hasNomineeChangeRequests) {
+			throw new RuntimeException("No applications, name change requests, or nominee change requests selected for board approval list");
 		}
 
 		if (dto.getBoardMeetingId() == null) {
@@ -83,21 +124,47 @@ public class BoardApprovalListService {
 		entity.setListId("BAL-" + System.currentTimeMillis());
 		entity.setBoardMeetingId(boardMeeting.getId());
 		entity.setBoardMeetingDate(boardMeeting.getScheduledDate());
-		entity.setApplicationIdsCsv(serializeApplicationIds(dto.getApplicationIds()));
 		entity.setStatus("CREATED");
 		entity.setCreatedAt(LocalDateTime.now());
 
-		BoardApprovalList saved = boardApprovalListRepository.save(entity);
-
-		for (String applicationId : dto.getApplicationIds()) {
-			Member_Application application = memberApplicationRepository.findByApplicationID(applicationId)
-					.orElseThrow(() -> new RuntimeException("Application not found: " + applicationId));
-			application.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
-			memberApplicationRepository.save(application);
+		// Store application IDs as CSV and update statuses
+		if (hasApplications) {
+			entity.setApplicationIdsCsv(serializeStringIds(dto.getApplicationIds()));
+			for (String applicationId : dto.getApplicationIds()) {
+				Member_Application application = memberApplicationRepository.findByApplicationID(applicationId)
+						.orElseThrow(() -> new RuntimeException("Application not found: " + applicationId));
+				application.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
+				memberApplicationRepository.save(application);
+			}
 		}
 
+		// Store name change request IDs as CSV and update statuses
+		if (hasNameChangeRequests) {
+			entity.setNameChangeRequestIdsCsv(serializeIntegerIds(dto.getNameChangeRequestIds()));
+			for (Integer id : dto.getNameChangeRequestIds()) {
+				NameChangeRequest ncr = nameChangeRequestRepo.findById(id)
+						.orElseThrow(() -> new RuntimeException("Name change request not found: " + id));
+				ncr.setNewStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
+				nameChangeRequestRepo.save(ncr);
+			}
+		}
+
+		// Store nominee change request IDs as CSV and update statuses
+		if (hasNomineeChangeRequests) {
+			entity.setNomineeChangeRequestIdsCsv(serializeIntegerIds(dto.getNomineeChangeRequestIds()));
+			for (Integer id : dto.getNomineeChangeRequestIds()) {
+				NommineChangeRequests ncr = nomineeChangeRequestRepo.findById(id)
+						.orElseThrow(() -> new RuntimeException("Nominee change request not found: " + id));
+				ncr.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
+				nomineeChangeRequestRepo.save(ncr);
+			}
+		}
+
+		BoardApprovalList saved = boardApprovalListRepository.save(entity);
 		return toDto(saved);
 	}
+
+	// ── Read ─────────────────────────────────────────────────────────────
 
 	public List<BoardApprovalListDTO> getAllBoardApprovalLists() {
 		return boardApprovalListRepository.findAll().stream()
@@ -115,7 +182,7 @@ public class BoardApprovalListService {
 		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
 				.orElseThrow(() -> new RuntimeException("Board approval list not found"));
 
-		List<String> applicationIds = parseApplicationIds(entity.getApplicationIdsCsv());
+		List<String> applicationIds = parseCsv(entity.getApplicationIdsCsv());
 		if (applicationIds.isEmpty()) {
 			return Collections.emptyList();
 		}
@@ -168,6 +235,58 @@ public class BoardApprovalListService {
 				.collect(Collectors.toList());
 	}
 
+	public List<NameChangeRequestDTO> getNameChangeRequestsByListId(String listId) {
+		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
+				.orElseThrow(() -> new RuntimeException("Board approval list not found"));
+
+		List<Integer> ids = parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv());
+		if (ids.isEmpty()) {
+			return Collections.emptyList();
+		}
+
+		return ids.stream()
+				.map(id -> nameChangeRequestRepo.findById(id)
+						.map(ncr -> {
+							NameChangeRequestDTO dto = new NameChangeRequestDTO();
+							dto.setNameChangeRequestID(String.valueOf(ncr.getNameChangeRequestID()));
+							dto.setNewTitle(ncr.getNewTitle());
+							dto.setNewFullName(ncr.getNewFullName());
+							dto.setNewNameAsInPayroll(ncr.getNewNameAsInPayroll());
+							dto.setNewNameWithInitials(ncr.getNewNameWithInitials());
+							dto.setNewStatus(ncr.getNewStatus());
+							return dto;
+						})
+						.orElseThrow(() -> new RuntimeException("Name change request not found: " + id)))
+				.collect(Collectors.toList());
+	}
+
+	public List<NommineChangeRequestDTO> getNomineeChangeRequestsByListId(String listId) {
+		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
+				.orElseThrow(() -> new RuntimeException("Board approval list not found"));
+
+		List<Integer> ids = parseCsvAsIntegers(entity.getNomineeChangeRequestIdsCsv());
+		if (ids.isEmpty()) {
+			return Collections.emptyList();
+		}
+
+		return ids.stream()
+				.map(id -> nomineeChangeRequestRepo.findById(id)
+						.map(ncr -> {
+							NommineChangeRequestDTO dto = new NommineChangeRequestDTO();
+							dto.setId(ncr.getId());
+							dto.setNewnommineName(ncr.getNewnommineName());
+							dto.setRelationship(ncr.getRelationship());
+							dto.setNic(ncr.getNic());
+							dto.setAddress(ncr.getAddress());
+							dto.setNewStatus(ncr.getStatus());
+							return dto;
+						})
+						.orElseThrow(() -> new RuntimeException("Nominee change request not found: " + id)))
+				.collect(Collectors.toList());
+	}
+
+	// ── Helpers ──────────────────────────────────────────────────────────
+
 	private void writeBoardDecisionReason(MemberApplicationDTO dto, String boardDecisionReason) {
 		try {
 			Field field = MemberApplicationDTO.class.getDeclaredField("boardDecisionReason");
@@ -177,6 +296,8 @@ public class BoardApprovalListService {
 			// Ignore if the field is unavailable; the rest of the payload is still valid.
 		}
 	}
+
+	// ── Process ──────────────────────────────────────────────────────────
 
 	public BoardApprovalListDTO processBoardApprovalList(String listId, BoardApprovalListDTO dto) {
 		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
@@ -201,12 +322,31 @@ public class BoardApprovalListService {
 		String boardRemarks = dto.getBoardRemarks();
 		String rejectReason = rejected ? dto.getRejectReason().trim() : null;
 
-		List<String> applicationIds = parseApplicationIds(entity.getApplicationIdsCsv());
+		// Update application statuses
+		List<String> applicationIds = parseCsv(entity.getApplicationIdsCsv());
 		for (String applicationId : applicationIds) {
 			memberApplicationRepository.findByApplicationID(applicationId).ifPresent(application -> {
 				application.setStatus(approved ? ApplicationStatus.INACTIVE : ApplicationStatus.REJECTED);
 				application.setBoardDecisionReason(rejectReason);
 				memberApplicationRepository.save(application);
+			});
+		}
+
+		// Update name change request statuses
+		List<Integer> nameChangeIds = parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv());
+		for (Integer id : nameChangeIds) {
+			nameChangeRequestRepo.findById(id).ifPresent(ncr -> {
+				ncr.setNewStatus(approved ? ApplicationStatus.INACTIVE : ApplicationStatus.REJECTED);
+				nameChangeRequestRepo.save(ncr);
+			});
+		}
+
+		// Update nominee change request statuses
+		List<Integer> nomineeChangeIds = parseCsvAsIntegers(entity.getNomineeChangeRequestIdsCsv());
+		for (Integer id : nomineeChangeIds) {
+			nomineeChangeRequestRepo.findById(id).ifPresent(ncr -> {
+				ncr.setStatus(approved ? ApplicationStatus.INACTIVE : ApplicationStatus.REJECTED);
+				nomineeChangeRequestRepo.save(ncr);
 			});
 		}
 
@@ -224,16 +364,41 @@ public class BoardApprovalListService {
 		return toDto(saved);
 	}
 
+	// ── Delete ───────────────────────────────────────────────────────────
+
 	public String deleteBoardApprovalList(String listId) {
 		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
 				.orElseThrow(() -> new RuntimeException("Board approval list not found"));
 
-		List<String> applicationIds = parseApplicationIds(entity.getApplicationIdsCsv());
+		// Reset application statuses
+		List<String> applicationIds = parseCsv(entity.getApplicationIdsCsv());
 		for (String applicationId : applicationIds) {
 			memberApplicationRepository.findByApplicationID(applicationId).ifPresent(application -> {
 				if (application.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
 					application.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
 					memberApplicationRepository.save(application);
+				}
+			});
+		}
+
+		// Reset name change request statuses
+		List<Integer> nameChangeIds = parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv());
+		for (Integer id : nameChangeIds) {
+			nameChangeRequestRepo.findById(id).ifPresent(ncr -> {
+				if (ncr.getNewStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
+					ncr.setNewStatus(ApplicationStatus.PENDING);
+					nameChangeRequestRepo.save(ncr);
+				}
+			});
+		}
+
+		// Reset nominee change request statuses
+		List<Integer> nomineeChangeIds = parseCsvAsIntegers(entity.getNomineeChangeRequestIdsCsv());
+		for (Integer id : nomineeChangeIds) {
+			nomineeChangeRequestRepo.findById(id).ifPresent(ncr -> {
+				if (ncr.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
+					ncr.setStatus(ApplicationStatus.PENDING);
+					nomineeChangeRequestRepo.save(ncr);
 				}
 			});
 		}

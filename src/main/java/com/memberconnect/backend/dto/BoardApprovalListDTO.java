@@ -15,6 +15,8 @@ public class BoardApprovalListDTO {
 	private Long boardMeetingId;
 	private LocalDate boardMeetingDate;
 	private List<String> applicationIds = new ArrayList<>();
+	private List<Integer> nameChangeRequestIds = new ArrayList<>();
+	private List<Integer> nomineeChangeRequestIds = new ArrayList<>();
 	private String status;
 	private LocalDateTime createdAt;
 	private LocalDateTime processedAt;
