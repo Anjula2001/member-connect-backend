@@ -285,10 +285,10 @@ public class UniversityScholarshipController {
     }
 
     // Endpoint to delete a Normal Approval List and roll back attached requests
-    @DeleteMapping("/university-scholarships/approval-list/{boardMeetingId}")
-    public ResponseEntity<?> deleteApprovalList(@PathVariable Long boardMeetingId) {
+    @DeleteMapping("/university-scholarships/approval-list/{approvalListId}")
+    public ResponseEntity<?> deleteApprovalList(@PathVariable String approvalListId) {
         try {
-            service.deleteApprovalList(boardMeetingId);
+            service.deleteApprovalList(approvalListId);
             return ResponseEntity.ok(Map.of("message", "Approval list deleted and requests rolled back successfully"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -296,10 +296,10 @@ public class UniversityScholarshipController {
     }
 
     // Endpoint to delete a Deviation Approval List and roll back attached requests
-    @DeleteMapping("/university-scholarships/deviation-approval-list/{boardMeetingId}")
-    public ResponseEntity<?> deleteDeviationApprovalList(@PathVariable Long boardMeetingId) {
+    @DeleteMapping("/university-scholarships/deviation-approval-list/{approvalListId}")
+    public ResponseEntity<?> deleteDeviationApprovalList(@PathVariable String approvalListId) {
         try {
-            service.deleteDeviationApprovalList(boardMeetingId);
+            service.deleteDeviationApprovalList(approvalListId);
             return ResponseEntity.ok(Map.of("message", "Deviation approval list deleted and requests rolled back successfully"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));

@@ -109,9 +109,20 @@ public class UniversityScholarshipRequest {
     @JoinColumn(name = "board_meeting_id")
     private BoardMeeting boardMeeting;
 
+    @Column(name = "approval_list_id")
+    private String approvalListId;
+
     public UniversityScholarshipRequest() {}
     
     public Long getId() { return id; }
+
+    public String getApprovalListId() {
+        return approvalListId;
+    }
+
+    public void setApprovalListId(String approvalListId) {
+        this.approvalListId = approvalListId;
+    }
 
     public LocalDate getRequestDate() { 
         return requestDate; 

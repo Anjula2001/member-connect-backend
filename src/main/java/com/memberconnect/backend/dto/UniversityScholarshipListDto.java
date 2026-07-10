@@ -32,6 +32,7 @@ public class UniversityScholarshipListDto {
     private String incompleteReason;
     private Long boardMeetingId;
     private String boardMeetingName;
+    private String approvalListId;
     private Double totalScholarshipAmount;
     private Double totalDisbursedAmount;
     private LocalDate lastDisbursementDate;
@@ -262,5 +263,13 @@ public class UniversityScholarshipListDto {
 
     public void setFundRequests(java.util.List<UniversityScholarshipFundRequestDto> fundRequests) {
         this.fundRequests = fundRequests;
+    }
+
+    public String getApprovalListId() {
+        return approvalListId;
+    }
+
+    public void setApprovalListId(String approvalListId) {
+        this.approvalListId = approvalListId;
     }
 }

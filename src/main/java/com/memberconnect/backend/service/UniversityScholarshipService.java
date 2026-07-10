@@ -309,6 +309,7 @@ public class UniversityScholarshipService {
             dto.setBoardMeetingId(request.getBoardMeeting().getId());
             dto.setBoardMeetingName(request.getBoardMeeting().getBoardMeetingId());
         }
+        dto.setApprovalListId(request.getApprovalListId());
         List<UniversityScholarshipFundRequest> fundRequests =
                 fundRequestRepository.findByUniversityScholarshipRequest(request);
         dto.setTotalScholarshipAmount(getStoredTotalScholarshipAmount(request));
@@ -1109,10 +1110,12 @@ public class UniversityScholarshipService {
             throw new RuntimeException("No scholarship requests specified");
         }
 
+        String approvalListId = generateNextApprovalListId("USNL-");
         for (String requestId : requestIds) {
             UniversityScholarshipRequest request = scholarshipRequestRepository.findByUniversityScholarshipRequestID(requestId)
                     .orElseThrow(() -> new RuntimeException("Scholarship Request not found: " + requestId));
             request.setBoardMeeting(boardMeeting);
+            request.setApprovalListId(approvalListId);
             request.setStatus(UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST);
             scholarshipRequestRepository.save(request);
         }
@@ -1134,13 +1137,35 @@ public class UniversityScholarshipService {
             throw new RuntimeException("No scholarship requests specified");
         }
 
+        String approvalListId = generateNextApprovalListId("USDL-");
         for (String requestId : requestIds) {
             UniversityScholarshipRequest request = scholarshipRequestRepository.findByUniversityScholarshipRequestID(requestId)
                     .orElseThrow(() -> new RuntimeException("Scholarship Request not found: " + requestId));
             request.setBoardMeeting(boardMeeting);
+            request.setApprovalListId(approvalListId);
             request.setStatus(UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST);
             scholarshipRequestRepository.save(request);
         }
+    }
+
+    private synchronized String generateNextApprovalListId(String prefix) {
+        List<UniversityScholarshipRequest> requests = scholarshipRequestRepository.findAll();
+        int maxVal = 0;
+        for (UniversityScholarshipRequest req : requests) {
+            String listId = req.getApprovalListId();
+            if (listId != null && listId.startsWith(prefix)) {
+                try {
+                    String numPart = listId.substring(prefix.length());
+                    int val = Integer.parseInt(numPart);
+                    if (val > maxVal) {
+                        maxVal = val;
+                    }
+                } catch (NumberFormatException e) {
+                    // Ignore non-numeric suffixes or variations
+                }
+            }
+        }
+        return String.format("%s%03d", prefix, maxVal + 1);
     }
 
     /**
@@ -1148,21 +1173,19 @@ public class UniversityScholarshipService {
      * SUBMITTED_FOR_NORMAL_BOARD_APPROVAL and detaching them from the board meeting.
      */
     @Transactional
-    public void deleteApprovalList(Long boardMeetingId) {
-        BoardMeeting boardMeeting = boardMeetingRepository.findById(boardMeetingId)
-                .orElseThrow(() -> new RuntimeException("Board Meeting not found: " + boardMeetingId));
-
+    public void deleteApprovalList(String approvalListId) {
         List<UniversityScholarshipRequest> requests =
-                scholarshipRequestRepository.findByBoardMeeting(boardMeeting);
+                scholarshipRequestRepository.findByApprovalListId(approvalListId);
 
         if (requests.isEmpty()) {
-            throw new RuntimeException("No approval list found for Board Meeting #" + boardMeetingId);
+            throw new RuntimeException("No approval list found with ID: " + approvalListId);
         }
 
         for (UniversityScholarshipRequest request : requests) {
             if (request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST) {
                 request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_BOARD_APPROVAL);
                 request.setBoardMeeting(null);
+                request.setApprovalListId(null);
                 scholarshipRequestRepository.save(request);
             }
         }
@@ -1173,21 +1196,19 @@ public class UniversityScholarshipService {
      * SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL and detaching them from the board meeting.
      */
     @Transactional
-    public void deleteDeviationApprovalList(Long boardMeetingId) {
-        BoardMeeting boardMeeting = boardMeetingRepository.findById(boardMeetingId)
-                .orElseThrow(() -> new RuntimeException("Board Meeting not found: " + boardMeetingId));
-
+    public void deleteDeviationApprovalList(String approvalListId) {
         List<UniversityScholarshipRequest> requests =
-                scholarshipRequestRepository.findByBoardMeeting(boardMeeting);
+                scholarshipRequestRepository.findByApprovalListId(approvalListId);
 
         if (requests.isEmpty()) {
-            throw new RuntimeException("No deviation approval list found for Board Meeting #" + boardMeetingId);
+            throw new RuntimeException("No deviation approval list found with ID: " + approvalListId);
         }
 
         for (UniversityScholarshipRequest request : requests) {
             if (request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST) {
                 request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL);
                 request.setBoardMeeting(null);
+                request.setApprovalListId(null);
                 scholarshipRequestRepository.save(request);
             }
         }
