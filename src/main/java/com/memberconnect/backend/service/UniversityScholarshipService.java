@@ -812,10 +812,12 @@ public class UniversityScholarshipService {
 
                 if (dto.getRequestDate() != null && examMaster != null) {
                         LocalDate examLastDate = examMaster.getExamLastDate();
-                        LocalDate earliestAllowed = examLastDate.minusMonths(eligibilityMonths);
+                        // Eligible window: from examLastDate to examLastDate + eligibilityMonths (default 12 = 1 year)
+                        LocalDate latestAllowed = examLastDate.plusMonths(eligibilityMonths);
 
                         LocalDate reqDate = dto.getRequestDate();
-                        if (reqDate.isBefore(earliestAllowed) || reqDate.isAfter(examLastDate)) {
+                        // Deviation if request date is before exam last date OR after the 1-year window
+                        if (reqDate.isBefore(examLastDate) || reqDate.isAfter(latestAllowed)) {
                                 followDeviation = true;
                         }
                 }
