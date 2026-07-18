@@ -1,6 +1,7 @@
 package com.memberconnect.backend.dto;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public class UniversityScholarshipListDto {
 
@@ -39,6 +40,11 @@ public class UniversityScholarshipListDto {
     private Integer availablePeriod;
     private Integer totalUniversityScholarships;
     private java.util.List<UniversityScholarshipFundRequestDto> fundRequests;
+    private String processedBy;
+    private LocalDateTime processedAt;
+    private LocalDate scheduledDate;
+    private String rejectReason;
+    private String scannedReportPath;
 
 
     public UniversityScholarshipListDto(
@@ -271,5 +277,45 @@ public class UniversityScholarshipListDto {
 
     public void setApprovalListId(String approvalListId) {
         this.approvalListId = approvalListId;
+    }
+
+    public String getProcessedBy() {
+        return processedBy;
+    }
+
+    public void setProcessedBy(String processedBy) {
+        this.processedBy = processedBy;
+    }
+
+    public LocalDateTime getProcessedAt() {
+        return processedAt;
+    }
+
+    public void setProcessedAt(LocalDateTime processedAt) {
+        this.processedAt = processedAt;
+    }
+
+    public LocalDate getScheduledDate() {
+        return scheduledDate;
+    }
+
+    public void setScheduledDate(LocalDate scheduledDate) {
+        this.scheduledDate = scheduledDate;
+    }
+
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    public void setRejectReason(String rejectReason) {
+        this.rejectReason = rejectReason;
+    }
+
+    public String getScannedReportPath() {
+        return scannedReportPath;
+    }
+
+    public void setScannedReportPath(String scannedReportPath) {
+        this.scannedReportPath = scannedReportPath;
     }
 }

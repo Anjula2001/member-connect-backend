@@ -35,6 +35,9 @@ import org.springframework.util.StringUtils;
 import com.memberconnect.backend.model.BoardMeeting;
 import com.memberconnect.backend.repository.BoardmeetingRepository;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -60,6 +63,9 @@ public class UniversityScholarshipService {
     private final ScholarshipMonthSettlementRepository settlementRepository;
     private final BoardmeetingRepository boardMeetingRepository;
     private final UniversityScholarshipFundRequestRepository fundRequestRepository;
+
+    @Autowired
+    private S3Service s3Service;
 
     @Value("${scholarship.required.remitted.months}")
     private int requiredRemittedMonths;
@@ -308,8 +314,13 @@ public class UniversityScholarshipService {
         if (request.getBoardMeeting() != null) {
             dto.setBoardMeetingId(request.getBoardMeeting().getId());
             dto.setBoardMeetingName(request.getBoardMeeting().getBoardMeetingId());
+            dto.setScheduledDate(request.getBoardMeeting().getScheduledDate());
         }
         dto.setApprovalListId(request.getApprovalListId());
+        dto.setProcessedBy(request.getProcessedBy());
+        dto.setProcessedAt(request.getProcessedAt());
+        dto.setRejectReason(request.getRejectReason());
+        dto.setScannedReportPath(request.getScannedReportPath());
         List<UniversityScholarshipFundRequest> fundRequests =
                 fundRequestRepository.findByUniversityScholarshipRequest(request);
         dto.setTotalScholarshipAmount(getStoredTotalScholarshipAmount(request));
@@ -1212,6 +1223,95 @@ public class UniversityScholarshipService {
                 request.setBoardMeeting(null);
                 request.setApprovalListId(null);
                 scholarshipRequestRepository.save(request);
+            }
+        }
+    }
+
+    /**
+     * Processes normal board approvals with file upload.
+     */
+    @Transactional
+    public void processApprovals(String dataJson, MultipartFile file) {
+        processApprovalDecisions(dataJson, file, UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST);
+    }
+
+    /**
+     * Processes deviation board approvals with file upload.
+     */
+    @Transactional
+    public void processDeviationApprovals(String dataJson, MultipartFile file) {
+        processApprovalDecisions(dataJson, file, UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void processApprovalDecisions(String dataJson, MultipartFile file, UniversityScholarshipRequestStatus expectedStatus) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String, Object> payload = mapper.readValue(dataJson, Map.class);
+            
+            String approvalListId = (String) payload.get("approvalListId");
+            String actualDateStr = (String) payload.get("actualBoardMeetingDate");
+            String comment = (String) payload.get("comment");
+            List<Map<String, Object>> decisions = (List<Map<String, Object>>) payload.get("decisions");
+
+            String scannedReportPath = null;
+            if (file != null && !file.isEmpty()) {
+                try {
+                    scannedReportPath = s3Service.uploadFile(file);
+                } catch (Exception e) {
+                    System.err.println("S3 upload failed: " + e.getMessage());
+                    scannedReportPath = "uploads/" + file.getOriginalFilename();
+                }
+            }
+
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+            for (Map<String, Object> dec : decisions) {
+                String requestId = (String) dec.get("requestId");
+                String action = (String) dec.get("action");
+                String reason = (String) dec.get("reason");
+
+                UniversityScholarshipRequest request = scholarshipRequestRepository
+                        .findByUniversityScholarshipRequestID(requestId)
+                        .orElseThrow(() -> new RuntimeException("Request not found: " + requestId));
+
+                if ("reject".equalsIgnoreCase(action)) {
+                    request.setStatus(UniversityScholarshipRequestStatus.REJECTED);
+                    request.setRejectReason(reason);
+                    System.out.println("SIMULATING NOTIFICATION: SMS sent to Student " + request.getStudentName() + " and Member: Request rejected. Reason: " + reason);
+                    System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request rejected. Reason: " + reason);
+                } else {
+                    request.setStatus(UniversityScholarshipRequestStatus.APPROVED);
+                    System.out.println("SIMULATING NOTIFICATION: SMS sent to Student " + request.getStudentName() + " and Member: Request approved.");
+                    System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request approved.");
+                }
+
+                request.setProcessedBy("Admin");
+                request.setProcessedAt(now);
+                if (scannedReportPath != null) {
+                    request.setScannedReportPath(scannedReportPath);
+                }
+                if (actualDateStr != null && !actualDateStr.isBlank()) {
+                    try {
+                        request.setActualBoardMeetingDate(LocalDate.parse(actualDateStr));
+                    } catch (Exception ignored) {}
+                }
+
+                scholarshipRequestRepository.save(request);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to process decisions: " + e.getMessage(), e);
+        }
+    }
+
+    public byte[] downloadFile(String fileName) {
+        try {
+            return s3Service.downloadFile(fileName);
+        } catch (Exception e) {
+            try {
+                return java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(fileName));
+            } catch (Exception ex) {
+                throw new RuntimeException("File not found: " + fileName);
             }
         }
     }

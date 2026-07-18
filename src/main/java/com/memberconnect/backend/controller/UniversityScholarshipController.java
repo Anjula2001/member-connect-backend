@@ -11,6 +11,8 @@ import com.memberconnect.backend.service.UniversityScholarshipService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.MediaType;
 
 import java.util.List;
 import java.util.Map;
@@ -303,6 +305,53 @@ public class UniversityScholarshipController {
             return ResponseEntity.ok(Map.of("message", "Deviation approval list deleted and requests rolled back successfully"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping(value = "/university-scholarships/process-approvals", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> processApprovals(
+            @RequestParam("data") String dataJson,
+            @RequestParam(value = "file", required = false) MultipartFile file
+    ) {
+        try {
+            service.processApprovals(dataJson, file);
+            return ResponseEntity.ok(Map.of("message", "Approvals processed successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping(value = "/university-scholarships/process-deviation-approvals", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> processDeviationApprovals(
+            @RequestParam("data") String dataJson,
+            @RequestParam(value = "file", required = false) MultipartFile file
+    ) {
+        try {
+            service.processDeviationApprovals(dataJson, file);
+            return ResponseEntity.ok(Map.of("message", "Deviation approvals processed successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/university-scholarships/download-report/{approvalListId}")
+    public ResponseEntity<byte[]> downloadReport(@PathVariable String approvalListId) {
+        try {
+            List<UniversityScholarshipRequest> requests = universityScholarshipRepository.findByApprovalListId(approvalListId);
+            String filePath = requests.stream()
+                    .map(UniversityScholarshipRequest::getScannedReportPath)
+                    .filter(path -> path != null && !path.isBlank())
+                    .findFirst()
+                    .orElseThrow(() -> new RuntimeException("No report found for list: " + approvalListId));
+
+            byte[] content = service.downloadFile(filePath);
+            
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"Scanned_Report_" + approvalListId + "\"")
+                    .body(content);
+        } catch (Exception e) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).build();
         }
     }
 

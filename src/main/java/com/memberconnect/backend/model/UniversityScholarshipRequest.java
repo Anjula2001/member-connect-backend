@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -111,6 +112,18 @@ public class UniversityScholarshipRequest {
 
     @Column(name = "approval_list_id")
     private String approvalListId;
+
+    @Column(name = "processed_by")
+    private String processedBy;
+
+    @Column(name = "processed_at")
+    private LocalDateTime processedAt;
+
+    @Column(name = "actual_board_meeting_date")
+    private LocalDate actualBoardMeetingDate;
+
+    @Column(name = "scanned_report_path")
+    private String scannedReportPath;
 
     public UniversityScholarshipRequest() {}
     
@@ -327,6 +340,38 @@ public class UniversityScholarshipRequest {
 
     public void setBoardMeeting(BoardMeeting boardMeeting) {
         this.boardMeeting = boardMeeting;
+    }
+
+    public String getProcessedBy() {
+        return processedBy;
+    }
+
+    public void setProcessedBy(String processedBy) {
+        this.processedBy = processedBy;
+    }
+
+    public LocalDateTime getProcessedAt() {
+        return processedAt;
+    }
+
+    public void setProcessedAt(LocalDateTime processedAt) {
+        this.processedAt = processedAt;
+    }
+
+    public LocalDate getActualBoardMeetingDate() {
+        return actualBoardMeetingDate;
+    }
+
+    public void setActualBoardMeetingDate(LocalDate actualBoardMeetingDate) {
+        this.actualBoardMeetingDate = actualBoardMeetingDate;
+    }
+
+    public String getScannedReportPath() {
+        return scannedReportPath;
+    }
+
+    public void setScannedReportPath(String scannedReportPath) {
+        this.scannedReportPath = scannedReportPath;
     }
 }
 
