@@ -1286,7 +1286,7 @@ public class UniversityScholarshipService {
                     System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request approved.");
                 }
 
-                request.setProcessedBy("Admin");
+                request.setProcessedBy("user1");
                 request.setProcessedAt(now);
                 if (scannedReportPath != null) {
                     request.setScannedReportPath(scannedReportPath);
