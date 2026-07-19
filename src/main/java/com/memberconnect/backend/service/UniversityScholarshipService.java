@@ -321,6 +321,7 @@ public class UniversityScholarshipService {
         dto.setProcessedAt(request.getProcessedAt());
         dto.setRejectReason(request.getRejectReason());
         dto.setScannedReportPath(request.getScannedReportPath());
+        dto.setFollowDeviationProcess(request.getFollowDeviationProcess());
         List<UniversityScholarshipFundRequest> fundRequests =
                 fundRequestRepository.findByUniversityScholarshipRequest(request);
         dto.setTotalScholarshipAmount(getStoredTotalScholarshipAmount(request));

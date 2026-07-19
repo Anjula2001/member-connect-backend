@@ -45,7 +45,7 @@ public class UniversityScholarshipListDto {
     private LocalDate scheduledDate;
     private String rejectReason;
     private String scannedReportPath;
-
+    private Boolean followDeviationProcess;
 
     public UniversityScholarshipListDto(
             Long id,
@@ -317,5 +317,13 @@ public class UniversityScholarshipListDto {
 
     public void setScannedReportPath(String scannedReportPath) {
         this.scannedReportPath = scannedReportPath;
+    }
+
+    public Boolean getFollowDeviationProcess() {
+        return followDeviationProcess;
+    }
+
+    public void setFollowDeviationProcess(Boolean followDeviationProcess) {
+        this.followDeviationProcess = followDeviationProcess;
     }
 }
