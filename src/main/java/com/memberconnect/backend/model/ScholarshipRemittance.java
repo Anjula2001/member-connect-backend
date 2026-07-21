@@ -15,10 +15,13 @@ public class ScholarshipRemittance {
     private Member member;
 
     @Column(name = "remittance_month", nullable = false)
-    private String remittanceMonth; // format: yyyy-MM
+    private String remittanceMonth;
 
     @Column(name = "remitted", nullable = false)
     private Boolean remitted;
+
+    @Column(name = "remittance_amount")
+    private Double remittanceAmount;
 
     public Long getId() {
         return id;
@@ -46,5 +49,13 @@ public class ScholarshipRemittance {
 
     public void setRemitted(Boolean remitted) {
         this.remitted = remitted;
+    }
+
+    public Double getRemittanceAmount() {
+        return remittanceAmount;
+    }
+
+    public void setRemittanceAmount(Double remittanceAmount) {
+        this.remittanceAmount = remittanceAmount;
     }
 }

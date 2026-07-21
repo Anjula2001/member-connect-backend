@@ -21,6 +21,9 @@ import com.memberconnect.backend.repository.Grade5ExamMasterRepository;
 import com.memberconnect.backend.repository.Grade5ScholarshipRepository;
 import com.memberconnect.backend.repository.MemberRepository;
 import com.memberconnect.backend.repository.MinorSavingsAccountRepository;
+import com.memberconnect.backend.repository.ScholarshipConfigRepository;
+import com.memberconnect.backend.repository.ScholarshipRemittanceRepository;
+import org.springframework.beans.factory.annotation.Value;
 
 
 @Service
@@ -34,6 +37,13 @@ public class Grade5ScholarshipService {
     private Grade5ExamMasterRepository Grade5ExamMasterRepository;
     @Autowired
     private MemberRepository memberRepository;
+    @Autowired
+    private ScholarshipRemittanceRepository remittanceRepository;
+    @Autowired
+    private ScholarshipConfigRepository scholarshipConfigRepository;
+
+    @Value("${grade5.scholarship.required.remitted.months:6}")
+    private int defaultRequiredRemittedMonths;
 
     // Check exam number exists
     public boolean isExamNumberExists(String examNo) {
@@ -89,6 +99,51 @@ public class Grade5ScholarshipService {
         }
     }
 
+    private void validateScholarshipRemittance(String memberId, Integer examYear) {
+        Member member = memberRepository.findByMemberId(memberId)
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        if (examYear == null) {
+            throw new RuntimeException("Selected exam year is required");
+        }
+
+        Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear)
+                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
+
+        LocalDate examLastDate = examMaster.getExamDate();
+        if (examLastDate == null) {
+            throw new RuntimeException("Selected exam date not found in Exam Master");
+        }
+
+        int requiredMonths = scholarshipConfigRepository.findByConfigKey("grade5.scholarship.required.remitted.months")
+                .or(() -> scholarshipConfigRepository.findByConfigKey("scholarship.required.remitted.months"))
+                .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue)
+                .orElse(defaultRequiredRemittedMonths > 0 ? defaultRequiredRemittedMonths : 6);
+
+        LocalDate examMonthDate = examLastDate.withDayOfMonth(1);
+        System.out.println("Validating Scholarship Remittance for Member: " + memberId + ", Exam Year: " + examYear + ", Exam Date: " + examLastDate + ", Required Months: " + requiredMonths);
+
+        for (int i = 1; i <= requiredMonths; i++) {
+            LocalDate targetMonth = examMonthDate.minusMonths(i);
+            String monthHyphen = String.format("%04d-%02d", targetMonth.getYear(), targetMonth.getMonthValue());
+            String monthDot = String.format("%04d.%02d", targetMonth.getYear(), targetMonth.getMonthValue());
+
+            boolean remitted = remittanceRepository.existsByMember_IdAndRemittanceMonthAndRemittedTrue(member.getId(), monthHyphen)
+                    || remittanceRepository.existsByMember_IdAndRemittanceMonthAndRemittedTrue(member.getId(), monthDot)
+                    || remittanceRepository.existsByMember_MemberIdAndRemittanceMonthAndRemittedTrue(memberId, monthHyphen)
+                    || remittanceRepository.existsByMember_MemberIdAndRemittanceMonthAndRemittedTrue(memberId, monthDot);
+
+            System.out.println("Checking month " + i + " (" + monthHyphen + "): remitted=" + remitted);
+
+            if (!remitted) {
+                System.out.println("Remittance check FAILED for month: " + monthHyphen);
+                throw new RuntimeException(
+                        "Scholarship deduction was not continuously remitted from Member for the specific period (" + requiredMonths + " months)"
+                );
+            }
+        }
+    }
+
     private boolean shouldFollowDeviationProcess(LocalDate requestedDate, Integer examYear) {
         if (requestedDate == null || examYear == null) {
             return false;
@@ -138,6 +193,7 @@ public class Grade5ScholarshipService {
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
         validateMemberActiveOnExamLastDate(memberId, dto.getExamYear());
+        validateScholarshipRemittance(memberId, dto.getExamYear());
 
         // Prevent duplicate
         if (repository.existsByExaminationNumber(dto.getExaminationNumber())) {
@@ -428,6 +484,7 @@ public class Grade5ScholarshipService {
                 .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
 
         validateMemberActiveOnExamLastDate(entity.getMemberId(), dto.getExamYear());
+        validateScholarshipRemittance(entity.getMemberId(), dto.getExamYear());
 
         if (repository.existsByExaminationNumberAndRequestNoNot(
                 dto.getExaminationNumber(),
