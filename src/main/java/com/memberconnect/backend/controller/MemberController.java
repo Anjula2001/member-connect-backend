@@ -85,6 +85,12 @@ public class MemberController {
         return memberService.updateStatus(id, status);
     }
 
+    @Autowired
+    private com.memberconnect.backend.repository.LoanRepository loanRepository;
+
+    @Autowired
+    private com.memberconnect.backend.repository.LoanObligationRepository loanObligationRepository;
+
     // Get member summary information
     @GetMapping("/{memberId}")
     public MemberSummaryDTO getMember(@PathVariable String memberId) {
@@ -97,5 +103,17 @@ public class MemberController {
             @PathVariable String memberId
     ) {
         return retirementService.validateMemberForRetirement(memberId);
+    }
+
+    // Get member loans and obligations
+    @GetMapping("/{memberId}/loans")
+    public ResponseEntity<?> getMemberLoans(@PathVariable String memberId) {
+        List<com.memberconnect.backend.model.Loan> loans = loanRepository.findByMemberId(memberId);
+        List<com.memberconnect.backend.model.LoanObligation> obligations = loanObligationRepository.findByMemberId(memberId);
+        
+        return ResponseEntity.ok(java.util.Map.of(
+            "loans", loans,
+            "obligations", obligations
+        ));
     }
 }

@@ -86,6 +86,16 @@ public class Grade5ScholarshipController {
         return ResponseEntity.ok(request);
     }
 
+    // Get a specific request by requestNo
+    @GetMapping("/request/{requestNo}")
+    public ResponseEntity<?> getRequestByRequestNo(
+            @PathVariable String requestNo
+    ) {
+        return service.getRequestByRequestNo(requestNo)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     // Mark incomplete
     @PutMapping("/{requestNo}/mark-incomplete")
     public Grade5ScholarshipRequest markIncomplete(

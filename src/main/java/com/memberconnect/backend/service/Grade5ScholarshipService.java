@@ -242,6 +242,11 @@ public class Grade5ScholarshipService {
             .orElse(null);
     }
 
+    // Get a specific request by requestNo
+    public java.util.Optional<Grade5ScholarshipRequest> getRequestByRequestNo(String requestNo) {
+        return repository.findByRequestNo(requestNo);
+    }
+
     // Mark incomplete
     public Grade5ScholarshipRequest markIncomplete(String requestNo, String reason) {
         Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo)
