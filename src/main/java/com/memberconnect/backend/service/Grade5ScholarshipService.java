@@ -21,6 +21,7 @@ import com.memberconnect.backend.repository.Grade5ExamMasterRepository;
 import com.memberconnect.backend.repository.Grade5ScholarshipRepository;
 import com.memberconnect.backend.repository.MemberRepository;
 import com.memberconnect.backend.repository.MinorSavingsAccountRepository;
+import com.memberconnect.backend.repository.MinorAccountRemittanceRepository;
 import com.memberconnect.backend.repository.ScholarshipConfigRepository;
 import com.memberconnect.backend.repository.ScholarshipRemittanceRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,6 +35,8 @@ public class Grade5ScholarshipService {
     @Autowired
     private MinorSavingsAccountRepository minorRepo;
     @Autowired
+    private MinorAccountRemittanceRepository minorAccountRemittanceRepository;
+    @Autowired
     private Grade5ExamMasterRepository Grade5ExamMasterRepository;
     @Autowired
     private MemberRepository memberRepository;
@@ -44,6 +47,9 @@ public class Grade5ScholarshipService {
 
     @Value("${grade5.scholarship.required.remitted.months:6}")
     private int defaultRequiredRemittedMonths;
+
+    @Value("${grade5.minor.account.required.remittance.amount:250.0}")
+    private double defaultMinMinorRemittanceAmount;
 
     // Check exam number exists
     public boolean isExamNumberExists(String examNo) {
@@ -257,7 +263,7 @@ public class Grade5ScholarshipService {
     }
 
     // Get fund disbursement details
-    public Map<String, Object> getFundDisbursementDetails(String birthCertificateNo) {
+    public Map<String, Object> getFundDisbursementDetails(String birthCertificateNo, Integer examYear) {
 
         List<MinorSavingsAccount> accounts =
                 minorRepo.findByBirthCertificateNo(birthCertificateNo);
@@ -280,15 +286,47 @@ public class Grade5ScholarshipService {
 
         result.put("minorAccountNo", account.getMinorAccountNo());
 
-        int eligibleMonths = (int) accounts.stream()
-                .filter(a -> a.getRemittedAmount() != null && a.getRemittedAmount() >= 250)
+        // Determine the last month of the exam if examYear is available
+        String examMonthLimit = null;
+        if (examYear != null) {
+            Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear).orElse(null);
+            if (examMaster != null && examMaster.getExamDate() != null) {
+                examMonthLimit = examMaster.getExamDate().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
+            }
+        }
+
+        List<com.memberconnect.backend.model.MinorAccountRemittance> remittances =
+                minorAccountRemittanceRepository.findByMinorAccountNo(account.getMinorAccountNo());
+
+        final String targetExamMonth = examMonthLimit;
+
+        double minAmount = scholarshipConfigRepository.findByConfigKey("grade5.minor.account.required.remittance.amount")
+                .or(() -> scholarshipConfigRepository.findByConfigKey("minor.account.required.remittance.amount"))
+                .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue)
+                .map(Double::valueOf)
+                .orElse(defaultMinMinorRemittanceAmount);
+
+        int eligibleMonths = (int) remittances.stream()
+                .filter(r -> r.getRemittanceAmount() != null && r.getRemittanceAmount() >= minAmount)
+                .filter(r -> {
+                    if (targetExamMonth == null) return true;
+                    String month = r.getRemittanceMonth();
+                    if (month == null) return false;
+                    String normMonth = month.replace(".", "-");
+                    String normTarget = targetExamMonth.replace(".", "-");
+                    return normMonth.compareTo(normTarget) <= 0;
+                })
                 .count();
 
-        result.put("totalMonths", accounts.size());
+        result.put("totalMonths", eligibleMonths);
         result.put("eligibleMonths", eligibleMonths);
         result.put("doubleAmount", eligibleMonths >= 36);
 
         return result;
+    }
+
+    public Map<String, Object> getFundDisbursementDetails(String birthCertificateNo) {
+        return getFundDisbursementDetails(birthCertificateNo, null);
     }
 
     // Get latest request for member

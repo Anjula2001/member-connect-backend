@@ -67,9 +67,10 @@ public class Grade5ScholarshipController {
     // Get fund disbursement details
     @GetMapping("/fund-details")
     public Map<String, Object> getFundDetails(
-            @RequestParam String birthCertificateNo
+            @RequestParam String birthCertificateNo,
+            @RequestParam(required = false) Integer examYear
     ) {
-        return service.getFundDisbursementDetails(birthCertificateNo);
+        return service.getFundDisbursementDetails(birthCertificateNo, examYear);
     }
 
     // Get latest request for member
