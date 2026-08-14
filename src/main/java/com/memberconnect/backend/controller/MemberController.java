@@ -6,6 +6,7 @@ import com.memberconnect.backend.dto.MemberSummaryDTO;
 import com.memberconnect.backend.enums.MemberStatus;
 import com.memberconnect.backend.service.MemberService;
 import com.memberconnect.backend.service.RetirementService;
+import com.memberconnect.backend.service.TerminationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,9 +22,11 @@ public class MemberController {
     private MemberService memberService;
 
     private final RetirementService retirementService;
+    private final TerminationService terminationService;
 
-    public MemberController(RetirementService retirementService) {
+    public MemberController(RetirementService retirementService, TerminationService terminationService) {
         this.retirementService = retirementService;
+        this.terminationService = terminationService;
     }
 
     @PostMapping("/createMember")
@@ -97,5 +100,13 @@ public class MemberController {
             @PathVariable String memberId
     ) {
         return retirementService.validateMemberForRetirement(memberId);
+    }
+
+    // Validate a member for termination
+    @GetMapping("/{memberId}/termination-validation")
+    public MemberRetirementValidationDTO validateMemberForTermination(
+            @PathVariable String memberId
+    ) {
+        return terminationService.validateMemberForTermination(memberId);
     }
 }
