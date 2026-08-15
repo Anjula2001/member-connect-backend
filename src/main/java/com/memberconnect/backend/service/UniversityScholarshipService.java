@@ -450,17 +450,25 @@ public class UniversityScholarshipService {
             return 0;
         }
 
-        java.util.regex.Matcher matcher = java.util.regex.Pattern
-                .compile("(?i)^Year\\s+([1-9][0-9]*)\\s+Semester\\s+([1-2])$")
-                .matcher(requestedPeriod.trim());
+        String trimmed = requestedPeriod.trim();
 
-        if (!matcher.matches()) {
-            return 0;
+        java.util.regex.Matcher semMatcher = java.util.regex.Pattern
+                .compile("(?i)^Semester\\s+([1-9][0-9]*)$")
+                .matcher(trimmed);
+        if (semMatcher.matches()) {
+            return Integer.parseInt(semMatcher.group(1));
         }
 
-        int year = Integer.parseInt(matcher.group(1));
-        int semester = Integer.parseInt(matcher.group(2));
-        return (year - 1) * 2 + semester;
+        java.util.regex.Matcher yearSemMatcher = java.util.regex.Pattern
+                .compile("(?i)^Year\\s+([1-5])\\s+Semester\\s+([1-2])$")
+                .matcher(trimmed);
+        if (yearSemMatcher.matches()) {
+            int year = Integer.parseInt(yearSemMatcher.group(1));
+            int semester = Integer.parseInt(yearSemMatcher.group(2));
+            return (year - 1) * 2 + semester;
+        }
+
+        return 0;
     }
 
     private UniversityScholarshipFundRequestDto toFundRequestDto(UniversityScholarshipFundRequest request) {
@@ -516,9 +524,26 @@ public class UniversityScholarshipService {
         }
 
         int requestedPeriod = parseRequestedPeriod(dto.getRequestedPeriod());
-        Integer availablePeriod = calculateAvailablePeriod(scholarshipRequest, fundRequest);
-        if (requestedPeriod <= 0 || (availablePeriod != null && requestedPeriod > availablePeriod)) {
-            throw new RuntimeException("Requested Period cannot be more than the Available Period");
+        if (requestedPeriod <= 0) {
+            throw new RuntimeException("Format must be: Semester 1 (e.g. Semester 1, Semester 2, ...)");
+        }
+
+        int years = parseInt(scholarshipRequest.getDuration());
+        int totalSemesters = years > 0 ? years * 2 : 10;
+        if (requestedPeriod > totalSemesters) {
+            throw new RuntimeException("Requested Period cannot exceed total course semesters (Semester " + totalSemesters + ")");
+        }
+
+        final UniversityScholarshipFundRequest targetFundRequest = fundRequest;
+        boolean duplicateExists = fundRequestRepository.findByUniversityScholarshipRequest(scholarshipRequest)
+                .stream()
+                .filter(fr -> targetFundRequest.getId() == null || !fr.getId().equals(targetFundRequest.getId()))
+                .filter(fr -> fr.getStatus() != UniversityScholarshipFundRequestStatus.REJECTED
+                        && fr.getStatus() != UniversityScholarshipFundRequestStatus.INACTIVE)
+                .anyMatch(fr -> parseRequestedPeriod(fr.getRequestedPeriod()) == requestedPeriod);
+
+        if (duplicateExists) {
+            throw new RuntimeException("A fund request for this semester already exists for this scholarship");
         }
 
         double requestedAmount = dto.getRequestedAmount() != null ? dto.getRequestedAmount() : 0.0;
