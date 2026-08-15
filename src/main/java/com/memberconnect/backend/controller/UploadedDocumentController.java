@@ -65,15 +65,31 @@ public class UploadedDocumentController {
         }
     }
 
-    // Endpoint to download a specific uploaded document by ID and request ID
+    // Endpoint to download/preview a specific uploaded document by ID and request ID
     @GetMapping("/download/{id}")
-    public ResponseEntity<byte[]> download(@PathVariable Long id, @RequestParam String requestId) {
+    public ResponseEntity<byte[]> download(
+            @PathVariable Long id,
+            @RequestParam String requestId,
+            @RequestParam(defaultValue = "false") boolean download) {
         try {
             byte[] content = service.download(id, requestId);
             UploadedDocument d = service.getDetails(id, requestId);
+
+            MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+            if (!download && org.springframework.util.StringUtils.hasText(d.getFileType())) {
+                try {
+                    mediaType = MediaType.parseMediaType(d.getFileType());
+                } catch (Exception ignored) {}
+            }
+
+            String disposition = download
+                    ? "attachment; filename=\"" + d.getFileName() + "\""
+                    : "inline; filename=\"" + d.getFileName() + "\"";
+
             return ResponseEntity.ok()
-                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + d.getFileName() + "\"")
+                    .contentType(mediaType)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                    .header(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, HttpHeaders.CONTENT_DISPOSITION)
                     .body(content);
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();

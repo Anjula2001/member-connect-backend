@@ -33,6 +33,7 @@ public class UploadedDocumentService {
 
         UploadedDocument ud = new UploadedDocument();
         ud.setRequestId(requestId);
+        ud.setRequestNo(requestId);
         ud.setRequiredDocumentId(requiredDocumentId);
         ud.setFileName(file.getOriginalFilename() != null ? file.getOriginalFilename() : fileName);
         ud.setFileType(file.getContentType());
@@ -48,7 +49,7 @@ public class UploadedDocumentService {
                 .stream()
             .map(d -> new UploadedDocumentDisplayDto(
                 d.getId(),
-                d.getRequestId(),
+                d.getRequestId() != null ? d.getRequestId() : d.getRequestNo(),
                 d.getRequiredDocumentId(),
                 d.getFileName(),
                 d.getFilePath(),
@@ -64,7 +65,7 @@ public class UploadedDocumentService {
                 .stream()
             .map(d -> new UploadedDocumentDisplayDto(
                 d.getId(),
-                d.getRequestId(),
+                d.getRequestId() != null ? d.getRequestId() : d.getRequestNo(),
                 d.getRequiredDocumentId(),
                 d.getFileName(),
                 d.getFilePath(),
