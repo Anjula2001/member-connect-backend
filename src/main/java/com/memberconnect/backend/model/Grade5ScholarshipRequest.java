@@ -54,6 +54,9 @@ public class Grade5ScholarshipRequest {
     @Column(name = "DistrictCutOffMark")
     private Integer districtCutOffMark;
 
+    @Column(name = "has_deviation")
+    private Boolean hasDeviation;
+
     @Column(name = "IncompleteReason")
     private String incompleteReason;
 
@@ -78,12 +81,55 @@ public class Grade5ScholarshipRequest {
     @Column(name = "IsDoubleAmount")
     private Boolean isDoubleAmount;
 
+    @Column(name = "ApprovalListId")
+    private String approvalListId;
+
+    @Column(name = "OriginalStatus")
+    private String originalStatus;
+
+    public String getApprovalListId() {
+        return approvalListId;
+    }
+
+    public void setApprovalListId(String approvalListId) {
+        this.approvalListId = approvalListId;
+    }
+
+    public String getOriginalStatus() {
+        return originalStatus;
+    }
+
+    public void setOriginalStatus(String originalStatus) {
+        this.originalStatus = originalStatus;
+    }
+
+
     public Integer getDistrictCutOffMark() {
         return districtCutOffMark;
     }
 
     public void setDistrictCutOffMark(Integer districtCutOffMark) {
         this.districtCutOffMark = districtCutOffMark;
+    }
+
+    public Boolean getHasDeviation() {
+        if ("SUBMITTED_FOR_DEVIATION_APPROVAL".equals(status) || "ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST".equals(status)) {
+            return true;
+        }
+        if ("SUBMITTED_FOR_NORMAL_APPROVAL".equals(status) || "ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST".equals(status)) {
+            return false;
+        }
+        if (approvalListId != null && (approvalListId.contains("-DAL-") || approvalListId.contains("DAL"))) {
+            return true;
+        }
+        if (originalStatus != null && originalStatus.contains("DEVIATION")) {
+            return true;
+        }
+        return Boolean.TRUE.equals(hasDeviation);
+    }
+
+    public void setHasDeviation(Boolean hasDeviation) {
+        this.hasDeviation = hasDeviation;
     }
     
     public Long getId() { 

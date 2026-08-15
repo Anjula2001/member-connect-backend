@@ -15,5 +15,10 @@ public interface ScholarshipRemittanceRepository
     boolean existsByMember_IdAndRemittanceMonthAndRemittedTrue(
         Long memberId,
         String remittanceMonth
-);
+    );
+
+    boolean existsByMember_MemberIdAndRemittanceMonthAndRemittedTrue(
+        String memberId,
+        String remittanceMonth
+    );
 }

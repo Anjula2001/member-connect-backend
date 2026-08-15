@@ -3,36 +3,44 @@ package com.memberconnect.backend.model;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "scholarship_remittance")
-public class ScholarshipRemittance {
+@Table(name = "minor_account_remittance")
+public class MinorAccountRemittance {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "member_id", nullable = false)
-    private Member member;
+    @Column(name = "minor_account_no", nullable = false)
+    private String minorAccountNo;
 
     @Column(name = "remittance_month", nullable = false)
     private String remittanceMonth;
 
-    @Column(name = "remitted", nullable = false)
-    private Boolean remitted;
-
     @Column(name = "remittance_amount")
     private Double remittanceAmount;
+
+    public MinorAccountRemittance() {}
+
+    public MinorAccountRemittance(String minorAccountNo, String remittanceMonth, Double remittanceAmount) {
+        this.minorAccountNo = minorAccountNo;
+        this.remittanceMonth = remittanceMonth;
+        this.remittanceAmount = remittanceAmount;
+    }
 
     public Long getId() {
         return id;
     }
 
-    public Member getMember() {
-        return member;
+    public void setId(Long id) {
+        this.id = id;
     }
 
-    public void setMember(Member member) {
-        this.member = member;
+    public String getMinorAccountNo() {
+        return minorAccountNo;
+    }
+
+    public void setMinorAccountNo(String minorAccountNo) {
+        this.minorAccountNo = minorAccountNo;
     }
 
     public String getRemittanceMonth() {
@@ -41,14 +49,6 @@ public class ScholarshipRemittance {
 
     public void setRemittanceMonth(String remittanceMonth) {
         this.remittanceMonth = remittanceMonth;
-    }
-
-    public Boolean getRemitted() {
-        return remitted;
-    }
-
-    public void setRemitted(Boolean remitted) {
-        this.remitted = remitted;
     }
 
     public Double getRemittanceAmount() {

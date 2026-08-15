@@ -29,8 +29,7 @@ public class MemberController {
     public MemberController(
             RetirementService retirementService,
             TerminationService terminationService,
-            MemberDeathRecordService memberDeathRecordService
-    ) {
+            MemberDeathRecordService memberDeathRecordService) {
         this.retirementService = retirementService;
         this.terminationService = terminationService;
         this.memberDeathRecordService = memberDeathRecordService;
@@ -64,7 +63,8 @@ public class MemberController {
     /**
      * Flexible search endpoint used by the directory page.
      * All parameters are optional.
-     * GET /api/members/search?query=&statuses=ACTIVE,INACTIVE&locations=Colombo&workingLocationType=school&educationalZone=colombo-zone
+     * GET
+     * /api/members/search?query=&statuses=ACTIVE,INACTIVE&locations=Colombo&workingLocationType=school&educationalZone=colombo-zone
      */
     @GetMapping("/search")
     public List<MemberDTO> searchMembers(
@@ -95,6 +95,12 @@ public class MemberController {
         return memberService.updateStatus(id, status);
     }
 
+    @Autowired
+    private com.memberconnect.backend.repository.LoanRepository loanRepository;
+
+    @Autowired
+    private com.memberconnect.backend.repository.LoanObligationRepository loanObligationRepository;
+
     // Get member summary information
     @GetMapping("/{memberId}")
     public MemberSummaryDTO getMember(@PathVariable String memberId) {
@@ -104,24 +110,33 @@ public class MemberController {
     // Validate a member for retirement
     @GetMapping("/{memberId}/retirement-validation")
     public MemberRetirementValidationDTO validateMemberForRetirement(
-            @PathVariable String memberId
-    ) {
+            @PathVariable String memberId) {
         return retirementService.validateMemberForRetirement(memberId);
     }
 
     // Validate a member for termination
     @GetMapping("/{memberId}/termination-validation")
     public MemberRetirementValidationDTO validateMemberForTermination(
-            @PathVariable String memberId
-    ) {
+            @PathVariable String memberId) {
         return terminationService.validateMemberForTermination(memberId);
     }
 
     // Validate a member for member death record
     @GetMapping("/{memberId}/member-death-validation")
     public MemberRetirementValidationDTO validateMemberForDeathRecord(
-            @PathVariable String memberId
-    ) {
+            @PathVariable String memberId) {
         return memberDeathRecordService.validateMemberForDeathRecord(memberId);
+    }
+
+    // Get member loans and obligations
+    @GetMapping("/{memberId}/loans")
+    public ResponseEntity<?> getMemberLoans(@PathVariable String memberId) {
+        List<com.memberconnect.backend.model.Loan> loans = loanRepository.findByMemberId(memberId);
+        List<com.memberconnect.backend.model.LoanObligation> obligations = loanObligationRepository
+                .findByMemberId(memberId);
+
+        return ResponseEntity.ok(java.util.Map.of(
+                "loans", loans,
+                "obligations", obligations));
     }
 }
