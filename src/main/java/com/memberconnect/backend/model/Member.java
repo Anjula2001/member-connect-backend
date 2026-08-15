@@ -138,4 +138,13 @@ public class Member {
     @Column(name = "IdentificationDetails", length = 2000)
     private String identificationDetails;
 
+    // Date the member's account was last updated/active. Used by the dormant
+    // membership identification process.
+    @Column(name = "last_activity_date")
+    private LocalDate lastActivityDate;
+
+    // Date the member was flagged as dormant (Dormant Selection Date).
+    @Column(name = "dormant_selection_date")
+    private LocalDate dormantSelectionDate;
+
 }
