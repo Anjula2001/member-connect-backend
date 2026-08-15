@@ -57,4 +57,20 @@ public class S3Service {
 
         return s3Client.getObjectAsBytes(getObjectRequest).asByteArray();
     }
+
+    /**
+     * Reads the Content-Type stored with the S3 object at upload time.
+     * Falls back to "application/octet-stream" if unavailable.
+     */
+    public String getFileContentType(String fileName) {
+        try {
+            software.amazon.awssdk.services.s3.model.HeadObjectResponse head =
+                    s3Client.headObject(r -> r.bucket(bucketName).key(fileName));
+            String ct = head.contentType();
+            return (ct != null && !ct.isBlank()) ? ct : "application/octet-stream";
+        } catch (Exception e) {
+            return "application/octet-stream";
+        }
+    }
 }
+

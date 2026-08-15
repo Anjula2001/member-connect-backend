@@ -1,6 +1,7 @@
 package com.memberconnect.backend.dto;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public class UniversityScholarshipListDto {
 
@@ -28,8 +29,23 @@ public class UniversityScholarshipListDto {
     private String bankName;
     private String branchName;
     private String accountNumber;
+    private Boolean specialDegree;
     private String incompleteReason;
-
+    private Long boardMeetingId;
+    private String boardMeetingName;
+    private String approvalListId;
+    private Double totalScholarshipAmount;
+    private Double totalDisbursedAmount;
+    private LocalDate lastDisbursementDate;
+    private Integer availablePeriod;
+    private Integer totalUniversityScholarships;
+    private java.util.List<UniversityScholarshipFundRequestDto> fundRequests;
+    private String processedBy;
+    private LocalDateTime processedAt;
+    private LocalDate scheduledDate;
+    private String rejectReason;
+    private String scannedReportPath;
+    private Boolean followDeviationProcess;
 
     public UniversityScholarshipListDto(
             Long id,
@@ -56,6 +72,7 @@ public class UniversityScholarshipListDto {
             String bankName,
             String branchName,
             String accountNumber,
+            Boolean specialDegree,
             String incompleteReason
     ) {
         this.id = id;
@@ -82,6 +99,7 @@ public class UniversityScholarshipListDto {
         this.bankName = bankName;
         this.branchName = branchName;
         this.accountNumber = accountNumber;
+        this.specialDegree = specialDegree;
         this.incompleteReason = incompleteReason;
     }
 
@@ -181,7 +199,131 @@ public class UniversityScholarshipListDto {
         return accountNumber; 
     }
 
+    public Boolean getSpecialDegree() {
+        return specialDegree;
+    }
+
     public String getIncompleteReason() { 
         return incompleteReason; 
+    }
+
+    public Long getBoardMeetingId() {
+        return boardMeetingId;
+    }
+
+    public void setBoardMeetingId(Long boardMeetingId) {
+        this.boardMeetingId = boardMeetingId;
+    }
+
+    public String getBoardMeetingName() {
+        return boardMeetingName;
+    }
+
+    public void setBoardMeetingName(String boardMeetingName) {
+        this.boardMeetingName = boardMeetingName;
+    }
+
+    public Double getTotalScholarshipAmount() {
+        return totalScholarshipAmount;
+    }
+
+    public void setTotalScholarshipAmount(Double totalScholarshipAmount) {
+        this.totalScholarshipAmount = totalScholarshipAmount;
+    }
+
+    public Double getTotalDisbursedAmount() {
+        return totalDisbursedAmount;
+    }
+
+    public void setTotalDisbursedAmount(Double totalDisbursedAmount) {
+        this.totalDisbursedAmount = totalDisbursedAmount;
+    }
+
+    public LocalDate getLastDisbursementDate() {
+        return lastDisbursementDate;
+    }
+
+    public void setLastDisbursementDate(LocalDate lastDisbursementDate) {
+        this.lastDisbursementDate = lastDisbursementDate;
+    }
+
+    public Integer getAvailablePeriod() {
+        return availablePeriod;
+    }
+
+    public void setAvailablePeriod(Integer availablePeriod) {
+        this.availablePeriod = availablePeriod;
+    }
+
+    public Integer getTotalUniversityScholarships() {
+        return totalUniversityScholarships;
+    }
+
+    public void setTotalUniversityScholarships(Integer totalUniversityScholarships) {
+        this.totalUniversityScholarships = totalUniversityScholarships;
+    }
+
+    public java.util.List<UniversityScholarshipFundRequestDto> getFundRequests() {
+        return fundRequests;
+    }
+
+    public void setFundRequests(java.util.List<UniversityScholarshipFundRequestDto> fundRequests) {
+        this.fundRequests = fundRequests;
+    }
+
+    public String getApprovalListId() {
+        return approvalListId;
+    }
+
+    public void setApprovalListId(String approvalListId) {
+        this.approvalListId = approvalListId;
+    }
+
+    public String getProcessedBy() {
+        return processedBy;
+    }
+
+    public void setProcessedBy(String processedBy) {
+        this.processedBy = processedBy;
+    }
+
+    public LocalDateTime getProcessedAt() {
+        return processedAt;
+    }
+
+    public void setProcessedAt(LocalDateTime processedAt) {
+        this.processedAt = processedAt;
+    }
+
+    public LocalDate getScheduledDate() {
+        return scheduledDate;
+    }
+
+    public void setScheduledDate(LocalDate scheduledDate) {
+        this.scheduledDate = scheduledDate;
+    }
+
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    public void setRejectReason(String rejectReason) {
+        this.rejectReason = rejectReason;
+    }
+
+    public String getScannedReportPath() {
+        return scannedReportPath;
+    }
+
+    public void setScannedReportPath(String scannedReportPath) {
+        this.scannedReportPath = scannedReportPath;
+    }
+
+    public Boolean getFollowDeviationProcess() {
+        return followDeviationProcess;
+    }
+
+    public void setFollowDeviationProcess(Boolean followDeviationProcess) {
+        this.followDeviationProcess = followDeviationProcess;
     }
 }

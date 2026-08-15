@@ -21,6 +21,9 @@ public class UniversityProgram {
     @Column(nullable = false)
     private Integer duration;
 
+    @Column(name = "scholarship_amount")
+    private Double scholarshipAmount;
+
     public UniversityProgram() {}
 
     public UniversityProgram(University university, Program program, Integer duration) {
@@ -45,6 +48,10 @@ public class UniversityProgram {
         return duration;
     }
 
+    public Double getScholarshipAmount() {
+        return scholarshipAmount;
+    }
+
     public void setUniversity(University university) {
         this.university = university;
     }
@@ -55,5 +62,9 @@ public class UniversityProgram {
 
     public void setDuration(Integer duration) {
         this.duration = duration;
+    }
+
+    public void setScholarshipAmount(Double scholarshipAmount) {
+        this.scholarshipAmount = scholarshipAmount;
     }
 }

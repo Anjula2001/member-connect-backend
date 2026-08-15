@@ -25,6 +25,7 @@ public class UniversityScholarshipRequestDto {
     private String branch;
     private String hasMinorAccount;
     private String minorAccountMonths;
+    private Boolean specialDegree;
 
     private String memberId;
     private Boolean followDeviationProcess;
@@ -181,6 +182,14 @@ public class UniversityScholarshipRequestDto {
 
     public void setMinorAccountMonths(String minorAccountMonths) {
         this.minorAccountMonths = minorAccountMonths;
+    }
+
+    public Boolean getSpecialDegree() {
+        return specialDegree;
+    }
+
+    public void setSpecialDegree(Boolean specialDegree) {
+        this.specialDegree = specialDegree;
     }
 
     public String getMemberId() {

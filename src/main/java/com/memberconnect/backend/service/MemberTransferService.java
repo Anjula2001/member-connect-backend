@@ -138,4 +138,90 @@ public class MemberTransferService {
 
         return candidate;
     }
+
+    public MemberTransferRequest findRequestByIdOrRequestId(String key) {
+        // Try finding by requestId first
+        java.util.Optional<MemberTransferRequest> request = memberTransferRepository.findByRequestId(key);
+        if (request.isPresent()) {
+            return request.get();
+        }
+        // Try parsing as Long database ID
+        try {
+            Long id = Long.parseLong(key);
+            return memberTransferRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Member transfer request not found with ID: " + key));
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("Member transfer request not found: " + key);
+        }
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public MemberTransferRequest approveRequest(String key) {
+        MemberTransferRequest request = findRequestByIdOrRequestId(key);
+
+        if (request.getStatus() == MemberTransferStatus.APPROVED) {
+            throw new RuntimeException("Request is already approved");
+        }
+
+        // Update request status
+        request.setStatus(MemberTransferStatus.APPROVED);
+
+        // Update Member profile with requested changes
+        Member member = request.getMember();
+        if (member != null) {
+            if (request.getNewDesignation() != null) {
+                member.setDesignation(request.getNewDesignation().getName());
+            }
+            if (request.getNewNatureOfOccupation() != null) {
+                String name = request.getNewNatureOfOccupation().getName().toUpperCase();
+                try {
+                    member.setNatureOfOccupation(com.memberconnect.backend.enums.NatureOfOccupation.valueOf(name));
+                } catch (IllegalArgumentException e) {
+                    if (name.startsWith("PERM")) {
+                        member.setNatureOfOccupation(com.memberconnect.backend.enums.NatureOfOccupation.PERMANENT);
+                    } else if (name.startsWith("PROB")) {
+                        member.setNatureOfOccupation(com.memberconnect.backend.enums.NatureOfOccupation.PROBATION);
+                    } else if (name.startsWith("TEMP")) {
+                        member.setNatureOfOccupation(com.memberconnect.backend.enums.NatureOfOccupation.TEMPORARY);
+                    } else if (name.startsWith("CASU")) {
+                        member.setNatureOfOccupation(com.memberconnect.backend.enums.NatureOfOccupation.CASUAL);
+                    }
+                }
+            }
+            if (request.getNewWorkingLocationType() != null) {
+                member.setWorkingLocationType(request.getNewWorkingLocationType().getName());
+            }
+            if (request.getNewEducationalDistrict() != null) {
+                member.setEducationalDistrict(request.getNewEducationalDistrict().getName());
+            }
+            if (request.getNewEducationalZone() != null) {
+                member.setEducationalZone(request.getNewEducationalZone().getName());
+            }
+            if (request.getNewWorkingLocation() != null) {
+                member.setWorkingLocation(request.getNewWorkingLocation().getName());
+            }
+            if (request.getNewWorkingLocationAddress() != null) {
+                member.setWorkingLocationAddress(request.getNewWorkingLocationAddress());
+            }
+            if (request.getNewComputerNoInPayslip() != null) {
+                member.setComputerNoInPayslip(request.getNewComputerNoInPayslip());
+            }
+            if (request.getNewSalaryPayingOffice() != null) {
+                member.setSalaryPayingOffice(request.getNewSalaryPayingOffice());
+            }
+            memberRepository.save(member);
+        }
+
+        return memberTransferRepository.save(request);
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public MemberTransferRequest rejectRequest(String key, String reason) {
+        MemberTransferRequest request = findRequestByIdOrRequestId(key);
+
+        request.setStatus(MemberTransferStatus.REJECTED);
+        request.setDecisionReason(reason);
+
+        return memberTransferRepository.save(request);
+    }
 }
