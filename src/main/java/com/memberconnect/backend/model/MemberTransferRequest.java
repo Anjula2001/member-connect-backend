@@ -64,6 +64,9 @@ public class MemberTransferRequest {
     @JoinColumn(name = "nature_of_occupation_id")
     private NatureOfOccupation newNatureOfOccupation;
 
+    @Column(name = "decision_reason")
+    private String decisionReason;
+
     @PrePersist
     protected void onCreate() {
         if (requestedDate == null) {

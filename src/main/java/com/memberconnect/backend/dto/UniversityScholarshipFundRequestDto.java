@@ -12,6 +12,8 @@ public class UniversityScholarshipFundRequestDto {
     private Double disbursedAmount;
     private LocalDate disbursementDate;
     private String status;
+    private String incompleteReason;
+    private String decisionReason;
 
     public Long getId() {
         return id;
@@ -83,5 +85,21 @@ public class UniversityScholarshipFundRequestDto {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getIncompleteReason() {
+        return incompleteReason;
+    }
+
+    public void setIncompleteReason(String incompleteReason) {
+        this.incompleteReason = incompleteReason;
+    }
+
+    public String getDecisionReason() {
+        return decisionReason;
+    }
+
+    public void setDecisionReason(String decisionReason) {
+        this.decisionReason = decisionReason;
     }
 }

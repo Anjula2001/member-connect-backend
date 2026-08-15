@@ -40,6 +40,9 @@ public class UniversityScholarshipFundRequest {
     @Column(name = "IncompleteReason")
     private String incompleteReason;
 
+    @Column(name = "DecisionReason")
+    private String decisionReason;
+
     public Long getId() {
         return id;
     }
@@ -114,5 +117,13 @@ public class UniversityScholarshipFundRequest {
 
     public void setIncompleteReason(String incompleteReason) {
         this.incompleteReason = incompleteReason;
+    }
+
+    public String getDecisionReason() {
+        return decisionReason;
+    }
+
+    public void setDecisionReason(String decisionReason) {
+        this.decisionReason = decisionReason;
     }
 }
