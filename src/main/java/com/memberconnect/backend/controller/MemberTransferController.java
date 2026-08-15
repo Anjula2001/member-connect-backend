@@ -36,4 +36,19 @@ public class MemberTransferController {
         return memberTransferService.submitRequest(dto);
     }
 
+    // Endpoint to approve a member transfer request
+    @PostMapping("/approve/{requestId}")
+    public MemberTransferRequest approveRequest(@PathVariable String requestId) {
+        return memberTransferService.approveRequest(requestId);
+    }
+
+    // Endpoint to reject a member transfer request
+    @PostMapping("/reject/{requestId}")
+    public MemberTransferRequest rejectRequest(
+            @PathVariable String requestId,
+            @RequestBody java.util.Map<String, String> body
+    ) {
+        String reason = body.get("decisionReason");
+        return memberTransferService.rejectRequest(requestId, reason);
+    }
 }

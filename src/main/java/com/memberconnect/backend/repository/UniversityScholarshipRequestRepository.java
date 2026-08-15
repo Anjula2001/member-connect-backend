@@ -2,9 +2,11 @@ package com.memberconnect.backend.repository;
 
 import com.memberconnect.backend.enums.UniversityScholarshipRequestStatus;
 
+import com.memberconnect.backend.model.BoardMeeting;
 import com.memberconnect.backend.model.UniversityScholarshipRequest;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -23,5 +25,20 @@ public interface UniversityScholarshipRequestRepository
             LocalDate endDate
     );
 
-    
+
+    List<UniversityScholarshipRequest> findByBoardMeeting(BoardMeeting boardMeeting);
+
+    List<UniversityScholarshipRequest> findByApprovalListId(String approvalListId);
+
+    List<UniversityScholarshipRequest> findByMember_MemberId(String memberId);
+
+    List<UniversityScholarshipRequest> findByMember_MemberIdAndStatus(
+            String memberId,
+            UniversityScholarshipRequestStatus status
+    );
+
+    long countByMember_MemberIdAndStatus(
+            String memberId,
+            UniversityScholarshipRequestStatus status
+    );
 }

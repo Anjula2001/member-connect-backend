@@ -117,8 +117,12 @@ public class DocumentController {
 
     @GetMapping("/file/download")
     public ResponseEntity<byte[]> downloadGenericFile(@RequestParam("fileName") String fileName) {
+        String contentType = s3Service.getFileContentType(fileName);
         byte[] fileBytes = s3Service.downloadFile(fileName);
-        return ResponseEntity.ok().body(fileBytes);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, contentType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                .body(fileBytes);
     }
 
     @GetMapping("/{requestType}/{requestNo}/documents/{requiredDocumentId}/uploaded")
@@ -165,6 +169,7 @@ public class DocumentController {
         return switch (requestType) {
             case "retirement-requests" -> "RETIREMENT";
             case "grade5-requests" -> "GRADE5";
+            case "termination-requests" -> "TERMINATION";
             default -> throw new RuntimeException(
                     "Invalid request type: " + requestType
             );

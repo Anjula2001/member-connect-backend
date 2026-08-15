@@ -4,8 +4,10 @@ import com.memberconnect.backend.dto.MemberDTO;
 import com.memberconnect.backend.dto.MemberRetirementValidationDTO;
 import com.memberconnect.backend.dto.MemberSummaryDTO;
 import com.memberconnect.backend.enums.MemberStatus;
+import com.memberconnect.backend.service.MemberDeathRecordService;
 import com.memberconnect.backend.service.MemberService;
 import com.memberconnect.backend.service.RetirementService;
+import com.memberconnect.backend.service.TerminationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,9 +23,16 @@ public class MemberController {
     private MemberService memberService;
 
     private final RetirementService retirementService;
+    private final TerminationService terminationService;
+    private final MemberDeathRecordService memberDeathRecordService;
 
-    public MemberController(RetirementService retirementService) {
+    public MemberController(
+            RetirementService retirementService,
+            TerminationService terminationService,
+            MemberDeathRecordService memberDeathRecordService) {
         this.retirementService = retirementService;
+        this.terminationService = terminationService;
+        this.memberDeathRecordService = memberDeathRecordService;
     }
 
     @PostMapping("/createMember")
@@ -54,7 +63,8 @@ public class MemberController {
     /**
      * Flexible search endpoint used by the directory page.
      * All parameters are optional.
-     * GET /api/members/search?query=&statuses=ACTIVE,INACTIVE&locations=Colombo&workingLocationType=school&educationalZone=colombo-zone
+     * GET
+     * /api/members/search?query=&statuses=ACTIVE,INACTIVE&locations=Colombo&workingLocationType=school&educationalZone=colombo-zone
      */
     @GetMapping("/search")
     public List<MemberDTO> searchMembers(
@@ -100,20 +110,33 @@ public class MemberController {
     // Validate a member for retirement
     @GetMapping("/{memberId}/retirement-validation")
     public MemberRetirementValidationDTO validateMemberForRetirement(
-            @PathVariable String memberId
-    ) {
+            @PathVariable String memberId) {
         return retirementService.validateMemberForRetirement(memberId);
+    }
+
+    // Validate a member for termination
+    @GetMapping("/{memberId}/termination-validation")
+    public MemberRetirementValidationDTO validateMemberForTermination(
+            @PathVariable String memberId) {
+        return terminationService.validateMemberForTermination(memberId);
+    }
+
+    // Validate a member for member death record
+    @GetMapping("/{memberId}/member-death-validation")
+    public MemberRetirementValidationDTO validateMemberForDeathRecord(
+            @PathVariable String memberId) {
+        return memberDeathRecordService.validateMemberForDeathRecord(memberId);
     }
 
     // Get member loans and obligations
     @GetMapping("/{memberId}/loans")
     public ResponseEntity<?> getMemberLoans(@PathVariable String memberId) {
         List<com.memberconnect.backend.model.Loan> loans = loanRepository.findByMemberId(memberId);
-        List<com.memberconnect.backend.model.LoanObligation> obligations = loanObligationRepository.findByMemberId(memberId);
-        
+        List<com.memberconnect.backend.model.LoanObligation> obligations = loanObligationRepository
+                .findByMemberId(memberId);
+
         return ResponseEntity.ok(java.util.Map.of(
-            "loans", loans,
-            "obligations", obligations
-        ));
+                "loans", loans,
+                "obligations", obligations));
     }
 }

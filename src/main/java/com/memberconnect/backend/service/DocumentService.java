@@ -179,16 +179,10 @@ public class DocumentService {
     }
 
     public boolean allMandatoryDocumentsUploaded(String requestNo, String memberId, String applicationType) {
-        List<UploadedDocument> uploadedDocuments = uploadedDocumentRepository.findByRequestNo(requestNo);
-        List<RequiredDocument> requiredDocuments = requiredDocumentRepository.findByApplicationType(applicationType);
-        
-        Set<Long> uploadedDocumentIds = uploadedDocuments.stream()
-                .map(UploadedDocument::getRequiredDocumentId)
-                .collect(Collectors.toSet());
-        
+        List<RequiredDocumentDTO> requiredDocuments = getRequiredDocuments(requestNo, memberId, applicationType);
         return requiredDocuments.stream()
-                .filter(RequiredDocument::isMandatory)
-                .allMatch(doc -> uploadedDocumentIds.contains(doc.getId()));
+                .filter(RequiredDocumentDTO::isMandatory)
+                .allMatch(RequiredDocumentDTO::isUploaded);
     }
 
     public UploadDocumentResponseDTO uploadDocumentMetadata(UploadDocumentRequestDTO requestDTO) {
@@ -274,6 +268,15 @@ public class DocumentService {
 
             if (hasMinorSavings) {
                 types.add("RETIREMENT_MINOR");
+            }
+        }
+
+        if ("TERMINATION".equals(applicationType)) {
+            boolean hasMinorSavings =
+                    !minorSavingsAccountRepository.findByMemberId(memberId).isEmpty();
+
+            if (hasMinorSavings) {
+                types.add("TERMINATION_MINOR");
             }
         }
 
