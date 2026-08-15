@@ -1,5 +1,6 @@
 package com.memberconnect.backend.controller;
 
+import com.memberconnect.backend.dto.CauseOfDeathDTO;
 import com.memberconnect.backend.model.EducationalDistrict;
 import com.memberconnect.backend.model.EducationalZone;
 import com.memberconnect.backend.model.Designation;
@@ -12,6 +13,7 @@ import com.memberconnect.backend.repository.DesignationRepository;
 import com.memberconnect.backend.repository.NatureOfOccupationRepository;
 import com.memberconnect.backend.repository.WorkingLocationRepository;
 import com.memberconnect.backend.repository.WorkingLocationTypeRepository;
+import com.memberconnect.backend.service.MemberDeathRecordService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,6 +30,7 @@ public class MastersController {
     private final DesignationRepository designationRepository;
     private final NatureOfOccupationRepository natureOfOccupationRepository;
     private final WorkingLocationRepository workingLocationRepository;
+    private final MemberDeathRecordService memberDeathRecordService;
 
     public MastersController(
             WorkingLocationTypeRepository workingLocationTypeRepository,
@@ -35,7 +38,8 @@ public class MastersController {
             EducationalZoneRepository educationalZoneRepository,
             DesignationRepository designationRepository,
             NatureOfOccupationRepository natureOfOccupationRepository,
-            WorkingLocationRepository workingLocationRepository
+            WorkingLocationRepository workingLocationRepository,
+            MemberDeathRecordService memberDeathRecordService
     ) {
         this.workingLocationTypeRepository = workingLocationTypeRepository;
         this.educationalDistrictRepository = educationalDistrictRepository;
@@ -43,6 +47,7 @@ public class MastersController {
         this.designationRepository = designationRepository;
         this.natureOfOccupationRepository = natureOfOccupationRepository;
         this.workingLocationRepository = workingLocationRepository;
+        this.memberDeathRecordService = memberDeathRecordService;
     }
 
     // Endpoint to get all working location types
@@ -67,6 +72,12 @@ public class MastersController {
     @GetMapping("/nature-of-occupations")
     public List<NatureOfOccupation> getNatureOfOccupations() {
         return natureOfOccupationRepository.findAll();
+    }
+
+    // Endpoint to get cause of death options
+    @GetMapping("/cause-of-death")
+    public List<CauseOfDeathDTO> getCauseOfDeath() {
+        return memberDeathRecordService.getCauseOfDeathOptions();
     }
 
     // Endpoint to get termination reasons

@@ -1,7 +1,8 @@
 package com.memberconnect.backend.controller;
 
-import java.util.List;
-
+import com.memberconnect.backend.dto.TerminationApprovalListDTO;
+import com.memberconnect.backend.dto.TerminationRequestResponseDTO;
+import com.memberconnect.backend.service.TerminationApprovalListService;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,55 +13,49 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.memberconnect.backend.dto.TerminationApprovalListDTO;
-import com.memberconnect.backend.dto.TerminationRequestResponseDTO;
-import com.memberconnect.backend.service.TerminationApprovalListService;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/termination-approval-lists")
 @CrossOrigin(origins = "http://localhost:3000")
 public class TerminationApprovalListController {
 
-    private final TerminationApprovalListService terminationApprovalListService;
+    private final TerminationApprovalListService approvalListService;
 
-    public TerminationApprovalListController(
-            TerminationApprovalListService terminationApprovalListService
-    ) {
-        this.terminationApprovalListService = terminationApprovalListService;
+    public TerminationApprovalListController(TerminationApprovalListService approvalListService) {
+        this.approvalListService = approvalListService;
     }
 
-    @PostMapping("/createTerminationApprovalList")
-    public TerminationApprovalListDTO createTerminationApprovalList(
-            @RequestBody TerminationApprovalListDTO dto
-    ) {
-        return terminationApprovalListService.createTerminationApprovalList(dto);
+    @PostMapping("/create")
+    public TerminationApprovalListDTO createApprovalList(@RequestBody TerminationApprovalListDTO dto) {
+        return approvalListService.createApprovalList(dto);
     }
 
-    @GetMapping("/getAllTerminationApprovalLists")
-    public List<TerminationApprovalListDTO> getAllTerminationApprovalLists() {
-        return terminationApprovalListService.getAllTerminationApprovalLists();
+    @GetMapping
+    public List<TerminationApprovalListDTO> getAllApprovalLists() {
+        return approvalListService.getAllApprovalLists();
     }
 
-    @GetMapping("/getTerminationApprovalListByListId/{listId}")
-    public TerminationApprovalListDTO getTerminationApprovalListByListId(@PathVariable String listId) {
-        return terminationApprovalListService.getTerminationApprovalListByListId(listId);
+    @GetMapping("/{listId}")
+    public TerminationApprovalListDTO getApprovalListByListId(@PathVariable String listId) {
+        return approvalListService.getApprovalListByListId(listId);
     }
 
-    @GetMapping("/getRequestsByListId/{listId}")
+    @GetMapping("/{listId}/requests")
     public List<TerminationRequestResponseDTO> getRequestsByListId(@PathVariable String listId) {
-        return terminationApprovalListService.getRequestsByListId(listId);
+        return approvalListService.getRequestsByListId(listId);
     }
 
-    @PatchMapping("/processTerminationApprovalList/{listId}")
-    public TerminationApprovalListDTO processTerminationApprovalList(
+    @PatchMapping("/{listId}/process")
+    public TerminationApprovalListDTO processApprovalList(
             @PathVariable String listId,
             @RequestBody TerminationApprovalListDTO dto
     ) {
-        return terminationApprovalListService.processTerminationApprovalList(listId, dto);
+        return approvalListService.processApprovalList(listId, dto);
     }
 
-    @DeleteMapping("/deleteTerminationApprovalList/{listId}")
-    public String deleteTerminationApprovalList(@PathVariable String listId) {
-        return terminationApprovalListService.deleteTerminationApprovalList(listId);
+    @DeleteMapping("/{listId}")
+    public String deleteApprovalList(@PathVariable String listId) {
+        return approvalListService.deleteApprovalList(listId);
     }
 }

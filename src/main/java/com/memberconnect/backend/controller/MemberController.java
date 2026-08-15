@@ -4,6 +4,7 @@ import com.memberconnect.backend.dto.MemberDTO;
 import com.memberconnect.backend.dto.MemberRetirementValidationDTO;
 import com.memberconnect.backend.dto.MemberSummaryDTO;
 import com.memberconnect.backend.enums.MemberStatus;
+import com.memberconnect.backend.service.MemberDeathRecordService;
 import com.memberconnect.backend.service.MemberService;
 import com.memberconnect.backend.service.RetirementService;
 import com.memberconnect.backend.service.TerminationService;
@@ -23,10 +24,16 @@ public class MemberController {
 
     private final RetirementService retirementService;
     private final TerminationService terminationService;
+    private final MemberDeathRecordService memberDeathRecordService;
 
-    public MemberController(RetirementService retirementService, TerminationService terminationService) {
+    public MemberController(
+            RetirementService retirementService,
+            TerminationService terminationService,
+            MemberDeathRecordService memberDeathRecordService
+    ) {
         this.retirementService = retirementService;
         this.terminationService = terminationService;
+        this.memberDeathRecordService = memberDeathRecordService;
     }
 
     @PostMapping("/createMember")
@@ -108,5 +115,13 @@ public class MemberController {
             @PathVariable String memberId
     ) {
         return terminationService.validateMemberForTermination(memberId);
+    }
+
+    // Validate a member for member death record
+    @GetMapping("/{memberId}/member-death-validation")
+    public MemberRetirementValidationDTO validateMemberForDeathRecord(
+            @PathVariable String memberId
+    ) {
+        return memberDeathRecordService.validateMemberForDeathRecord(memberId);
     }
 }

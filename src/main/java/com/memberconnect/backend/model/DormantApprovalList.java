@@ -18,11 +18,15 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * A list of dormant members presented to the Board for approval before bulk
+ * inactivation.
+ */
 @Getter
 @Setter
 @Entity
-@Table(name = "termination_approval_list")
-public class TerminationApprovalList {
+@Table(name = "dormant_approval_list")
+public class DormantApprovalList {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -39,12 +43,13 @@ public class TerminationApprovalList {
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
-        name = "termination_approval_list_requests",
-        joinColumns = @JoinColumn(name = "termination_approval_list_id"),
-        inverseJoinColumns = @JoinColumn(name = "termination_request_id")
+        name = "dormant_approval_list_members",
+        joinColumns = @JoinColumn(name = "dormant_approval_list_id"),
+        inverseJoinColumns = @JoinColumn(name = "member_id")
     )
-    private List<TerminationRequest> requests = new ArrayList<>();
+    private List<Member> members = new ArrayList<>();
 
+    // CREATED, PROCESSED, INACTIVATED
     @Column(name = "status")
     private String status;
 
@@ -60,6 +65,7 @@ public class TerminationApprovalList {
     @Column(name = "actual_meeting_date")
     private LocalDate actualMeetingDate;
 
+    // Approve / Reject
     @Column(name = "decision")
     private String decision;
 
@@ -68,4 +74,7 @@ public class TerminationApprovalList {
 
     @Column(name = "board_remarks", length = 2000)
     private String boardRemarks;
+
+    @Column(name = "inactivated_at")
+    private LocalDateTime inactivatedAt;
 }
