@@ -364,7 +364,8 @@ public class Grade5ScholarshipService {
 
         // Decide final submit status on the server to avoid relying on client-provided values.
         boolean isDeviation = Boolean.TRUE.equals(request.getHasDeviation())
-                || shouldFollowDeviationProcess(request.getRequestedDate(), request.getExamYear());
+                || shouldFollowDeviationProcess(request.getRequestedDate(), request.getExamYear())
+                || (status != null && status.toUpperCase().contains("DEVIATION"));
 
         String finalStatus = isDeviation
                 ? ScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_APPROVAL.name()
@@ -587,6 +588,12 @@ public class Grade5ScholarshipService {
         }
 
         request.setStatus(newStatus.name());
+
+        if (newStatus == ScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_APPROVAL || newStatus == ScholarshipRequestStatus.ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST) {
+            request.setHasDeviation(true);
+        } else if (newStatus == ScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_APPROVAL || newStatus == ScholarshipRequestStatus.ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST) {
+            request.setHasDeviation(false);
+        }
 
         // Clear reasons when returning to New
         if (newStatus == ScholarshipRequestStatus.NEW) {

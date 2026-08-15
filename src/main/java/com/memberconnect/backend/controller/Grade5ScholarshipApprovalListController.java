@@ -74,4 +74,14 @@ public class Grade5ScholarshipApprovalListController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
+
+    @PostMapping("/{listId}/restore")
+    public ResponseEntity<?> restoreApprovalList(@PathVariable String listId) {
+        try {
+            Grade5ScholarshipApprovalListDTO restored = service.restoreApprovalList(listId);
+            return ResponseEntity.ok(restored);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
 }

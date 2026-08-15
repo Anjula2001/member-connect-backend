@@ -119,7 +119,13 @@ public class Grade5ScholarshipRequest {
         if ("SUBMITTED_FOR_NORMAL_APPROVAL".equals(status) || "ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST".equals(status)) {
             return false;
         }
-        return hasDeviation;
+        if (approvalListId != null && (approvalListId.contains("-DAL-") || approvalListId.contains("DAL"))) {
+            return true;
+        }
+        if (originalStatus != null && originalStatus.contains("DEVIATION")) {
+            return true;
+        }
+        return Boolean.TRUE.equals(hasDeviation);
     }
 
     public void setHasDeviation(Boolean hasDeviation) {

@@ -110,6 +110,9 @@ public class Grade5ScholarshipApprovalListService {
             request.setOriginalStatus(request.getStatus());
             request.setApprovalListId(entity.getListId());
             request.setStatus(targetRequestStatus);
+            if ("DEVIATION".equals(listType)) {
+                request.setHasDeviation(true);
+            }
             scholarshipRepository.save(request);
         }
 
@@ -209,6 +212,23 @@ public class Grade5ScholarshipApprovalListService {
         entity.setBoardRemarks(boardRemarks);
         entity.setScannedReportPath(scannedReportPath);
         entity.setDecision(String.format("Approved: %d, Rejected: %d", approvedCount, rejectedCount));
+
+        Grade5ScholarshipApprovalList saved = approvalListRepository.save(entity);
+        return toDto(saved);
+    }
+
+    public Grade5ScholarshipApprovalListDTO restoreApprovalList(String listId) {
+        Grade5ScholarshipApprovalList entity = approvalListRepository.findByListId(listId)
+                .orElseThrow(() -> new RuntimeException("Grade 5 Scholarship Approval list not found: " + listId));
+
+        if (entity.getType() == null || entity.getType().isEmpty()) {
+            String derivedType = listId.startsWith("G5-DAL-") ? "DEVIATION" : "NORMAL";
+            entity.setType(derivedType);
+        }
+
+        if (entity.getStatus() == null || entity.getStatus().isEmpty()) {
+            entity.setStatus("CREATED");
+        }
 
         Grade5ScholarshipApprovalList saved = approvalListRepository.save(entity);
         return toDto(saved);
