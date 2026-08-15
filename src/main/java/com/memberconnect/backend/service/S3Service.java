@@ -58,17 +58,3 @@ public class S3Service {
         return s3Client.getObjectAsBytes(getObjectRequest).asByteArray();
     }
 }
-                .build();
-
-        s3Client.deleteObject(deleteObjectRequest);
-    }
-
-    public byte[] downloadFile(String fileName) {
-        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
-                .bucket(bucketName)
-                .key(fileName)
-                .build();
-
-        return s3Client.getObjectAsBytes(getObjectRequest).asByteArray();
-    }
-}
