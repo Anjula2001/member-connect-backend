@@ -470,7 +470,8 @@ public class UniversityScholarshipService {
 
         return 0;
     }
-
+    
+    // Save Fund Request 
     private UniversityScholarshipFundRequestDto toFundRequestDto(UniversityScholarshipFundRequest request) {
         UniversityScholarshipFundRequestDto dto = new UniversityScholarshipFundRequestDto();
         dto.setId(request.getId());
@@ -488,7 +489,8 @@ public class UniversityScholarshipService {
         dto.setDecisionReason(request.getDecisionReason());
         return dto;
     }
-
+    
+    //Generate Fund Request ID
     private String generateFundRequestId() {
         long nextNumber = fundRequestRepository.count() + 1;
         return String.format("USFR-%03d", nextNumber);
@@ -589,6 +591,7 @@ public class UniversityScholarshipService {
         return fundRequest;
     }
 
+    //Submit Fund Request
     public UniversityScholarshipFundRequestDto submitFundRequest(String scholarshipRequestId, String fundRequestId) {
         UniversityScholarshipFundRequest fundRequest = findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
 
@@ -601,7 +604,8 @@ public class UniversityScholarshipService {
         fundRequest.setIncompleteReason(null);
         return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
-
+ 
+    //Mark Fund Request Incomplete
     public UniversityScholarshipFundRequestDto markFundRequestIncomplete(
             String scholarshipRequestId,
             String fundRequestId,
@@ -623,6 +627,7 @@ public class UniversityScholarshipService {
         return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
 
+    // Update Fund Request Status
     public UniversityScholarshipFundRequestDto updateFundRequestStatus(
             String scholarshipRequestId,
             String fundRequestId,
@@ -893,7 +898,7 @@ public class UniversityScholarshipService {
         request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
         return scholarshipRequestRepository.save(request);
     }   
-
+    
     public UniversityScholarshipRequest updateRequestByRequestId(String requestId, UniversityScholarshipRequestDto dto) {
         UniversityScholarshipRequest request = scholarshipRequestRepository
                         .findByUniversityScholarshipRequestID(requestId)
@@ -1133,7 +1138,7 @@ public class UniversityScholarshipService {
                 return scholarshipRequestRepository.save(request);
     }
 
-    // Attach scholarship requests to a board meeting for approval
+    // Attach scholarship requests to a normal board meeting for approval
     @Transactional
     public void attachBoardMeeting(Map<String, Object> payload) {
         Object meetingIdObj = payload.get("boardMeetingId");
@@ -1186,7 +1191,7 @@ public class UniversityScholarshipService {
             scholarshipRequestRepository.save(request);
         }
     }
-
+    
     private synchronized String generateNextApprovalListId(String prefix) {
         List<UniversityScholarshipRequest> requests = scholarshipRequestRepository.findAll();
         int maxVal = 0;
@@ -1200,7 +1205,7 @@ public class UniversityScholarshipService {
                         maxVal = val;
                     }
                 } catch (NumberFormatException e) {
-                    // Ignore non-numeric suffixes or variations
+
                 }
             }
         }
@@ -1269,6 +1274,7 @@ public class UniversityScholarshipService {
         processApprovalDecisions(dataJson, file, UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST);
     }
 
+    // process approvals
     @SuppressWarnings("unchecked")
     private void processApprovalDecisions(String dataJson, MultipartFile file, UniversityScholarshipRequestStatus expectedStatus) {
         try {
