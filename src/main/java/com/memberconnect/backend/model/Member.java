@@ -44,6 +44,11 @@ public class Member {
     @Enumerated(EnumType.STRING)
     private MemberStatus status;
 
+    // The District Office branch this member registered/is administered through.
+    // Distinct from educationalDistrict below (the member's working district).
+    @Column(name = "SubmissionLocation")
+    private String submissionLocation;
+
     @Column(name = "MembershipStartDate")
     private LocalDate membershipStartDate;
 

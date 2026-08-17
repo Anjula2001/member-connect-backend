@@ -15,6 +15,7 @@ public class MemberDTO {
   private Long applicationId;   // FK to Member_Application — sent when creating from an approved application
   private String memberType;
   private MemberStatus status;
+  private String submissionLocation;
   private LocalDate membershipStartDate;
   private String nic;
   private String title;

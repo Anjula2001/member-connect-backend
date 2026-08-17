@@ -2,17 +2,22 @@ package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.MemberDTO;
 import com.memberconnect.backend.enums.MemberStatus;
+import com.memberconnect.backend.enums.Role;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.model.Member_Application;
+import com.memberconnect.backend.model.User;
 import com.memberconnect.backend.repository.MemberApplicationRepository;
 import com.memberconnect.backend.repository.MemberRepository;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import java.time.LocalDate;
 import java.util.List;
 @Service
 @Transactional
@@ -32,7 +37,7 @@ public class MemberService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "NIC already exists");
         }
         Member member = modelMapper.map(memberDTO, Member.class);
-        member.setMemberId("MEM-" + System.currentTimeMillis());
+        member.setMemberId(generateMemberId());
 
         // Link the originating application if applicationId was supplied
         if (memberDTO.getApplicationId() != null) {
@@ -46,6 +51,22 @@ public class MemberService {
 
         Member saved = memberRepository.save(member);
         return convertToDTO(saved);
+    }
+
+    // Generates a sequential, year-scoped ID such as "MEM-2026-001", matching the
+    // convention already used elsewhere in the app (e.g. RetirementService.generateRequestNo()).
+    private String generateMemberId() {
+        int year = LocalDate.now().getYear();
+        String prefix = "MEM-" + year + "-";
+
+        return memberRepository
+                .findFirstByMemberIdStartingWithOrderByMemberIdDesc(prefix)
+                .map(last -> {
+                    String lastId = last.getMemberId();
+                    int lastSeq = Integer.parseInt(lastId.substring(lastId.lastIndexOf("-") + 1));
+                    return prefix + String.format("%03d", lastSeq + 1);
+                })
+                .orElse(prefix + "001");
     }
 
     public List<MemberDTO> getAllMembers() {
@@ -98,9 +119,11 @@ public class MemberService {
                     }
                     // status filter
                     if (filterByStatus && !statuses.contains(m.getStatus())) return false;
-                    // location filter (matches workingLocation field)
+                    // location filter — the District Office branch the member registered through,
+                    // NOT the working location (school/institution name). These are different concepts:
+                    // a member can work in one district and have registered via a District Office in another.
                     if (filterByLocation &&
-                            (m.getWorkingLocation() == null || !locations.contains(m.getWorkingLocation())))
+                            (m.getSubmissionLocation() == null || !locations.contains(m.getSubmissionLocation())))
                         return false;
                     // working location type filter
                     if (wlt != null &&
@@ -177,9 +200,28 @@ public class MemberService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Member not found"));
 
+        // Real activation is supposed to come from the Finance Module once the member's
+        // accounts are created there (out of scope for this build). Until that
+        // integration exists, allow Super Admin only to flip a member to ACTIVE, as a
+        // clearly testing-only stand-in — never treat this as the real activation path.
+        if (status == MemberStatus.ACTIVE && !currentUserIsSuperAdmin()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Activating a member is a testing-only override reserved for Super Admin " +
+                            "until the Finance Module integration exists."
+            );
+        }
+
         member.setStatus(status);
 
         return convertToDTO(memberRepository.save(member));
+    }
+
+    private boolean currentUserIsSuperAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null
+                && auth.getPrincipal() instanceof User user
+                && user.getRole() == Role.SUPER_ADMIN;
     }
 
     private MemberDTO convertToDTO(Member member) {
