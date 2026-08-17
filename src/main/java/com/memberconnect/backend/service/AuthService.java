@@ -45,7 +45,8 @@ public class AuthService {
                 token,
                 user.getUsername(),
                 user.getFullName(),
-                user.getRole().name()
+                user.getRole().name(),
+                user.getProfilePictureUrl()
         );
     }
 }

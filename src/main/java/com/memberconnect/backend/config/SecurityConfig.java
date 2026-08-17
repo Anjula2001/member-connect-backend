@@ -69,8 +69,13 @@ public class SecurityConfig {
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Public: login endpoint only
+                // Public authentication endpoints
                 .requestMatchers("/api/auth/**").permitAll()
+                // File upload, download & preview streaming
+                .requestMatchers("/api/file/**").permitAll()
+                .requestMatchers("/api/documents/**").permitAll()
+                .requestMatchers("/api/uploaded-documents/**").permitAll()
+                .requestMatchers("/api/required-document-types/**").permitAll()
                 // Everything else requires authentication
                 .anyRequest().authenticated()
             )
