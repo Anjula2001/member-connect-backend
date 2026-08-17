@@ -70,6 +70,7 @@ public class UserProfileService {
                 user.getFullName(),
                 user.getRole().name(),
                 user.getProfilePictureUrl(),
+                user.getAssignedDistrict(),
                 user.isActive(),
                 user.getCreatedAt()
         );

@@ -37,6 +37,9 @@ public class User implements UserDetails {
     @Column(name = "profile_picture_url")
     private String profilePictureUrl;
 
+    @Column(name = "assigned_district")
+    private String assignedDistrict;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false)
     private Role role;
