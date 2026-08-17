@@ -13,4 +13,5 @@ public class LoginResponseDTO {
     private String fullName;
     private String role;
     private String profilePictureUrl;
+    private String assignedDistrict;
 }

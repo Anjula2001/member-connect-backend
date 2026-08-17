@@ -46,7 +46,8 @@ public class AuthService {
                 user.getUsername(),
                 user.getFullName(),
                 user.getRole().name(),
-                user.getProfilePictureUrl()
+                user.getProfilePictureUrl(),
+                user.getAssignedDistrict()
         );
     }
 }
