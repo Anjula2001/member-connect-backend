@@ -28,11 +28,26 @@ public class RequiredDocument {
         return applicationType;
     }
 
+    // Setters exist so the master can be seeded (TerminationDocumentSeeder). Rows are
+    // otherwise treated as read-only reference data: nothing in the request flows
+    // mutates a RequiredDocument, they only read it and store its id against an upload.
+    public void setApplicationType(String applicationType) {
+        this.applicationType = applicationType;
+    }
+
     public String getDocumentName() {
         return documentName;
     }
 
+    public void setDocumentName(String documentName) {
+        this.documentName = documentName;
+    }
+
     public boolean isMandatory() {
         return mandatory;
+    }
+
+    public void setMandatory(boolean mandatory) {
+        this.mandatory = mandatory;
     }
 }
