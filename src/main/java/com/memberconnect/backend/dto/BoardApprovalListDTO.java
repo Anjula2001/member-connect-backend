@@ -23,4 +23,5 @@ public class BoardApprovalListDTO {
 	private String decision;
 	private String rejectReason;
 	private String boardRemarks;
+	private String approvedListDocument;
 }

@@ -50,6 +50,7 @@ public class BoardApprovalListService {
 		dto.setDecision(entity.getDecision());
 		dto.setRejectReason(entity.getRejectReason());
 		dto.setBoardRemarks(entity.getBoardRemarks());
+		dto.setApprovedListDocument(entity.getApprovedListDocument());
 		return dto;
 	}
 
@@ -111,6 +112,7 @@ public class BoardApprovalListService {
 					applicationDTO.setId(application.getId());
 					applicationDTO.setApplicationID(application.getApplicationID());
 					applicationDTO.setStatus(application.getStatus());
+					applicationDTO.setSubmissionLocation(application.getSubmissionLocation());
 					applicationDTO.setTitle(application.getTitle());
 					applicationDTO.setFullName(application.getFullName());
 					applicationDTO.setApplicationDate(application.getApplicationDate());
@@ -196,6 +198,10 @@ public class BoardApprovalListService {
 		entity.setDecision(approved ? "Approve" : "Reject");
 		entity.setRejectReason(rejectReason);
 		entity.setBoardRemarks(boardRemarks);
+		// Scanned copy of the signed board approval sheet, if one was attached.
+		if (dto.getApprovedListDocument() != null) {
+			entity.setApprovedListDocument(dto.getApprovedListDocument());
+		}
 
 		BoardApprovalList saved = boardApprovalListRepository.save(entity);
 		return toDto(saved);
