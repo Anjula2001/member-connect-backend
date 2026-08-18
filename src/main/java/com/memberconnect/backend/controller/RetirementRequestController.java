@@ -113,9 +113,9 @@ public class RetirementRequestController {
 
     @GetMapping("/request/{id}")
     public RetirementRequestResponseDTO getRetirementRequestById(
-            @PathVariable Long id
+            @PathVariable String id
     ) {
-        return retirementService.getRequestById(id);
+        return retirementService.getRequestByRequestNo(id);
     }
 
     // Update retirement request

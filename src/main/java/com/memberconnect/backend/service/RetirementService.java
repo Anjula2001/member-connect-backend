@@ -235,11 +235,26 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
-    public RetirementRequestResponseDTO getRequestById(Long id) {
-        RetirementRequest request = requestRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Retirement request not found"));
+    public RetirementRequestResponseDTO getRequestByRequestNo(String requestNo) {
+        RetirementRequest request = requestRepository.findByRequestNo(requestNo)
+                .orElseGet(() -> {
+                    try {
+                        Long id = Long.parseLong(requestNo);
+                        return requestRepository.findById(id).orElse(null);
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                });
+
+        if (request == null) {
+            throw new RuntimeException("Retirement request not found: " + requestNo);
+        }
 
         return mapToResponse(request);
+    }
+
+    public RetirementRequestResponseDTO getRequestById(Long id) {
+        return getRequestByRequestNo(String.valueOf(id));
     }
 
     public RetirementRequestResponseDTO changeRequestStatus(String requestNo, String status) {
