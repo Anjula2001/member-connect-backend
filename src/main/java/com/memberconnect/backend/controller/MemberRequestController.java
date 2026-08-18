@@ -36,13 +36,36 @@ public String getAllRequsts(){
 
  @PostMapping("/saveRequests")
     public String saveRequest(@RequestBody BasicProfileChangeRequestDTO dto){
-     return basicProfileChangeRequestsServices.saveBasicProfileChangeRequest(dto);
+      return basicProfileChangeRequestsServices.saveBasicProfileChangeRequest(dto);
  }
+
+ @PostMapping(value = "/saveRequestWithDocument", consumes = {"multipart/form-data"})
+    public String saveRequestWithDocument(
+            @RequestPart("request") BasicProfileChangeRequestDTO dto,
+            @RequestPart(value = "file", required = false) org.springframework.web.multipart.MultipartFile file) {
+        return basicProfileChangeRequestsServices.saveWithDocument(dto, file);
+    }
 
  @PutMapping("/updateRequest/{id}")
     public BasicProfileChangeRequestDTO updateRequest(@PathVariable Integer id, @RequestBody BasicProfileChangeRequestDTO dto) {
         return basicProfileChangeRequestsServices.updateProfileRequest(id, dto);
     }
+
+ @PutMapping(value = "/updateRequestWithDocument/{id}", consumes = {"multipart/form-data"})
+    public BasicProfileChangeRequestDTO updateRequestWithDocument(
+            @PathVariable Integer id,
+            @RequestPart("request") BasicProfileChangeRequestDTO dto,
+            @RequestPart(value = "file", required = false) org.springframework.web.multipart.MultipartFile file) {
+        return basicProfileChangeRequestsServices.updateWithDocument(id, dto, file);
+    }
+
+ @PutMapping("/updateRequestStatus/{id}")
+    public BasicProfileChangeRequestDTO updateRequestStatus(
+            @PathVariable Integer id, 
+            @RequestParam("status") com.memberconnect.backend.enums.ApplicationStatus status) {
+        return basicProfileChangeRequestsServices.updateStatus(id, status);
+    }
+
  @DeleteMapping("/deletRequest/{id}")
     public String deleteRequest(@PathVariable Integer id) {
      return basicProfileChangeRequestsServices.deleteProfileRequest(id);

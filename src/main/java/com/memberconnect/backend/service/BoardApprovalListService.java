@@ -336,7 +336,7 @@ public class BoardApprovalListService {
 		List<Integer> nameChangeIds = parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv());
 		for (Integer id : nameChangeIds) {
 			nameChangeRequestRepo.findById(id).ifPresent(ncr -> {
-				ncr.setNewStatus(approved ? ApplicationStatus.INACTIVE : ApplicationStatus.REJECTED);
+				ncr.setNewStatus(approved ? ApplicationStatus.APPROVED : ApplicationStatus.REJECTED);
 				nameChangeRequestRepo.save(ncr);
 			});
 		}
@@ -345,7 +345,7 @@ public class BoardApprovalListService {
 		List<Integer> nomineeChangeIds = parseCsvAsIntegers(entity.getNomineeChangeRequestIdsCsv());
 		for (Integer id : nomineeChangeIds) {
 			nomineeChangeRequestRepo.findById(id).ifPresent(ncr -> {
-				ncr.setStatus(approved ? ApplicationStatus.INACTIVE : ApplicationStatus.REJECTED);
+				ncr.setStatus(approved ? ApplicationStatus.APPROVED : ApplicationStatus.REJECTED);
 				nomineeChangeRequestRepo.save(ncr);
 			});
 		}
@@ -386,7 +386,7 @@ public class BoardApprovalListService {
 		for (Integer id : nameChangeIds) {
 			nameChangeRequestRepo.findById(id).ifPresent(ncr -> {
 				if (ncr.getNewStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
-					ncr.setNewStatus(ApplicationStatus.PENDING);
+					ncr.setNewStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
 					nameChangeRequestRepo.save(ncr);
 				}
 			});
@@ -397,7 +397,7 @@ public class BoardApprovalListService {
 		for (Integer id : nomineeChangeIds) {
 			nomineeChangeRequestRepo.findById(id).ifPresent(ncr -> {
 				if (ncr.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
-					ncr.setStatus(ApplicationStatus.PENDING);
+					ncr.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
 					nomineeChangeRequestRepo.save(ncr);
 				}
 			});
