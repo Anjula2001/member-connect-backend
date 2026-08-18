@@ -12,4 +12,6 @@ public class RemittanceAmountChangeDTO {
     private Integer id;
     private String newRemittanceAmount;
     private String newRemittanceCurrency;
+    private String remittanceAccountType;
+    private String memberId;
 }

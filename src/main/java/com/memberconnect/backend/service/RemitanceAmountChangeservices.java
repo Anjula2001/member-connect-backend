@@ -55,6 +55,8 @@ public class RemitanceAmountChangeservices {
         existingAmount.setNewStatus(dto.getNewStatus());
         existingAmount.setNewRemittanceAmount(dto.getNewRemittanceAmount());
         existingAmount.setNewRemittanceCurrency(dto.getNewRemittanceCurrency());
+        existingAmount.setRemittanceAccountType(dto.getRemittanceAccountType());
+        existingAmount.setMemberId(dto.getMemberId());
         RemittanceAmountChange updatedAmount = remittanceAmountChangeRepo.save(existingAmount);
         return modelMapper.map(updatedAmount,RemittanceAmountChangeDTO.class);
     }

@@ -16,6 +16,8 @@ public class RemittanceAmountChange {
 
     private String newRemittanceAmount;
     private String newRemittanceCurrency;
+    private String remittanceAccountType;
+    private String memberId;
 
     // --- 1. No-Args Constructor (Required by JPA) ---
     public RemittanceAmountChange() {
@@ -23,11 +25,13 @@ public class RemittanceAmountChange {
 
     // --- 2. All-Args Constructor ---
     public RemittanceAmountChange(Integer id, ApplicationStatus newStatus,
-                                  String newRemittanceAmount, String newRemittanceCurrency) {
+                                  String newRemittanceAmount, String newRemittanceCurrency, String remittanceAccountType, String memberId) {
         this.id = id;
         this.newStatus = newStatus;
         this.newRemittanceAmount = newRemittanceAmount;
         this.newRemittanceCurrency = newRemittanceCurrency;
+        this.remittanceAccountType = remittanceAccountType;
+        this.memberId = memberId;
     }
 
     // --- 3. Getters and Setters ---
@@ -62,5 +66,21 @@ public class RemittanceAmountChange {
 
     public void setNewRemittanceCurrency(String newRemittanceCurrency) {
         this.newRemittanceCurrency = newRemittanceCurrency;
+    }
+
+    public String getRemittanceAccountType() {
+        return remittanceAccountType;
+    }
+
+    public void setRemittanceAccountType(String remittanceAccountType) {
+        this.remittanceAccountType = remittanceAccountType;
+    }
+
+    public String getMemberId() {
+        return memberId;
+    }
+
+    public void setMemberId(String memberId) {
+        this.memberId = memberId;
     }
 }
