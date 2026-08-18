@@ -32,6 +32,9 @@ public class MemberService {
     @Autowired
     private ModelMapper modelMapper;
 
+    @Autowired
+    private NotificationService notificationService;
+
     public MemberDTO saveMember(MemberDTO memberDTO) {
         if (memberRepository.findByNic(memberDTO.getNic()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "NIC already exists");
@@ -212,9 +215,18 @@ public class MemberService {
             );
         }
 
-        member.setStatus(status);
+        boolean isActivating = status == MemberStatus.ACTIVE && member.getStatus() != MemberStatus.ACTIVE;
 
-        return convertToDTO(memberRepository.save(member));
+        member.setStatus(status);
+        Member saved = memberRepository.save(member);
+
+        // MR12 — notify the member once their membership becomes active. Best-effort:
+        // NotificationService swallows delivery failures so activation still succeeds.
+        if (isActivating) {
+            notificationService.sendMembershipActivated(saved);
+        }
+
+        return convertToDTO(saved);
     }
 
     private boolean currentUserIsSuperAdmin() {
