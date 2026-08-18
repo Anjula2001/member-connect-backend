@@ -101,6 +101,23 @@ public class RetirementRequestController {
         return retirementService.rejectRequest(requestNo, reason);
     }
 
+    // Change retirement request status
+    @PutMapping("/{requestNo}/status")
+    public RetirementRequestResponseDTO changeRetirementRequestStatus(
+            @PathVariable String requestNo,
+            @RequestBody Map<String, String> body
+    ) {
+        String status = body.get("status");
+        return retirementService.changeRequestStatus(requestNo, status);
+    }
+
+    @GetMapping("/request/{id}")
+    public RetirementRequestResponseDTO getRetirementRequestById(
+            @PathVariable Long id
+    ) {
+        return retirementService.getRequestById(id);
+    }
+
     // Update retirement request
     @PutMapping("/{requestNo}")
     public RetirementRequestResponseDTO updateRetirementRequest(

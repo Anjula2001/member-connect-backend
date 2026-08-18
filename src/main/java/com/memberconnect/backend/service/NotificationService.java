@@ -14,12 +14,17 @@ import com.memberconnect.backend.service.notification.SmsSender;
  *
  * Two rules govern everything in this class:
  *
- * 1. It never throws. Callers reach it from an after-commit hook, where an
- *    escaping exception would serve no purpose - the business record is already
- *    committed and cannot be undone by failing to tell the member about it.
+ * 1. It never throws. Callers reach it from an after-commit hook or from inside
+ *    a transaction, where an escaping exception would serve no purpose - the
+ *    business record is already committed, or is about to be, and cannot be
+ *    undone by failing to tell the member about it.
  *
  * 2. The two channels are fully isolated. A missing email address, or an SMTP
  *    server that is down, must not stop the SMS going out, and vice versa.
+ *
+ * Both channels go through the EmailSender / SmsSender abstractions rather than
+ * touching JavaMailSender directly, so which transport is live is decided once,
+ * by notification.email.enabled, instead of separately per notification.
  *
  * Contact details are read from the Member entity, which MemberService keeps
  * current, and are never logged in full.
@@ -71,6 +76,55 @@ public class NotificationService {
 
         sendEmail(member, memberId, requestNo, safeReason);
         sendSms(member, memberId, requestNo, safeReason);
+    }
+
+    /** MR12 - sent when the Finance Module activates a member. */
+    public void sendMembershipActivated(Member member) {
+        String name = displayName(member);
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Your Future Finance Institute membership is now active",
+                "Dear " + name + ",\n\n"
+                        + "Your membership (" + member.getMemberId() + ") is now active.\n"
+                        + "Your membership documentation will be posted to you shortly.\n\n"
+                        + "Future Finance Institute",
+                member.getMemberId(),
+                "membership activated"
+        );
+
+        dispatchSms(
+                member.getMobileNumber(),
+                "FFI: Your membership " + member.getMemberId()
+                        + " is now active. Your documentation will be posted soon.",
+                member.getMemberId(),
+                "membership activated"
+        );
+    }
+
+    /** MR18 - sent when the membership documentation is put in the post. */
+    public void sendDocumentationDispatched(Member member) {
+        String name = displayName(member);
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Your Future Finance Institute membership documentation has been posted",
+                "Dear " + name + ",\n\n"
+                        + "The membership documentation for " + member.getMemberId()
+                        + " has been posted to your registered address.\n"
+                        + "Please sign the enclosed Signature Card and hand it in at any District Office.\n\n"
+                        + "Future Finance Institute",
+                member.getMemberId(),
+                "documentation dispatched"
+        );
+
+        dispatchSms(
+                member.getMobileNumber(),
+                "FFI: Documentation for membership " + member.getMemberId()
+                        + " has been posted. Please sign and return the Signature Card.",
+                member.getMemberId(),
+                "documentation dispatched"
+        );
     }
 
     private void sendEmail(Member member, String memberId, String requestNo, String reason) {
@@ -127,6 +181,75 @@ public class NotificationService {
                     memberId, requestNo, e.toString(), e
             );
         }
+    }
+
+    /**
+     * Email channel for the registration-flow notifications, which identify the
+     * member by membership number rather than by a request number. Same contract
+     * as sendEmail above: a blank address is skipped, a transport failure is
+     * logged and never propagated to the caller's transaction.
+     */
+    private void dispatchEmail(String to, String subject, String body, String memberId, String purpose) {
+        String address = trimToNull(to);
+
+        if (address == null) {
+            // Email is optional on the application, so this is expected, not a fault.
+            log.warn(
+                    "Notification channel EMAIL skipped: member has no email address. memberId={}, purpose={}",
+                    memberId, purpose
+            );
+            return;
+        }
+
+        try {
+            emailSender.send(address, subject, body);
+            log.info("Notification channel EMAIL succeeded. memberId={}, purpose={}", memberId, purpose);
+        } catch (Exception e) {
+            log.error(
+                    "Notification channel EMAIL failed. memberId={}, purpose={}, cause={}",
+                    memberId, purpose, e.toString(), e
+            );
+        }
+    }
+
+    /** SMS counterpart of dispatchEmail. */
+    private void dispatchSms(String toMobile, String message, String memberId, String purpose) {
+        String mobile = trimToNull(toMobile);
+
+        if (mobile == null) {
+            // Mobile is optional on the application, so this is expected, not a fault.
+            log.warn(
+                    "Notification channel SMS skipped: member has no mobile number. memberId={}, purpose={}",
+                    memberId, purpose
+            );
+            return;
+        }
+
+        try {
+            smsSender.send(mobile, message);
+            log.info("Notification channel SMS succeeded. memberId={}, purpose={}", memberId, purpose);
+        } catch (Exception e) {
+            log.error(
+                    "Notification channel SMS failed. memberId={}, purpose={}, cause={}",
+                    memberId, purpose, e.toString(), e
+            );
+        }
+    }
+
+    /**
+     * Greeting used by the registration-flow notifications. It prefers the name
+     * with initials, which is how the membership documentation addresses the
+     * member; the termination notification uses resolveMemberName instead, which
+     * prefers the full name. The two orders are deliberate, not an oversight.
+     */
+    private String displayName(Member member) {
+        String nameWithInitials = trimToNull(member.getNameWithInitials());
+        if (nameWithInitials != null) {
+            return nameWithInitials;
+        }
+
+        String fullName = trimToNull(member.getFullName());
+        return fullName == null ? "Member" : fullName;
     }
 
     private String buildSmsMessage(String requestNo, String reason) {

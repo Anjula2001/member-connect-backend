@@ -240,6 +240,79 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
+    public RetirementRequestResponseDTO getRequestById(Long id) {
+        RetirementRequest request = requestRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Retirement request not found"));
+
+        return mapToResponse(request);
+    }
+
+    public RetirementRequestResponseDTO changeRequestStatus(String requestNo, String status) {
+        RetirementRequest request = requestRepository.findByRequestNo(requestNo)
+                .orElseThrow(() -> new RuntimeException("Retirement request not found"));
+
+        RetirementRequestStatus newStatus;
+        try {
+            newStatus = RetirementRequestStatus.valueOf(status);
+        } catch (IllegalArgumentException ex) {
+            throw new RuntimeException("Invalid retirement request status: " + status);
+        }
+
+        RetirementRequestStatus currentStatus = request.getStatus();
+
+        if (currentStatus == newStatus) {
+            return mapToResponse(request);
+        }
+
+        if (!isStatusTransitionAllowed(currentStatus, newStatus)) {
+            throw new RuntimeException(
+                    "Cannot change status from " + currentStatus + " to " + newStatus
+            );
+        }
+
+        request.setStatus(newStatus);
+
+        if (newStatus == RetirementRequestStatus.INACTIVE) {
+            request.setIncompleteReason(null);
+            request.setRejectReason(null);
+
+            Member member = getMemberEntity(request.getMemberId());
+            member.setStatus(MemberStatus.ACTIVE);
+            memberRepository.save(member);
+        } else if (newStatus == RetirementRequestStatus.NEW ||
+                newStatus == RetirementRequestStatus.INCOMPLETE ||
+                newStatus == RetirementRequestStatus.SUBMITTED_FOR_APPROVAL) {
+            request.setRejectReason(null);
+            if (newStatus == RetirementRequestStatus.NEW) {
+                request.setIncompleteReason(null);
+            }
+
+            Member member = getMemberEntity(request.getMemberId());
+            member.setStatus(MemberStatus.RETIREMENT_REQUESTED);
+            memberRepository.save(member);
+        }
+
+        RetirementRequest saved = requestRepository.save(request);
+        return mapToResponse(saved);
+    }
+
+    private boolean isStatusTransitionAllowed(RetirementRequestStatus current, RetirementRequestStatus next) {
+        switch (current) {
+            case NEW:
+                return next == RetirementRequestStatus.INACTIVE || next == RetirementRequestStatus.INCOMPLETE;
+            case INCOMPLETE:
+                return next == RetirementRequestStatus.NEW || next == RetirementRequestStatus.INACTIVE;
+            case SUBMITTED_FOR_APPROVAL:
+                return next == RetirementRequestStatus.NEW || next == RetirementRequestStatus.INACTIVE;
+            case REJECTED:
+                return next == RetirementRequestStatus.NEW || next == RetirementRequestStatus.INACTIVE;
+            case INACTIVE:
+                return next == RetirementRequestStatus.NEW;
+            default:
+                return false;
+        }
+    }
+
     // Marks a retirement request as incomplete
     public RetirementRequestResponseDTO markIncomplete(String requestNo, String reason) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)

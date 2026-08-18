@@ -8,4 +8,7 @@ import java.util.Optional;
 public interface BoardApprovalListRepository extends JpaRepository<BoardApprovalList, Long> {
 
 	Optional<BoardApprovalList> findByListId(String listId);
+
+	// Used to block deletion of a Board Meeting that still has approvals attached.
+	boolean existsByBoardMeetingId(Long boardMeetingId);
 }

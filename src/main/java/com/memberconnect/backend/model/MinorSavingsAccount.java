@@ -1,7 +1,5 @@
 package com.memberconnect.backend.model;
 
-import java.time.LocalDate;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -26,12 +24,6 @@ public class MinorSavingsAccount {
 
     @Column(name = "balance", nullable = false)
     private float balance;
-
-    @Column(name = "remitted_amount")
-    private Double remittedAmount;
-
-    @Column(name = "remitted_date")
-    private LocalDate remittedDate;
 
     public MinorSavingsAccount() {}
 
@@ -80,21 +72,5 @@ public class MinorSavingsAccount {
 
     public void setBalance(float balance) {
         this.balance = balance;
-    }
-
-    public Double getRemittedAmount() {
-        return remittedAmount;
-    }
-
-    public void setRemittedAmount(Double remittedAmount) {
-        this.remittedAmount = remittedAmount;
-    }
-
-    public LocalDate getRemittedDate() {
-        return remittedDate;
-    }
-
-    public void setRemittedDate(LocalDate remittedDate) {
-        this.remittedDate = remittedDate;
     }
 }

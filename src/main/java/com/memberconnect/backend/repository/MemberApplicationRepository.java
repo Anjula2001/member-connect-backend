@@ -13,4 +13,7 @@ public interface MemberApplicationRepository extends JpaRepository<Member_Applic
     Optional<Member_Application> findByNicNumber(String nicNumber);
 
     List<Member_Application> findAllByNicNumberIsNotNull();
+
+    // Used to derive the next sequence number for the "APP-<year>-<seq>" ID format.
+    Optional<Member_Application> findFirstByApplicationIDStartingWithOrderByApplicationIDDesc(String prefix);
 }

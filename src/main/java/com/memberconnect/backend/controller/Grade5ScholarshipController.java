@@ -67,9 +67,10 @@ public class Grade5ScholarshipController {
     // Get fund disbursement details
     @GetMapping("/fund-details")
     public Map<String, Object> getFundDetails(
-            @RequestParam String birthCertificateNo
+            @RequestParam String birthCertificateNo,
+            @RequestParam(required = false) Integer examYear
     ) {
-        return service.getFundDisbursementDetails(birthCertificateNo);
+        return service.getFundDisbursementDetails(birthCertificateNo, examYear);
     }
 
     // Get latest request for member
@@ -84,6 +85,16 @@ public class Grade5ScholarshipController {
         }
 
         return ResponseEntity.ok(request);
+    }
+
+    // Get a specific request by requestNo
+    @GetMapping("/request/{requestNo}")
+    public ResponseEntity<?> getRequestByRequestNo(
+            @PathVariable String requestNo
+    ) {
+        return service.getRequestByRequestNo(requestNo)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     // Mark incomplete
@@ -121,6 +132,21 @@ public class Grade5ScholarshipController {
         return service.getExamYears();
     }
 
+    // Check deviation info for a requested date and exam year
+    @GetMapping("/check-deviation")
+    public ResponseEntity<?> checkDeviation(
+            @RequestParam String requestedDate,
+            @RequestParam Integer examYear
+    ) {
+        try {
+            java.time.LocalDate reqDate = java.time.LocalDate.parse(requestedDate);
+            Map<String, Object> info = service.computeDeviationInfo(reqDate, examYear);
+            return ResponseEntity.ok(info);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
     //get all created scholarship requests
     @GetMapping("/requests/search")
     public ResponseEntity<?> searchRequests(
@@ -155,4 +181,19 @@ public class Grade5ScholarshipController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-}
+
+    // Change request status (view mode)
+    @PutMapping("/{requestNo}/status")
+    public ResponseEntity<?> changeRequestStatus(
+            @PathVariable String requestNo,
+            @RequestBody Map<String, String> body
+    ) {
+        try {
+            String status = body.get("status");
+            Grade5ScholarshipRequest updated = service.changeRequestStatus(requestNo, status);
+            return ResponseEntity.ok(updated);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+}

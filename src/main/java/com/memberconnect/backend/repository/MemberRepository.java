@@ -18,4 +18,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     List<Member> findAllByNicIsNotNull();
     List<Member> findByStatus(MemberStatus status);
     List<Member> findByStatusIn(List<MemberStatus> statuses);
+
+    // Used to derive the next sequence number for the "MEM-<year>-<seq>" ID format.
+    Optional<Member> findFirstByMemberIdStartingWithOrderByMemberIdDesc(String prefix);
 }
