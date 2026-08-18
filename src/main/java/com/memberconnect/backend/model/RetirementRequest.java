@@ -11,10 +11,17 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "retirement_request")
+@Table(
+    name = "retirement_request",
+    indexes = {
+        @Index(name = "idx_retirement_request_status_date", columnList = "status, requested_date"),
+        @Index(name = "idx_retirement_request_member_id", columnList = "member_id")
+    }
+)
 public class RetirementRequest {
 
     @Id

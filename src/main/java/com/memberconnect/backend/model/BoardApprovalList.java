@@ -63,4 +63,9 @@ public class BoardApprovalList {
 
     @Column(name = "BoardRemarks", length = 2000)
     private String boardRemarks;
+
+    // Scanned image of the signed "Application List for Board Approval" sheet,
+    // uploaded when the list is processed. Stores the S3 object key.
+    @Column(name = "ApprovedListDocument")
+    private String approvedListDocument;
 }

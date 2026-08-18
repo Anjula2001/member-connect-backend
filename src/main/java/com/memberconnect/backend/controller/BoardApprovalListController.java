@@ -6,6 +6,7 @@ import com.memberconnect.backend.dto.NameChangeRequestDTO;
 import com.memberconnect.backend.dto.NommineChangeRequestDTO;
 import com.memberconnect.backend.service.BoardApprovalListService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,6 +14,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/board-approval-lists")
 @CrossOrigin
+// Board Approval Lists are a Head Office / Board Secretariat concern — District Office
+// has no business creating, viewing, approving or deleting them.
+@PreAuthorize("hasAnyRole('HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
 public class BoardApprovalListController {
 
 	@Autowired
@@ -55,6 +59,9 @@ public class BoardApprovalListController {
 		return boardApprovalListService.processBoardApprovalList(listId, boardApprovalListDTO);
 	}
 
+	// Delete is the "delete privilege" the spec calls out separately — Head Office does
+	// not get it, only Board Secretary/Super Admin.
+	@PreAuthorize("hasAnyRole('BOARD_SECRETARY','SUPER_ADMIN')")
 	@DeleteMapping("/deleteBoardApprovalList/{listId}")
 	public String deleteBoardApprovalList(@PathVariable String listId) {
 		return boardApprovalListService.deleteBoardApprovalList(listId);

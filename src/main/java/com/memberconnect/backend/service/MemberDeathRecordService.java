@@ -21,6 +21,7 @@ import com.memberconnect.backend.repository.CauseOfDeathRepository;
 import com.memberconnect.backend.repository.LoanObligationRepository;
 import com.memberconnect.backend.repository.LoanRepository;
 import com.memberconnect.backend.repository.MemberDeathDocumentRepository;
+import com.memberconnect.backend.repository.MemberDeathMinorAccountRepository;
 import com.memberconnect.backend.repository.MemberDeathRecordRepository;
 import com.memberconnect.backend.repository.MemberRepository;
 import com.memberconnect.backend.repository.MinorSavingsAccountRepository;
@@ -36,8 +37,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -50,6 +56,7 @@ public class MemberDeathRecordService {
 
     private final MemberDeathRecordRepository recordRepository;
     private final MemberDeathDocumentRepository documentRepository;
+    private final MemberDeathMinorAccountRepository minorAccountRepository;
     private final MemberRepository memberRepository;
     private final CauseOfDeathRepository causeOfDeathRepository;
     private final MinorSavingsAccountRepository minorSavingsAccountRepository;
@@ -62,6 +69,7 @@ public class MemberDeathRecordService {
     public MemberDeathRecordService(
             MemberDeathRecordRepository recordRepository,
             MemberDeathDocumentRepository documentRepository,
+            MemberDeathMinorAccountRepository minorAccountRepository,
             MemberRepository memberRepository,
             CauseOfDeathRepository causeOfDeathRepository,
             MinorSavingsAccountRepository minorSavingsAccountRepository,
@@ -73,6 +81,7 @@ public class MemberDeathRecordService {
     ) {
         this.recordRepository = recordRepository;
         this.documentRepository = documentRepository;
+        this.minorAccountRepository = minorAccountRepository;
         this.memberRepository = memberRepository;
         this.causeOfDeathRepository = causeOfDeathRepository;
         this.minorSavingsAccountRepository = minorSavingsAccountRepository;
@@ -117,15 +126,108 @@ public class MemberDeathRecordService {
             String sortBy,
             String sortOrder
     ) {
-        return recordRepository.findAll()
+        // Filtering happens on the entities first. Mapping used to run ahead of the
+        // filters, which meant a search that matched nothing still paid the full
+        // per-record mapping cost for every row in the table.
+        List<MemberDeathRecord> matches = recordRepository.findAllWithMember()
                 .stream()
-                .map(this::mapToResponse)
-                .filter(dto -> matchesStatuses(dto, statuses))
-                .filter(dto -> matchesInformedDateRange(dto, fromDate, toDate))
-                .filter(dto -> matchesSearch(dto, searchKey))
+                .filter(record -> matchesStatuses(record, statuses))
+                .filter(record -> matchesInformedDateRange(record, fromDate, toDate))
+                .filter(record -> matchesSearch(record, searchKey))
                 .sorted((left, right) -> compareForSort(left, right, sortBy, sortOrder))
                 .toList();
+
+        return mapToResponses(matches);
     }
+
+    /**
+     * Batch counterpart of mapToResponse: resolves loans, obligations, causes of
+     * death, bank and branch names, minor accounts and documents for a whole page
+     * in a fixed number of queries rather than roughly eight per row. The DTOs it
+     * produces are identical to mapping each record individually.
+     */
+    private List<MemberDeathRecordDTO> mapToResponses(List<MemberDeathRecord> records) {
+        if (records.isEmpty()) {
+            return List.of();
+        }
+
+        DeathRecordLookups lookups = loadLookups(records);
+
+        return records.stream()
+                .map(record -> buildResponse(record, lookups))
+                .toList();
+    }
+
+    private DeathRecordLookups loadLookups(List<MemberDeathRecord> records) {
+        List<String> memberIds = records.stream()
+                .map(MemberDeathRecord::getMember)
+                .filter(Objects::nonNull)
+                .map(Member::getMemberId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        List<Long> recordIds = records.stream()
+                .map(MemberDeathRecord::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        List<String> recordNos = records.stream()
+                .map(MemberDeathRecord::getRecordId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        Set<Long> bankIds = records.stream()
+                .map(MemberDeathRecord::getNomineeBankId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<Long> branchIds = records.stream()
+                .map(MemberDeathRecord::getNomineeBranchId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // Sorting the child rows by id before grouping keeps them in the same
+        // order the lazy collections would have produced them in.
+        return new DeathRecordLookups(
+                memberIds.isEmpty()
+                        ? Set.of()
+                        : new HashSet<>(loanRepository.findMemberIdsWithPositiveBalance(memberIds)),
+                memberIds.isEmpty()
+                        ? Set.of()
+                        : new HashSet<>(obligationRepository.findMemberIdsWithObligations(memberIds)),
+                causeOfDeathRepository.findByActiveTrueOrderByNameAsc(),
+                bankIds.isEmpty()
+                        ? Map.of()
+                        : bankRepository.findAllById(bankIds).stream()
+                                .collect(Collectors.toMap(bank -> bank.getId(), bank -> bank.getName(),
+                                        (first, second) -> first)),
+                branchIds.isEmpty()
+                        ? Map.of()
+                        : branchRepository.findAllById(branchIds).stream()
+                                .collect(Collectors.toMap(branch -> branch.getId(), branch -> branch.getName(),
+                                        (first, second) -> first)),
+                recordIds.isEmpty()
+                        ? Map.of()
+                        : minorAccountRepository.findByRecord_IdIn(recordIds).stream()
+                                .sorted(Comparator.comparing(MemberDeathMinorAccount::getId))
+                                .collect(Collectors.groupingBy(item -> item.getRecord().getId())),
+                recordNos.isEmpty()
+                        ? Map.of()
+                        : documentRepository.findByRecord_RecordIdIn(recordNos).stream()
+                                .sorted(Comparator.comparing(MemberDeathDocument::getId))
+                                .collect(Collectors.groupingBy(document -> document.getRecord().getRecordId()))
+        );
+    }
+
+    /** Per-page lookups shared by every row of a list response. */
+    private record DeathRecordLookups(
+            Set<String> membersWithLoanBalance,
+            Set<String> membersWithObligations,
+            List<CauseOfDeath> causes,
+            Map<Long, String> bankNames,
+            Map<Long, String> branchNames,
+            Map<Long, List<MemberDeathMinorAccount>> minorAccountsByRecordId,
+            Map<String, List<MemberDeathDocument>> documentsByRecordNo
+    ) {}
 
     public List<MemberDeathRecordDTO> getRecordsByMember(String memberId) {
         return recordRepository.findByMember_MemberIdOrderByCreatedAtDesc(memberId)
@@ -542,7 +644,39 @@ public class MemberDeathRecordService {
         }
     }
 
+    /**
+     * Single-record mapping, used by the save/submit/fetch endpoints. It keeps
+     * reading the in-memory minorAccounts collection rather than re-querying,
+     * because the write flows call this straight after mutating that collection.
+     * List responses go through mapToResponses, which batches the same lookups
+     * across the whole page.
+     */
     private MemberDeathRecordDTO mapToResponse(MemberDeathRecord record) {
+        Member member = record.getMember();
+        String memberId = member != null ? member.getMemberId() : null;
+        Long bankId = record.getNomineeBankId();
+        Long branchId = record.getNomineeBranchId();
+
+        DeathRecordLookups lookups = new DeathRecordLookups(
+                memberId != null && loanRepository.existsByMemberIdAndBalanceGreaterThan(memberId, 0.0)
+                        ? Set.of(memberId)
+                        : Set.of(),
+                memberId != null && obligationRepository.existsByMemberId(memberId)
+                        ? Set.of(memberId)
+                        : Set.of(),
+                causeOfDeathRepository.findByActiveTrueOrderByNameAsc(),
+                bankId != null ? Map.of(bankId, resolveBankName(bankId)) : Map.of(),
+                branchId != null ? Map.of(branchId, resolveBranchName(branchId)) : Map.of(),
+                record.getId() != null ? Map.of(record.getId(), record.getMinorAccounts()) : Map.of(),
+                record.getRecordId() != null
+                        ? Map.of(record.getRecordId(), documentRepository.findByRecord_RecordId(record.getRecordId()))
+                        : Map.of()
+        );
+
+        return buildResponse(record, lookups);
+    }
+
+    private MemberDeathRecordDTO buildResponse(MemberDeathRecord record, DeathRecordLookups lookups) {
         Member member = record.getMember();
 
         MemberDeathRecordDTO dto = new MemberDeathRecordDTO();
@@ -568,7 +702,7 @@ public class MemberDeathRecordService {
         dto.setInformedDate(record.getInformedDate().toString());
         dto.setDeceasedDate(record.getDeceasedDate().toString());
         dto.setCauseOfDeathName(record.getCauseOfDeath());
-        dto.setCauseOfDeathId(resolveCauseOfDeathId(record.getCauseOfDeath()));
+        dto.setCauseOfDeathId(resolveCauseOfDeathId(record.getCauseOfDeath(), lookups.causes()));
         dto.setComment(record.getComment());
         dto.setConcernsIdentified(record.getConcernsIdentified());
         dto.setNomineeMobile(firstNonBlank(record.getNomineeMobile(), record.getNomineeMobileNo()));
@@ -582,22 +716,29 @@ public class MemberDeathRecordService {
         dto.setEditable(isEditable(record.getStatus()));
         dto.setSubmittable(isSubmittable(record.getStatus()));
 
-        dto.setNomineeBankName(firstNonBlank(record.getBank(), resolveBankName(record.getNomineeBankId())));
-        dto.setNomineeBranchName(firstNonBlank(record.getBankBranch(), resolveBranchName(record.getNomineeBranchId())));
+        dto.setNomineeBankName(firstNonBlank(
+                record.getBank(),
+                resolveName(record.getNomineeBankId(), lookups.bankNames())));
+        dto.setNomineeBranchName(firstNonBlank(
+                record.getBankBranch(),
+                resolveName(record.getNomineeBranchId(), lookups.branchNames())));
 
         String memberId = member != null ? member.getMemberId() : null;
         if (memberId != null) {
-            dto.setHasLoanBalance(loanRepository.existsByMemberIdAndBalanceGreaterThan(memberId, 0.0));
-            dto.setHasIndirectObligations(obligationRepository.existsByMemberId(memberId));
+            dto.setHasLoanBalance(lookups.membersWithLoanBalance().contains(memberId));
+            dto.setHasIndirectObligations(lookups.membersWithObligations().contains(memberId));
         }
 
-        dto.setMinorDisbursements(record.getMinorAccounts().stream()
-                .map(this::mapMinorAccountToDto)
-                .toList());
-        dto.setDocuments(documentRepository.findByRecord_RecordId(record.getRecordId())
-                .stream()
-                .map(this::mapDocumentToDto)
-                .toList());
+        dto.setMinorDisbursements(
+                lookups.minorAccountsByRecordId().getOrDefault(record.getId(), List.of())
+                        .stream()
+                        .map(this::mapMinorAccountToDto)
+                        .toList());
+        dto.setDocuments(
+                lookups.documentsByRecordNo().getOrDefault(record.getRecordId(), List.of())
+                        .stream()
+                        .map(this::mapDocumentToDto)
+                        .toList());
 
         return dto;
     }
@@ -694,17 +835,25 @@ public class MemberDeathRecordService {
                 .orElse("-");
     }
 
-    private Long resolveCauseOfDeathId(String causeName) {
+    private Long resolveCauseOfDeathId(String causeName, List<CauseOfDeath> causes) {
         if (causeName == null || causeName.isBlank()) {
             return null;
         }
-        return causeOfDeathRepository.findByActiveTrueOrderByNameAsc()
-                .stream()
+        return causes.stream()
                 .filter(cause -> causeName.equalsIgnoreCase(cause.getName())
                         || causeName.equalsIgnoreCase(cause.getCode()))
                 .map(CauseOfDeath::getId)
                 .findFirst()
                 .orElse(null);
+    }
+
+    // Map-backed counterpart of resolveBankName/resolveBranchName, matching their
+    // "-" fallback for a missing id or an id with no matching row.
+    private String resolveName(Long id, Map<Long, String> namesById) {
+        if (id == null) {
+            return "-";
+        }
+        return namesById.getOrDefault(id, "-");
     }
 
     private String buildIdentification(Member member) {
@@ -727,13 +876,14 @@ public class MemberDeathRecordService {
         return normalizedType;
     }
 
-    private boolean matchesStatuses(MemberDeathRecordDTO dto, List<String> statuses) {
+    private boolean matchesStatuses(MemberDeathRecord record, List<String> statuses) {
         if (statuses == null || statuses.isEmpty()) {
             return true;
         }
+        String status = record.getStatus() != null ? record.getStatus().name() : null;
         return statuses.stream()
                 .map(this::normalizeStatusFilter)
-                .anyMatch(status -> status.equalsIgnoreCase(dto.getStatus()));
+                .anyMatch(candidate -> candidate.equalsIgnoreCase(status));
     }
 
     private String normalizeStatusFilter(String status) {
@@ -743,11 +893,11 @@ public class MemberDeathRecordService {
                 .replace("PND", "PD");
     }
 
-    private boolean matchesInformedDateRange(MemberDeathRecordDTO dto, String fromDate, String toDate) {
-        if (dto.getInformedDate() == null) {
+    private boolean matchesInformedDateRange(MemberDeathRecord record, String fromDate, String toDate) {
+        if (record.getInformedDate() == null) {
             return false;
         }
-        LocalDate date = LocalDate.parse(dto.getInformedDate());
+        LocalDate date = record.getInformedDate();
         if (fromDate != null && !fromDate.isBlank() && date.isBefore(LocalDate.parse(fromDate))) {
             return false;
         }
@@ -757,27 +907,31 @@ public class MemberDeathRecordService {
         return true;
     }
 
-    private boolean matchesSearch(MemberDeathRecordDTO dto, String searchKey) {
+    private boolean matchesSearch(MemberDeathRecord record, String searchKey) {
         if (searchKey == null || searchKey.isBlank()) {
             return true;
         }
         String key = searchKey.toLowerCase();
-        return contains(dto.getRecordNo(), key)
-                || contains(dto.getMemberId(), key)
-                || contains(dto.getMemberFullName(), key)
-                || contains(dto.getMemberNameWithInitials(), key)
-                || contains(dto.getMemberNic(), key)
-                || contains(dto.getCauseOfDeathName(), key);
+        Member member = record.getMember();
+        return contains(record.getRecordId(), key)
+                || contains(member != null ? member.getMemberId() : null, key)
+                || contains(member != null ? member.getFullName() : null, key)
+                || contains(member != null ? member.getNameWithInitials() : null, key)
+                || contains(member != null ? member.getNic() : null, key)
+                || contains(record.getCauseOfDeath(), key);
     }
 
-    private int compareForSort(MemberDeathRecordDTO left, MemberDeathRecordDTO right, String sortBy, String sortOrder) {
+    private int compareForSort(MemberDeathRecord left, MemberDeathRecord right, String sortBy, String sortOrder) {
         int result;
         if ("status".equalsIgnoreCase(sortBy)) {
-            result = safeString(left.getStatus()).compareToIgnoreCase(safeString(right.getStatus()));
+            result = safeString(left.getStatus() != null ? left.getStatus().name() : null)
+                    .compareToIgnoreCase(safeString(right.getStatus() != null ? right.getStatus().name() : null));
         } else if ("memberId".equalsIgnoreCase(sortBy)) {
-            result = safeString(left.getMemberId()).compareToIgnoreCase(safeString(right.getMemberId()));
+            result = safeString(left.getMember() != null ? left.getMember().getMemberId() : null)
+                    .compareToIgnoreCase(safeString(right.getMember() != null ? right.getMember().getMemberId() : null));
         } else {
-            result = safeString(left.getInformedDate()).compareTo(safeString(right.getInformedDate()));
+            result = safeString(left.getInformedDate() != null ? left.getInformedDate().toString() : null)
+                    .compareTo(safeString(right.getInformedDate() != null ? right.getInformedDate().toString() : null));
         }
         return "desc".equalsIgnoreCase(sortOrder) ? -result : result;
     }

@@ -1,5 +1,7 @@
 package com.memberconnect.backend.dto;
 
+import java.util.List;
+
 public class TerminationRequestResponseDTO {
 
     private Long id;
@@ -19,6 +21,7 @@ public class TerminationRequestResponseDTO {
     private String rejectReason;
     private boolean hasLoanBalance;
     private boolean hasIndirectObligations;
+    private List<TerminationMinorDisbursementDTO> minorDisbursements;
 
     public TerminationRequestResponseDTO() {}
 
@@ -39,7 +42,8 @@ public class TerminationRequestResponseDTO {
             String incompleteReason,
             String rejectReason,
             boolean hasLoanBalance,
-            boolean hasIndirectObligations
+            boolean hasIndirectObligations,
+            List<TerminationMinorDisbursementDTO> minorDisbursements
     ) {
         this.id = id;
         this.requestNo = requestNo;
@@ -58,6 +62,7 @@ public class TerminationRequestResponseDTO {
         this.rejectReason = rejectReason;
         this.hasLoanBalance = hasLoanBalance;
         this.hasIndirectObligations = hasIndirectObligations;
+        this.minorDisbursements = minorDisbursements;
     }
 
     public Long getId() {
@@ -126,5 +131,9 @@ public class TerminationRequestResponseDTO {
 
     public boolean isHasIndirectObligations() {
         return hasIndirectObligations;
+    }
+
+    public List<TerminationMinorDisbursementDTO> getMinorDisbursements() {
+        return minorDisbursements;
     }
 }

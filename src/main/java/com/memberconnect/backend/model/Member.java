@@ -1,6 +1,7 @@
 package com.memberconnect.backend.model;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import com.memberconnect.backend.enums.Gender;
 import com.memberconnect.backend.enums.Identification;
@@ -44,8 +45,31 @@ public class Member {
     @Enumerated(EnumType.STRING)
     private MemberStatus status;
 
+    // The District Office branch this member registered/is administered through.
+    // Distinct from educationalDistrict below (the member's working district).
+    @Column(name = "SubmissionLocation")
+    private String submissionLocation;
+
     @Column(name = "MembershipStartDate")
     private LocalDate membershipStartDate;
+
+    // ---- Membership documentation printing (MR15-17) ----
+    // Null means "not yet printed"; the print screens filter on these and the
+    // reprint path is what allows a second copy once one is set.
+    @Column(name = "MembershipCardPrintedAt")
+    private LocalDateTime membershipCardPrintedAt;
+
+    @Column(name = "SignatureCardPrintedAt")
+    private LocalDateTime signatureCardPrintedAt;
+
+    @Column(name = "PassbookPrintedAt")
+    private LocalDateTime passbookPrintedAt;
+
+    // ---- Membership documentation dispatch (MR18) ----
+    // Denormalised from the dispatch record so the "Non-Dispatched Members"
+    // filter does not need a join on every search.
+    @Column(name = "DocumentsDispatchedAt")
+    private LocalDateTime documentsDispatchedAt;
 
     @Column(name = "Nic")
     private String nic;
