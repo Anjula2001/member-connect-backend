@@ -1,20 +1,34 @@
 package com.memberconnect.backend.model;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.memberconnect.backend.enums.TerminationRequestStatus;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "termination_request")
+@Table(
+    name = "termination_request",
+    indexes = {
+        @Index(name = "idx_termination_request_status_date", columnList = "status, requested_date"),
+        @Index(name = "idx_termination_request_member_id", columnList = "member_id")
+    }
+)
 public class TerminationRequest {
 
     @Id
@@ -27,11 +41,19 @@ public class TerminationRequest {
     @Column(name = "member_id", nullable = false)
     private String memberId;
 
+    // Legacy Phase 1 columns. Both are still written on every save and are the
+    // only reason data requests created before the Termination Reasons Master
+    // have, so neither is dropped or retyped until the backfill is agreed.
     @Column(name = "termination_reason_id", nullable = false)
     private String terminationReasonId;
 
     @Column(name = "termination_reason", nullable = false)
     private String terminationReason;
+
+    // Nullable throughout Phase 1: existing rows have no master reference yet.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "termination_reason_ref_id")
+    private TerminationReason terminationReasonRef;
 
     @Column(name = "requested_date", nullable = false)
     private LocalDate requestedDate;
@@ -51,6 +73,9 @@ public class TerminationRequest {
 
     @Column(name = "reject_reason", columnDefinition = "TEXT")
     private String rejectReason;
+
+    @OneToMany(mappedBy = "terminationRequest", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TerminationMinorDisbursement> minorDisbursements = new ArrayList<>();
 
     public Long getId() {
         return id;
@@ -86,6 +111,14 @@ public class TerminationRequest {
 
     public void setTerminationReason(String terminationReason) {
         this.terminationReason = terminationReason;
+    }
+
+    public TerminationReason getTerminationReasonRef() {
+        return terminationReasonRef;
+    }
+
+    public void setTerminationReasonRef(TerminationReason terminationReasonRef) {
+        this.terminationReasonRef = terminationReasonRef;
     }
 
     public LocalDate getRequestedDate() {
@@ -134,5 +167,13 @@ public class TerminationRequest {
 
     public void setRejectReason(String rejectReason) {
         this.rejectReason = rejectReason;
+    }
+
+    public List<TerminationMinorDisbursement> getMinorDisbursements() {
+        return minorDisbursements;
+    }
+
+    public void setMinorDisbursements(List<TerminationMinorDisbursement> minorDisbursements) {
+        this.minorDisbursements = minorDisbursements;
     }
 }

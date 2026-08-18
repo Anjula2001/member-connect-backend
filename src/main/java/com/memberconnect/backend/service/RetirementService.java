@@ -1,7 +1,12 @@
 package com.memberconnect.backend.service;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
@@ -299,6 +304,15 @@ public class RetirementService {
         boolean hasIndirectObligations = obligationRepository
             .existsByMemberId(request.getMemberId());
 
+        return buildResponse(request, member, hasLoanBalance, hasIndirectObligations);
+    }
+
+    private RetirementRequestResponseDTO buildResponse(
+            RetirementRequest request,
+            Member member,
+            boolean hasLoanBalance,
+            boolean hasIndirectObligations
+    ) {
         return new RetirementRequestResponseDTO(
                 request.getId(),
                 request.getRequestNo(),
@@ -376,13 +390,15 @@ public class RetirementService {
             String sortBy,
             String sortOrder
     ) {
-        return requestRepository.findAll()
+        // Status and date filtering needs no extra queries, so it runs first and
+        // shrinks the set the member lookup below has to cover.
+        List<RetirementRequest> candidates = requestRepository.findAll()
                 .stream()
 
                 //status filter
                 .filter(r -> statuses == null || statuses.isEmpty()
                         || statuses.contains(r.getStatus().name()))
-                
+
                 //date filter
                 .filter(r -> {
                     if (r.getRequestedDate() == null) return false;
@@ -401,6 +417,15 @@ public class RetirementService {
 
                     return true;
                 })
+                .toList();
+
+        // One query for every member on the page. The map is shared by the search
+        // filter and by the response mapping, replacing a lookup per row.
+        Map<String, Member> membersById = loadMembersByMemberId(
+                candidates.stream().map(RetirementRequest::getMemberId).toList()
+        );
+
+        List<RetirementRequest> matches = candidates.stream()
 
                 //search filter
                 .filter(r -> {
@@ -408,8 +433,7 @@ public class RetirementService {
 
                     String key = searchKey.toLowerCase();
 
-                    Member member = memberRepository.findByMemberId(r.getMemberId())
-                            .orElse(null);
+                    Member member = membersById.get(r.getMemberId());
 
                     return contains(r.getMemberId(), key)
                             || (member != null && contains(member.getFullName(), key))
@@ -432,8 +456,64 @@ public class RetirementService {
 
                     return "desc".equalsIgnoreCase(sortOrder) ? -result : result;
                 })
-                .map(this::mapToResponse)
                 .toList();
+
+        return mapToResponses(matches, membersById);
+    }
+
+    /**
+     * Batch counterpart of mapToResponse: resolves the loan flags for a whole
+     * page in two queries instead of two per row. The DTOs it produces are
+     * identical to mapping each request individually.
+     */
+    private List<RetirementRequestResponseDTO> mapToResponses(
+            List<RetirementRequest> requests,
+            Map<String, Member> membersById
+    ) {
+        if (requests.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> memberIds = requests.stream()
+                .map(RetirementRequest::getMemberId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        Set<String> membersWithLoanBalance = memberIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(loanRepository.findMemberIdsWithPositiveBalance(memberIds));
+        Set<String> membersWithObligations = memberIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(obligationRepository.findMemberIdsWithObligations(memberIds));
+
+        return requests.stream()
+                .map(request -> buildResponse(
+                        request,
+                        membersById.get(request.getMemberId()),
+                        membersWithLoanBalance.contains(request.getMemberId()),
+                        membersWithObligations.contains(request.getMemberId())
+                ))
+                .toList();
+    }
+
+    private Map<String, Member> loadMembersByMemberId(List<String> memberIds) {
+        List<String> distinctIds = memberIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (distinctIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return memberRepository.findByMemberIdIn(distinctIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        Member::getMemberId,
+                        member -> member,
+                        (first, second) -> first
+                ));
     }
 
     private boolean contains(String value, String key) {
