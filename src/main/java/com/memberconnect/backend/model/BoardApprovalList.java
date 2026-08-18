@@ -26,8 +26,13 @@ public class BoardApprovalList {
     @Column(name = "BoardMeetingDate")
     private LocalDate boardMeetingDate;
 
-    @Column(name = "ApplicationIds", columnDefinition = "TEXT")
-    private String applicationIdsCsv;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "Board_Approval_List_Applications",
+        joinColumns = @JoinColumn(name = "board_approval_list_id"),
+        inverseJoinColumns = @JoinColumn(name = "member_application_id")
+    )
+    private java.util.List<Member_Application> applications = new java.util.ArrayList<>();
 
     @Column(name = "NameChangeRequestIds", columnDefinition = "TEXT")
     private String nameChangeRequestIdsCsv;

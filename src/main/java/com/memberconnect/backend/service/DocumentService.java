@@ -1,30 +1,40 @@
 package com.memberconnect.backend.service;
 
-import com.memberconnect.backend.dto.DocumentSummaryDTO;
-import com.memberconnect.backend.dto.UploadDocumentRequestDTO;
-import com.memberconnect.backend.dto.UploadDocumentResponseDTO;
-import com.memberconnect.backend.model.UploadDocument;
-import com.memberconnect.backend.repository.MemberApplicationRepository;
-import com.memberconnect.backend.repository.UploadDocumentRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
+import java.io.IOException;
+import java.io.File;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.Optional;
+import java.util.HashSet;
+import java.util.stream.Collectors;
+
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import com.memberconnect.backend.dto.DocumentSummaryDTO;
+import com.memberconnect.backend.dto.RequiredDocumentDTO;
+import com.memberconnect.backend.dto.UploadDocumentRequestDTO;
+import com.memberconnect.backend.dto.UploadDocumentResponseDTO;
+import com.memberconnect.backend.model.UploadDocument;
+import com.memberconnect.backend.model.RequiredDocument;
+import com.memberconnect.backend.model.UploadedDocument;
+import com.memberconnect.backend.repository.MemberApplicationRepository;
+import com.memberconnect.backend.repository.MinorSavingsAccountRepository;
+import com.memberconnect.backend.repository.RequiredDocumentRepository;
+import com.memberconnect.backend.repository.UploadDocumentRepository;
+import com.memberconnect.backend.repository.UploadedDocumentRepository;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 @Service
 @Transactional
@@ -36,6 +46,10 @@ public class DocumentService {
             "PAYSLIP_COPY"
     );
 
+    private final RequiredDocumentRepository requiredDocumentRepository;
+    private final UploadedDocumentRepository uploadedDocumentRepository;
+    private final MinorSavingsAccountRepository minorSavingsAccountRepository;
+
     @Autowired
     private UploadDocumentRepository uploadDocumentRepository;
 
@@ -45,8 +59,131 @@ public class DocumentService {
     @Autowired
     private ModelMapper modelMapper;
 
+    @Autowired
+    private S3Service s3Service;
+
     @PersistenceContext
     private EntityManager entityManager;
+
+    public DocumentService(
+            RequiredDocumentRepository requiredDocumentRepository,
+            UploadedDocumentRepository uploadedDocumentRepository,
+            MinorSavingsAccountRepository minorSavingsAccountRepository
+    ) {
+        this.requiredDocumentRepository = requiredDocumentRepository;
+        this.uploadedDocumentRepository = uploadedDocumentRepository;
+        this.minorSavingsAccountRepository = minorSavingsAccountRepository;
+    }
+
+    // --- Member application document methods ---
+
+    public List<RequiredDocumentDTO> getRequiredDocuments(Long requestId, String memberId, String applicationType) {
+        List<RequiredDocument> requiredDocuments = requiredDocumentRepository.findByApplicationTypeIn(List.of(applicationType));
+        Set<Long> uploadedRequiredDocumentIds = uploadedDocumentRepository.findByRequestNo(String.valueOf(requestId))
+                .stream()
+                .map(UploadedDocument::getRequiredDocumentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        return requiredDocuments.stream()
+                .map(requiredDocument -> new RequiredDocumentDTO(
+                        requiredDocument.getId(),
+                        requiredDocument.getDocumentName(),
+                        requiredDocument.isMandatory(),
+                        uploadedRequiredDocumentIds.contains(requiredDocument.getId())
+                ))
+                .toList();
+    }
+
+    public UploadedDocument uploadDocument(
+            Long requestId,
+            Long requiredDocumentId,
+            MultipartFile file,
+            String applicationType
+    ) throws IOException {
+        if (requestId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request ID is required");
+        }
+
+        if (requiredDocumentId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Required document ID is required");
+        }
+
+        if (file == null || file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is required");
+        }
+
+        RequiredDocument requiredDocument = requiredDocumentRepository.findById(requiredDocumentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Required document not found"));
+
+        if (requiredDocument.getApplicationType() != null
+                && applicationType != null
+                && !requiredDocument.getApplicationType().equalsIgnoreCase(applicationType)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Required document does not match request type");
+        }
+
+        List<UploadedDocument> existingDocuments = uploadedDocumentRepository.findByRequestNoAndRequiredDocumentId(
+                String.valueOf(requestId),
+                requiredDocumentId
+        );
+
+        if (!existingDocuments.isEmpty()) {
+            UploadedDocument existingDocument = existingDocuments.getFirst();
+            if (existingDocument.getFilePath() != null && !existingDocument.getFilePath().isBlank()) {
+                s3Service.deleteFile(existingDocument.getFilePath());
+            }
+            uploadedDocumentRepository.delete(existingDocument);
+        }
+
+        String fileKey = s3Service.uploadFile(file);
+
+        UploadedDocument uploadedDocument = new UploadedDocument();
+        uploadedDocument.setRequestId(String.valueOf(requestId));
+        uploadedDocument.setRequiredDocumentId(requiredDocumentId);
+        uploadedDocument.setFileName(file.getOriginalFilename());
+        uploadedDocument.setFileType(file.getContentType());
+        uploadedDocument.setFilePath(fileKey);
+        uploadedDocument.setUploadedAt(LocalDateTime.now());
+
+        return uploadedDocumentRepository.save(uploadedDocument);
+    }
+
+    public List<UploadedDocument> getUploadedDocuments(Long requestId) {
+        return uploadedDocumentRepository.findByRequestNo(String.valueOf(requestId));
+    }
+
+    public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(Long requestId, Long requiredDocumentId) {
+        return uploadedDocumentRepository.findByRequestNoAndRequiredDocumentId(String.valueOf(requestId), requiredDocumentId);
+    }
+
+    public void deleteUploadedDocument(Long uploadedDocumentId) {
+        UploadedDocument document = getUploadedDocumentById(uploadedDocumentId);
+
+        if (document.getFilePath() != null && !document.getFilePath().isBlank()) {
+            s3Service.deleteFile(document.getFilePath());
+        }
+
+        uploadedDocumentRepository.delete(document);
+    }
+
+    public UploadedDocument getUploadedDocumentById(Long uploadedDocumentId) {
+        return uploadedDocumentRepository.findById(uploadedDocumentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Uploaded document not found"));
+    }
+
+    public boolean allMandatoryDocumentsUploaded(Long requestId, String memberId, String applicationType) {
+        List<RequiredDocumentDTO> requiredDocuments = getRequiredDocuments(requestId, memberId, applicationType);
+        return requiredDocuments.stream()
+                .filter(RequiredDocumentDTO::isMandatory)
+                .allMatch(RequiredDocumentDTO::isUploaded);
+    }
+
+    public boolean allMandatoryDocumentsUploaded(String requestNo, String memberId, String applicationType) {
+        List<RequiredDocumentDTO> requiredDocuments = getRequiredDocuments(requestNo, memberId, applicationType);
+        return requiredDocuments.stream()
+                .filter(RequiredDocumentDTO::isMandatory)
+                .allMatch(RequiredDocumentDTO::isUploaded);
+    }
 
     public UploadDocumentResponseDTO uploadDocumentMetadata(UploadDocumentRequestDTO requestDTO) {
         Long applicationId = requestDTO.getApplicationId();
@@ -72,7 +209,6 @@ public class DocumentService {
         uploadDocument.setUploadedAt(LocalDateTime.now());
         uploadDocument.setId(null);
 
-        // Use persist to guarantee INSERT behavior and avoid merge/update on accidental id mapping.
         entityManager.persist(uploadDocument);
         entityManager.flush();
 
@@ -115,17 +251,105 @@ public class DocumentService {
         UploadDocument doc = uploadDocumentRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found"));
 
-        // Delete physical file from disk if storagePath is known
-        if (doc.getStoragePath() != null && !doc.getStoragePath().isBlank()) {
-            try {
-                Path filePath = Paths.get(doc.getStoragePath());
-                Files.deleteIfExists(filePath);
-            } catch (IOException e) {
-                // Log but don't fail — remove the DB record regardless
-                System.err.println("Warning: could not delete file at " + doc.getStoragePath() + ": " + e.getMessage());
+        uploadDocumentRepository.deleteById(id);
+    }
+    public List<RequiredDocumentDTO> getRequiredDocuments(
+            String requestNo,
+            String memberId,
+            String applicationType
+    ) {
+        List<String> types = new ArrayList<>();
+
+        types.add(applicationType);
+
+        if ("RETIREMENT".equals(applicationType)) {
+            boolean hasMinorSavings =
+                    !minorSavingsAccountRepository.findByMemberId(memberId).isEmpty();
+
+            if (hasMinorSavings) {
+                types.add("RETIREMENT_MINOR");
             }
         }
 
-        uploadDocumentRepository.deleteById(id);
+        if ("TERMINATION".equals(applicationType)) {
+            boolean hasMinorSavings =
+                    !minorSavingsAccountRepository.findByMemberId(memberId).isEmpty();
+
+            if (hasMinorSavings) {
+                types.add("TERMINATION_MINOR");
+            }
+        }
+
+        List<RequiredDocument> requiredDocs = requiredDocumentRepository.findByApplicationTypeIn(types);
+
+        return requiredDocs.stream()
+                .map(doc -> new RequiredDocumentDTO(
+                        doc.getId(),
+                        doc.getDocumentName(),
+                        doc.isMandatory(),
+                        uploadedDocumentRepository.existsByRequestNoAndRequiredDocumentId(
+                                requestNo,
+                                doc.getId()
+                        )
+                ))
+                .toList();
+    }
+
+    // Upload a document for a specific required document
+    public UploadedDocument uploadDocument(
+            String requestNo,
+            Long requiredDocumentId,
+            MultipartFile file,
+            String applicationType
+    ) {
+        try {
+            if (file == null || file.isEmpty()) {
+                throw new RuntimeException("Please select a file to upload");
+            }
+
+            List<UploadedDocument> existingDocuments = uploadedDocumentRepository.findByRequestNoAndRequiredDocumentId(
+                    requestNo,
+                    requiredDocumentId
+            );
+
+            if (!existingDocuments.isEmpty()) {
+                UploadedDocument existingDocument = existingDocuments.getFirst();
+                if (existingDocument.getFilePath() != null && !existingDocument.getFilePath().isBlank()) {
+                    s3Service.deleteFile(existingDocument.getFilePath());
+                }
+                uploadedDocumentRepository.delete(existingDocument);
+            }
+
+            String fileKey = s3Service.uploadFile(file);
+
+            UploadedDocument uploaded = new UploadedDocument();
+            uploaded.setRequestNo(requestNo);
+            uploaded.setRequiredDocumentId(requiredDocumentId);
+            uploaded.setFileName(file.getOriginalFilename());
+            uploaded.setFileType(file.getContentType());
+            uploaded.setFilePath(fileKey);
+            uploaded.setUploadedAt(LocalDateTime.now());
+
+            return uploadedDocumentRepository.save(uploaded);
+
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to upload document: " + e.getMessage());
+        }
+    }
+
+    // Get uploaded documents for a specific request
+    public List<UploadedDocument> getUploadedDocuments(String requestNo) {
+        return uploadedDocumentRepository.findByRequestNo(requestNo);
+    }
+
+    // Get uploaded documents for a specific required document
+    public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
+            String requestNo,
+            Long requiredDocumentId
+    ) {
+        return uploadedDocumentRepository.findByRequestNoAndRequiredDocumentId(
+                requestNo,
+                requiredDocumentId
+        );
     }
 }

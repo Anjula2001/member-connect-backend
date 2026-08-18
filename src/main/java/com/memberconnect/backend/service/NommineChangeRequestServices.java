@@ -54,7 +54,7 @@ return nommineChangeRequestDTO;
 
  public NommineChangeRequestDTO updateNommineChange(Integer id,NommineChangeRequestDTO nommineChangeRequestDTO){
      NommineChangeRequests exsitingnommineChangeRequests = nominneChangeRequestRepo.findById(id).orElseThrow(() -> new RuntimeException("Request not found with id: " + id) );
-     modelMapper.map(exsitingnommineChangeRequests,nommineChangeRequestDTO);
+     modelMapper.map(nommineChangeRequestDTO, exsitingnommineChangeRequests);
      NommineChangeRequests updatedNommineChangeRequest = nominneChangeRequestRepo.save(exsitingnommineChangeRequests);
      return modelMapper.map(updatedNommineChangeRequest,NommineChangeRequestDTO.class);
 

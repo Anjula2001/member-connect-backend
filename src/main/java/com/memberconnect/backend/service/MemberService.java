@@ -61,6 +61,12 @@ public class MemberService {
         return convertToDTO(member);
     }
 
+    public MemberDTO getMemberByMemberId(String memberId) {
+        Member member = memberRepository.findByMemberId(memberId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found with memberId: " + memberId));
+        return convertToDTO(member);
+    }
+
     public MemberDTO getMemberByNic(String nic) {
         Member member = memberRepository.findByNic(nic)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found with NIC: " + nic));
