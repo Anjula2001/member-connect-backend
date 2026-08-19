@@ -1,5 +1,7 @@
 package com.memberconnect.backend.model;
 
+import com.memberconnect.backend.config.RolePermissions;
+import com.memberconnect.backend.enums.Permission;
 import com.memberconnect.backend.enums.Role;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -10,6 +12,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -52,9 +55,23 @@ public class User implements UserDetails {
 
     // ---------- UserDetails interface ----------
 
+    /**
+     * Emits both the role ("ROLE_HEAD_OFFICE") and every fine-grained permission the
+     * role carries ("G5_LIST_PROCESS"). Existing role-based checks keep working; new
+     * Grade 5 endpoints authorize on the permission instead, so a right can be moved
+     * between roles by editing {@link RolePermissions} alone.
+     *
+     * Authorities are resolved from the database on every request rather than read
+     * from the JWT, so a role change takes effect immediately without re-issuing tokens.
+     */
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
+        List<GrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_" + role.name()));
+        for (Permission permission : RolePermissions.forRole(role)) {
+            authorities.add(new SimpleGrantedAuthority(permission.name()));
+        }
+        return authorities;
     }
 
     @Override

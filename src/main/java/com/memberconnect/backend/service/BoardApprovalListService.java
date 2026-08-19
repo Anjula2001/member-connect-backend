@@ -35,6 +35,9 @@ public class BoardApprovalListService {
 	@Autowired
 	private MemberApplicationRepository memberApplicationRepository;
 
+	@Autowired
+	private AuditService auditService;
+
 	private BoardApprovalListDTO toDto(BoardApprovalList entity) {
 		BoardApprovalListDTO dto = new BoardApprovalListDTO();
 		dto.setId(entity.getId());
@@ -78,6 +81,8 @@ public class BoardApprovalListService {
 					.orElseThrow(() -> new RuntimeException("Application not found: " + applicationId));
 			application.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 			memberApplicationRepository.save(application);
+			auditService.record(AuditService.MODULE_APPLICATION, application.getId(),
+					"Added to Board Approval List", null, entity.getListId(), null);
 			entity.getApplications().add(application);
 		}
 

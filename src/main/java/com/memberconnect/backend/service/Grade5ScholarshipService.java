@@ -17,6 +17,7 @@ import com.memberconnect.backend.model.Grade5ExamMaster;
 import com.memberconnect.backend.model.Grade5ScholarshipRequest;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.model.MinorSavingsAccount;
+import com.memberconnect.backend.model.User;
 import com.memberconnect.backend.repository.Grade5ExamMasterRepository;
 import com.memberconnect.backend.repository.Grade5ScholarshipRepository;
 import com.memberconnect.backend.repository.MemberRepository;
@@ -44,6 +45,8 @@ public class Grade5ScholarshipService {
     private ScholarshipRemittanceRepository remittanceRepository;
     @Autowired
     private ScholarshipConfigRepository scholarshipConfigRepository;
+    @Autowired
+    private com.memberconnect.backend.config.CurrentUserService currentUserService;
 
     @Value("${grade5.scholarship.required.remitted.months:6}")
     private int defaultRequiredRemittedMonths;
@@ -229,7 +232,15 @@ public class Grade5ScholarshipService {
         entity.setMinorAmount(dto.getMinorAmount());
         entity.setIsDoubleAmount(dto.getIsDoubleAmount());
         entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
-       
+
+        // Location comes from the member's administering District Office, not from the
+        // logged-in user — a member may apply at any office (SRS 2.3.1) but the request
+        // belongs to the branch that holds their membership.
+        entity.setSubmissionLocation(member.getSubmissionLocation());
+        User currentUser = currentUserService.current();
+        entity.setCreatedBy(currentUser != null ? currentUser.getUsername() : null);
+        entity.setCreatedAt(java.time.LocalDateTime.now());
+
         List<MinorSavingsAccount> accounts =
                 minorRepo.findByBirthCertificateNo(dto.getBirthCertificateNumber());
 
@@ -389,6 +400,7 @@ public class Grade5ScholarshipService {
 
     // Search requests with filters
     public List<Grade5RequestListDTO> searchRequests(
+            List<String> locations,
             List<String> years,
             List<String> statuses,
             String receivedOn,
@@ -400,8 +412,24 @@ public class Grade5ScholarshipService {
     ) {
         LocalDate today = LocalDate.now();
 
+        // A District Office user is pinned to their own branch regardless of what the
+        // client asked for; the requested locations only narrow within what they may
+        // already see. Enforcing this here rather than in the UI is what stops a
+        // hand-crafted request from reading another branch's records.
+        String pinnedLocation = currentUserService.restrictedToLocation();
+
+        // Restricted, but no district on the account: return nothing rather than
+        // falling back to "everything". Failing open here would hand a misconfigured
+        // District Office login the national dataset.
+        if (currentUserService.isLocationRestricted() && pinnedLocation == null) {
+            return List.of();
+        }
+
+        List<String> effectiveLocations = resolveLocationFilter(locations, pinnedLocation);
+
         return repository.findAll()
                 .stream()
+                .filter(r -> matchesLocation(r.getSubmissionLocation(), effectiveLocations))
                 .filter(r -> years == null || years.isEmpty()
                         || years.contains(String.valueOf(r.getExamYear())))
                 .filter(r -> statuses == null || statuses.isEmpty()
@@ -501,12 +529,53 @@ public class Grade5ScholarshipService {
                             r.getExaminationNumber(),
                             r.getExamYear(),
                             r.getStatus(),
-                            r.getDistrict(),
+                            // The Location column means the District Office that owns the
+                            // request, not the student's school district — those are
+                            // different concepts and were previously conflated here.
+                            r.getSubmissionLocation(),
                             Boolean.TRUE.equals(r.getHasDeviation())
-                
+
                     );
                 })
                 .toList();
+    }
+
+    /**
+     * Works out which locations a search may actually cover.
+     *
+     * A pinned user (District Office) can never widen beyond their own branch: if they
+     * ask for other locations the request is narrowed back to theirs rather than
+     * rejected, so a stale filter in the UI degrades to "your own district" instead of
+     * an error. An unpinned user gets exactly what they asked for, and "ALL" or an
+     * empty selection means no location filtering at all.
+     */
+    private List<String> resolveLocationFilter(List<String> requested, String pinnedLocation) {
+        if (pinnedLocation != null) {
+            return List.of(pinnedLocation);
+        }
+        if (requested == null || requested.isEmpty()) {
+            return List.of();
+        }
+        List<String> cleaned = requested.stream()
+                .filter(location -> location != null && !location.isBlank())
+                .filter(location -> !"ALL".equalsIgnoreCase(location))
+                .toList();
+        return cleaned;
+    }
+
+    /**
+     * Rows saved before the location column existed carry a null location. They stay
+     * visible to everyone rather than disappearing, so enabling location scoping does
+     * not hide historical requests that nobody can re-tag.
+     */
+    private boolean matchesLocation(String requestLocation, List<String> locations) {
+        if (locations.isEmpty()) {
+            return true;
+        }
+        if (requestLocation == null || requestLocation.isBlank()) {
+            return true;
+        }
+        return locations.stream().anyMatch(location -> location.equalsIgnoreCase(requestLocation));
     }
 
     private boolean contains(String value, String key) {
@@ -584,6 +653,19 @@ public class Grade5ScholarshipService {
         if (!isGrade5StatusTransitionAllowed(currentStatus, newStatus)) {
             throw new RuntimeException(
                     "Cannot change status from " + currentStatus + " to " + newStatus
+            );
+        }
+
+        // A request that has already been picked up onto an approval list cannot be
+        // pulled back to New by the originating office — Head Office may be mid-way
+        // through a Board Meeting with it on the printed list. Deleting the list
+        // (MMS09/MMS16) is the supported way to release it.
+        if (newStatus == ScholarshipRequestStatus.NEW
+                && request.getApprovalListId() != null
+                && !request.getApprovalListId().isBlank()) {
+            throw new RuntimeException(
+                    "This request is attached to approval list " + request.getApprovalListId()
+                            + " and cannot be returned to New. Remove it from the list first."
             );
         }
 
