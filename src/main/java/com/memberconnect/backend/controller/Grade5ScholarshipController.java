@@ -73,6 +73,16 @@ public class Grade5ScholarshipController {
         return service.getFundDisbursementDetails(birthCertificateNo, examYear);
     }
 
+    // Calculate fund disbursement breakdown
+    @GetMapping("/calculate-disbursement")
+    public Map<String, Object> calculateDisbursement(
+            @RequestParam(defaultValue = "0") Integer months,
+            @RequestParam(required = false) String option,
+            @RequestParam(defaultValue = "false") Boolean hasMinorAccount
+    ) {
+        return service.calculateDisbursement(months, option, hasMinorAccount);
+    }
+
     // Get latest request for member
     @GetMapping("/{memberId}/request")
     public ResponseEntity<?> getLatestRequest(

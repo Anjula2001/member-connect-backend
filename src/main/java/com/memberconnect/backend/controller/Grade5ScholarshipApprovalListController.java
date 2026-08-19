@@ -18,6 +18,7 @@ public class Grade5ScholarshipApprovalListController {
     @Autowired
     private Grade5ScholarshipApprovalListService service;
 
+    // Create a new Grade 5 scholarship approval list.
     @PostMapping("/create")
     public ResponseEntity<?> createApprovalList(@RequestBody Grade5ScholarshipApprovalListDTO dto) {
         try {
@@ -28,11 +29,13 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
+    // Retrieve all Grade 5 scholarship approval lists.
     @GetMapping("/all")
     public ResponseEntity<List<Grade5ScholarshipApprovalListDTO>> getAllApprovalLists() {
         return ResponseEntity.ok(service.getAllApprovalLists());
     }
 
+    // Get approval list details by list ID.
     @GetMapping("/{listId}")
     public ResponseEntity<?> getApprovalListByListId(@PathVariable String listId) {
         try {
@@ -42,6 +45,7 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
+    // Get all scholarship requests associated with a specific approval list.
     @GetMapping("/{listId}/requests")
     public ResponseEntity<?> getRequestsByListId(@PathVariable String listId) {
         try {
@@ -52,6 +56,7 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
+    // Soft-delete or cancel an approval list by list ID.
     @DeleteMapping("/{listId}")
     public ResponseEntity<?> deleteApprovalList(@PathVariable String listId) {
         try {
@@ -62,11 +67,11 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
+    // Process /update the status and details of an approval list.
     @PutMapping("/{listId}/process")
     public ResponseEntity<?> processApprovalList(
             @PathVariable String listId,
-            @RequestBody Grade5ScholarshipApprovalListDTO dto
-    ) {
+            @RequestBody Grade5ScholarshipApprovalListDTO dto) {
         try {
             Grade5ScholarshipApprovalListDTO processed = service.processApprovalList(listId, dto);
             return ResponseEntity.ok(processed);
@@ -75,6 +80,7 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
+    // Restore a deleted or cancelled approval list.
     @PostMapping("/{listId}/restore")
     public ResponseEntity<?> restoreApprovalList(@PathVariable String listId) {
         try {

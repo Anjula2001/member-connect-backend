@@ -152,6 +152,36 @@ public class Grade5ScholarshipService {
         }
     }
 
+    private void validateFundDisbursement(Grade5StudentDTO dto) {
+        if (dto.getEligibleMonths() != null && dto.getEligibleMonths() < 0) {
+            throw new RuntimeException("Eligible months cannot be negative.");
+        }
+
+        String option = dto.getDisbursementOption();
+        if (option == null || option.trim().isEmpty()) {
+            throw new RuntimeException("Please select a fund disbursement option.");
+        }
+
+        boolean hasMinorAccount = Boolean.TRUE.equals(dto.getMinorAccountExists());
+
+        if (!hasMinorAccount && !"MEMBER_ONLY".equalsIgnoreCase(option)) {
+            throw new RuntimeException("Minor account disbursement options are not allowed without a minor account.");
+        }
+
+        if (hasMinorAccount && (dto.getMinorAccountNumber() == null || dto.getMinorAccountNumber().trim().isEmpty())) {
+            throw new RuntimeException("Minor account number is required.");
+        }
+
+        if ("MINOR_ONLY".equalsIgnoreCase(option) && (dto.getMinorAccountNumber() == null || dto.getMinorAccountNumber().trim().isEmpty())) {
+            throw new RuntimeException("Minor account number is required for Minor Account Only option.");
+        }
+
+        if ((dto.getMemberAmount() != null && dto.getMemberAmount() < 0)
+                || (dto.getMinorAmount() != null && dto.getMinorAmount() < 0)) {
+            throw new RuntimeException("Disbursement amounts cannot be negative.");
+        }
+    }
+
     private boolean shouldFollowDeviationProcess(LocalDate requestedDate, Integer examYear) {
         if (requestedDate == null || examYear == null) {
             return false;
@@ -202,6 +232,7 @@ public class Grade5ScholarshipService {
 
         validateMemberActiveOnExamLastDate(memberId, dto.getExamYear());
         validateScholarshipRemittance(memberId, dto.getExamYear());
+        validateFundDisbursement(dto);
 
         // Prevent duplicate
         if (repository.existsByExaminationNumber(dto.getExaminationNumber())) {
@@ -223,13 +254,19 @@ public class Grade5ScholarshipService {
         entity.setSchool(dto.getStudentSchool());
         entity.setDistrict(dto.getSchoolDistrict());
         entity.setDistrictCutOffMark(dto.getDistrictCutOffMark());
+        Map<String, Object> calc = calculateDisbursement(
+                dto.getEligibleMonths(),
+                dto.getDisbursementOption(),
+                dto.getMinorAccountExists()
+        );
+
         entity.setMinorAccountExists(dto.getMinorAccountExists());
         entity.setMinorAccountNumber(dto.getMinorAccountNumber());
         entity.setEligibleMonths(dto.getEligibleMonths());
-        entity.setDisbursementOption(dto.getDisbursementOption());
-        entity.setMemberAmount(dto.getMemberAmount());
-        entity.setMinorAmount(dto.getMinorAmount());
-        entity.setIsDoubleAmount(dto.getIsDoubleAmount());
+        entity.setDisbursementOption((String) calc.get("disbursementOption"));
+        entity.setMemberAmount((Integer) calc.get("memberAmount"));
+        entity.setMinorAmount((Integer) calc.get("minorAmount"));
+        entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
         entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
 
         List<MinorSavingsAccount> accounts = minorRepo.findByBirthCertificateNo(dto.getBirthCertificateNumber());
@@ -323,7 +360,46 @@ public class Grade5ScholarshipService {
 
         result.put("totalMonths", eligibleMonths);
         result.put("eligibleMonths", eligibleMonths);
-        result.put("doubleAmount", eligibleMonths >= 36);
+
+        String defaultOption = hasMinor ? "MEMBER_AND_MINOR" : "MEMBER_ONLY";
+        Map<String, Object> calc = calculateDisbursement(eligibleMonths, defaultOption, hasMinor);
+        result.putAll(calc);
+
+        return result;
+    }
+
+    // Calculate fund disbursement breakdown
+    public Map<String, Object> calculateDisbursement(Integer months, String option, Boolean hasMinorAccount) {
+        int eligibleMonths = (months != null && months >= 0) ? months : 0;
+        boolean isDouble = eligibleMonths >= 36;
+        int normalAmount = 5000;
+        int doubleAmount = 10000;
+        int totalAmount = isDouble ? doubleAmount : normalAmount;
+
+        boolean minorExists = Boolean.TRUE.equals(hasMinorAccount);
+        String resolvedOption = minorExists ? (option != null && !option.trim().isEmpty() ? option : "MEMBER_AND_MINOR") : "MEMBER_ONLY";
+
+        int memberAmount = 0;
+        int minorAmount = 0;
+
+        if ("MEMBER_ONLY".equalsIgnoreCase(resolvedOption)) {
+            memberAmount = totalAmount;
+            minorAmount = 0;
+        } else if ("MEMBER_AND_MINOR".equalsIgnoreCase(resolvedOption)) {
+            memberAmount = totalAmount / 2;
+            minorAmount = totalAmount / 2;
+        } else if ("MINOR_ONLY".equalsIgnoreCase(resolvedOption)) {
+            memberAmount = 0;
+            minorAmount = totalAmount;
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("isDoubleAmount", isDouble);
+        result.put("doubleAmount", isDouble);
+        result.put("totalAmount", totalAmount);
+        result.put("memberAmount", memberAmount);
+        result.put("minorAmount", minorAmount);
+        result.put("disbursementOption", resolvedOption);
 
         return result;
     }
@@ -524,6 +600,7 @@ public class Grade5ScholarshipService {
 
         validateMemberActiveOnExamLastDate(entity.getMemberId(), dto.getExamYear());
         validateScholarshipRemittance(entity.getMemberId(), dto.getExamYear());
+        validateFundDisbursement(dto);
 
         if (repository.existsByExaminationNumberAndRequestNoNot(
                 dto.getExaminationNumber(),
@@ -543,13 +620,19 @@ public class Grade5ScholarshipService {
         entity.setDistrict(dto.getSchoolDistrict());
         entity.setDistrictCutOffMark(dto.getDistrictCutOffMark());
 
+        Map<String, Object> calc = calculateDisbursement(
+                dto.getEligibleMonths(),
+                dto.getDisbursementOption(),
+                dto.getMinorAccountExists()
+        );
+
         entity.setMinorAccountExists(dto.getMinorAccountExists());
         entity.setMinorAccountNumber(dto.getMinorAccountNumber());
         entity.setEligibleMonths(dto.getEligibleMonths());
-        entity.setDisbursementOption(dto.getDisbursementOption());
-        entity.setMemberAmount(dto.getMemberAmount());
-        entity.setMinorAmount(dto.getMinorAmount());
-        entity.setIsDoubleAmount(dto.getIsDoubleAmount());
+        entity.setDisbursementOption((String) calc.get("disbursementOption"));
+        entity.setMemberAmount((Integer) calc.get("memberAmount"));
+        entity.setMinorAmount((Integer) calc.get("minorAmount"));
+        entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
         entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
 
         entity.setIncompleteReason(null);
