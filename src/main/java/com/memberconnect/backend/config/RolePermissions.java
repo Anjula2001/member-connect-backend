@@ -49,14 +49,23 @@ public final class RolePermissions {
                 Permission.G5_REQUEST_SUBMIT,
                 Permission.G5_REQUEST_INCOMPLETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-                // University (MMS21-MMS25). Fund requests are Head Office work, so
-                // this role can see them but not raise or decide them.
+                // University (MMS21-MMS25), and fund request preparation (MMS42-MMS46)
+                // as of 2026-08-19. This role now raises fund requests but still cannot
+                // decide them — US_FUND_APPROVE stays with Head Office / Board Secretary.
+                //
+                // That split is the point: it puts preparation and approval in different
+                // offices again, which is what granting US_FUND_APPROVE to Head Office
+                // had collapsed.
                 Permission.US_REQUEST_VIEW,
                 Permission.US_REQUEST_CREATE,
                 Permission.US_REQUEST_EDIT,
                 Permission.US_REQUEST_SUBMIT,
                 Permission.US_REQUEST_INCOMPLETE,
                 Permission.US_FUND_VIEW,
+                Permission.US_FUND_CREATE,
+                Permission.US_FUND_EDIT,
+                Permission.US_FUND_SUBMIT,
+                Permission.US_FUND_INCOMPLETE,
                 Permission.US_MASTER_VIEW));
 
         // Head Office — MMS06-MMS19. Owns the approval track end to end.
@@ -70,11 +79,17 @@ public final class RolePermissions {
                 Permission.G5_LIST_PROCESS,
                 Permission.G5_LIST_DELETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-                // University board track (MMS27-MMS41) and fund request preparation
-                // (MMS42-MMS46). Deliberately WITHOUT US_COMMITTEE_APPROVE, so the
-                // Committee gate is not cleared by the same office that runs the
-                // Board, and WITHOUT US_FUND_APPROVE, so the office that can change
-                // a payee's bank account cannot also release the payment to it.
+                // University board track (MMS27-MMS41) and fund requests end to end
+                // (MMS42-MMS47). Deliberately WITHOUT US_COMMITTEE_APPROVE, so the
+                // Committee gate is not cleared by the same office that runs the Board.
+                //
+                // US_FUND_APPROVE was granted here on 2026-08-19 by product decision:
+                // Head Office raises fund requests, so it also decides them. This is a
+                // knowing relaxation of the split that used to keep US_APPROVED_EDIT
+                // (changing a payee's bank account) apart from releasing payment into
+                // that account — both now sit with this role. If that pairing ever has
+                // to be broken again, move US_FUND_APPROVE out of HEAD_OFFICE and leave
+                // it with BOARD_SECRETARY, which is where it lived before.
                 Permission.US_REQUEST_VIEW,
                 Permission.US_REQUEST_SET_INACTIVE,
                 Permission.US_REQUEST_REOPEN,
@@ -89,6 +104,7 @@ public final class RolePermissions {
                 Permission.US_FUND_EDIT,
                 Permission.US_FUND_SUBMIT,
                 Permission.US_FUND_INCOMPLETE,
+                Permission.US_FUND_APPROVE,
                 Permission.US_MASTER_VIEW));
 
         // Board Secretary — the same approval track, plus delete privileges. Mirrors
@@ -104,9 +120,8 @@ public final class RolePermissions {
                 Permission.G5_LIST_PROCESS,
                 Permission.G5_LIST_DELETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-                // Everything Head Office holds on the University side, plus
-                // US_FUND_APPROVE — releasing a disbursement is the one step kept
-                // away from the office that prepares it.
+                // Everything Head Office holds on the University side, including
+                // US_FUND_APPROVE.
                 Permission.US_REQUEST_VIEW,
                 Permission.US_REQUEST_SET_INACTIVE,
                 Permission.US_REQUEST_REOPEN,
