@@ -117,6 +117,21 @@ public enum Permission {
      */
     US_FUND_APPROVE,
 
+    /**
+     * Deactivate a fund request from View Mode — the fund-request counterpart of
+     * US_REQUEST_SET_INACTIVE. Kept in the US_FUND_* namespace rather than reusing the
+     * request-level right, because a fund request has its own lifecycle and the two
+     * must be movable between roles independently.
+     */
+    US_FUND_SET_INACTIVE,
+
+    /**
+     * Return a fund request to New from View Mode — including out of Rejected or
+     * Inactive, which reverses a disbursement decision. Held apart from US_FUND_EDIT
+     * so the office that prepares a fund request cannot undo its rejection.
+     */
+    US_FUND_REOPEN,
+
     // ---- Masters (universities, programs, exam years) ----
     US_MASTER_VIEW,
     US_MASTER_MANAGE,

@@ -105,6 +105,10 @@ public final class RolePermissions {
                 Permission.US_FUND_SUBMIT,
                 Permission.US_FUND_INCOMPLETE,
                 Permission.US_FUND_APPROVE,
+                // Fund request status changes from View Mode (New <-> Inactive).
+                // Withheld from District Office, which raises fund requests.
+                Permission.US_FUND_SET_INACTIVE,
+                Permission.US_FUND_REOPEN,
                 Permission.US_MASTER_VIEW));
 
         // Board Secretary — the same approval track, plus delete privileges. Mirrors
@@ -137,6 +141,8 @@ public final class RolePermissions {
                 Permission.US_FUND_SUBMIT,
                 Permission.US_FUND_INCOMPLETE,
                 Permission.US_FUND_APPROVE,
+                Permission.US_FUND_SET_INACTIVE,
+                Permission.US_FUND_REOPEN,
                 Permission.US_MASTER_VIEW));
 
         // Scholarship Officer — not named as an actor anywhere in the SRS, but it is the
