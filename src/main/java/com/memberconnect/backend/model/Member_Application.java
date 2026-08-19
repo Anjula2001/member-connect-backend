@@ -29,6 +29,12 @@ public class Member_Application {
     @Enumerated(EnumType.STRING)
     private ApplicationStatus status;
 
+    // The District Office branch where this application was physically submitted/entered.
+    // Distinct from educationalDistrict below, which is the applicant's *working* district
+    // (spec: "The applicant can go to any District Office irrespective of their working district").
+    @Column(name = "SubmissionLocation")
+    private String submissionLocation;
+
     @Column(name = "ApplicationDate")
     private String applicationDate;
 

@@ -35,6 +35,9 @@ public class BoardApprovalListService {
 	@Autowired
 	private MemberApplicationRepository memberApplicationRepository;
 
+	@Autowired
+	private AuditService auditService;
+
 	private BoardApprovalListDTO toDto(BoardApprovalList entity) {
 		BoardApprovalListDTO dto = new BoardApprovalListDTO();
 		dto.setId(entity.getId());
@@ -50,6 +53,7 @@ public class BoardApprovalListService {
 		dto.setDecision(entity.getDecision());
 		dto.setRejectReason(entity.getRejectReason());
 		dto.setBoardRemarks(entity.getBoardRemarks());
+		dto.setApprovedListDocument(entity.getApprovedListDocument());
 		return dto;
 	}
 
@@ -77,6 +81,8 @@ public class BoardApprovalListService {
 					.orElseThrow(() -> new RuntimeException("Application not found: " + applicationId));
 			application.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 			memberApplicationRepository.save(application);
+			auditService.record(AuditService.MODULE_APPLICATION, application.getId(),
+					"Added to Board Approval List", null, entity.getListId(), null);
 			entity.getApplications().add(application);
 		}
 
@@ -111,6 +117,7 @@ public class BoardApprovalListService {
 					applicationDTO.setId(application.getId());
 					applicationDTO.setApplicationID(application.getApplicationID());
 					applicationDTO.setStatus(application.getStatus());
+					applicationDTO.setSubmissionLocation(application.getSubmissionLocation());
 					applicationDTO.setTitle(application.getTitle());
 					applicationDTO.setFullName(application.getFullName());
 					applicationDTO.setApplicationDate(application.getApplicationDate());
@@ -196,6 +203,10 @@ public class BoardApprovalListService {
 		entity.setDecision(approved ? "Approve" : "Reject");
 		entity.setRejectReason(rejectReason);
 		entity.setBoardRemarks(boardRemarks);
+		// Scanned copy of the signed board approval sheet, if one was attached.
+		if (dto.getApprovedListDocument() != null) {
+			entity.setApprovedListDocument(dto.getApprovedListDocument());
+		}
 
 		BoardApprovalList saved = boardApprovalListRepository.save(entity);
 		return toDto(saved);

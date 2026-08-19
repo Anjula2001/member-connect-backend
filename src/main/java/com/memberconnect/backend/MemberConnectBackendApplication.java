@@ -44,6 +44,17 @@ public class MemberConnectBackendApplication {
 				System.err.println("FAILED TO DROP member_death_record_status_check CONSTRAINT: " + e.getMessage());
 			}
 
+			// Hibernate writes the enum's values into a CHECK constraint when it first
+			// creates the column, and ddl-auto=update never revises it. Adding a value to
+			// ApplicationStatus (e.g. APPROVED) therefore compiles but is rejected by the
+			// database at runtime. Same reason the constraints above are dropped.
+			try {
+				jdbcTemplate.execute("ALTER TABLE member_application DROP CONSTRAINT IF EXISTS member_application_status_check;");
+				System.out.println("SUCCESSFULLY DROPPED member_application_status_check CONSTRAINT!");
+			} catch (Exception e) {
+				System.err.println("FAILED TO DROP member_application_status_check CONSTRAINT: " + e.getMessage());
+			}
+
 			memberDeathRecordService.seedCauseOfDeathIfEmpty();
 		};
 	}

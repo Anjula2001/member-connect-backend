@@ -17,4 +17,7 @@ public interface DormantApprovalListRepository extends JpaRepository<DormantAppr
 
     @Query("SELECT l FROM DormantApprovalList l LEFT JOIN FETCH l.members WHERE l.listId = :listId")
     Optional<DormantApprovalList> findByListIdWithMembers(String listId);
+
+	// Used to block deletion of a Board Meeting that still has approvals attached.
+	boolean existsByBoardMeetingId(Long boardMeetingId);
 }

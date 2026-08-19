@@ -16,6 +16,7 @@ public class MemberApplicationDTO {
     private Long id;
     private String applicationID;
     private ApplicationStatus status;
+    private String submissionLocation;
     private String title;
     private String fullName;
     private String applicationDate;

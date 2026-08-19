@@ -2,17 +2,22 @@ package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.MemberDTO;
 import com.memberconnect.backend.enums.MemberStatus;
+import com.memberconnect.backend.enums.Role;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.model.Member_Application;
+import com.memberconnect.backend.model.User;
 import com.memberconnect.backend.repository.MemberApplicationRepository;
 import com.memberconnect.backend.repository.MemberRepository;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import java.time.LocalDate;
 import java.util.List;
 @Service
 @Transactional
@@ -27,12 +32,21 @@ public class MemberService {
     @Autowired
     private ModelMapper modelMapper;
 
+    @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
+    private AuditService auditService;
+
+    @Autowired
+    private MemberFinancialsService memberFinancialsService;
+
     public MemberDTO saveMember(MemberDTO memberDTO) {
         if (memberRepository.findByNic(memberDTO.getNic()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "NIC already exists");
         }
         Member member = modelMapper.map(memberDTO, Member.class);
-        member.setMemberId("MEM-" + System.currentTimeMillis());
+        member.setMemberId(generateMemberId());
 
         // Link the originating application if applicationId was supplied
         if (memberDTO.getApplicationId() != null) {
@@ -45,7 +59,30 @@ public class MemberService {
         }
 
         Member saved = memberRepository.save(member);
+        auditService.record(AuditService.MODULE_MEMBER, saved.getId(),
+                "Member Record Created", null, saved.getMemberId(),
+                "Created from approved application");
+        // Carry the application's remittance amounts onto the member. Without this
+        // the amounts collected at registration are lost on approval, since Member
+        // has no remittance columns of its own.
+        memberFinancialsService.seedFromApplication(saved, saved.getApplication());
         return convertToDTO(saved);
+    }
+
+    // Generates a sequential, year-scoped ID such as "MEM-2026-001", matching the
+    // convention already used elsewhere in the app (e.g. RetirementService.generateRequestNo()).
+    private String generateMemberId() {
+        int year = LocalDate.now().getYear();
+        String prefix = "MEM-" + year + "-";
+
+        return memberRepository
+                .findFirstByMemberIdStartingWithOrderByMemberIdDesc(prefix)
+                .map(last -> {
+                    String lastId = last.getMemberId();
+                    int lastSeq = Integer.parseInt(lastId.substring(lastId.lastIndexOf("-") + 1));
+                    return prefix + String.format("%03d", lastSeq + 1);
+                })
+                .orElse(prefix + "001");
     }
 
     public List<MemberDTO> getAllMembers() {
@@ -74,7 +111,9 @@ public class MemberService {
     }
 
     public List<MemberDTO> searchMembers(String query, List<MemberStatus> statuses, List<String> locations,
-                                          String workingLocationType, String educationalZone) {
+                                          String workingLocationType, String educationalZone,
+                                          String educationalDistrict,
+                                          LocalDate membershipStartFrom, LocalDate membershipStartTo) {
 
         // Normalise sentinel values from the UI
         final String q = (query == null || query.isBlank()) ? null : query.toLowerCase().trim();
@@ -84,6 +123,8 @@ public class MemberService {
                 || "all-types".equalsIgnoreCase(workingLocationType)) ? null : workingLocationType.toLowerCase();
         final String ez = (educationalZone == null || educationalZone.isBlank()
                 || "all-zones".equalsIgnoreCase(educationalZone)) ? null : educationalZone.toLowerCase();
+        final String ed = (educationalDistrict == null || educationalDistrict.isBlank()
+                || "all-districts".equalsIgnoreCase(educationalDistrict)) ? null : educationalDistrict.toLowerCase();
 
         return memberRepository.findAll().stream()
                 .filter(m -> {
@@ -98,9 +139,11 @@ public class MemberService {
                     }
                     // status filter
                     if (filterByStatus && !statuses.contains(m.getStatus())) return false;
-                    // location filter (matches workingLocation field)
+                    // location filter — the District Office branch the member registered through,
+                    // NOT the working location (school/institution name). These are different concepts:
+                    // a member can work in one district and have registered via a District Office in another.
                     if (filterByLocation &&
-                            (m.getWorkingLocation() == null || !locations.contains(m.getWorkingLocation())))
+                            (m.getSubmissionLocation() == null || !locations.contains(m.getSubmissionLocation())))
                         return false;
                     // working location type filter
                     if (wlt != null &&
@@ -109,6 +152,18 @@ public class MemberService {
                     // educational zone filter
                     if (ez != null &&
                             (m.getEducationalZone() == null || !ez.equalsIgnoreCase(m.getEducationalZone())))
+                        return false;
+                    // educational district filter — the member's WORKING district, distinct
+                    // from the Location filter above (the District Office they registered at).
+                    if (ed != null &&
+                            (m.getEducationalDistrict() == null || !ed.equalsIgnoreCase(m.getEducationalDistrict())))
+                        return false;
+                    // Membership Start Date period
+                    if (membershipStartFrom != null &&
+                            (m.getMembershipStartDate() == null || m.getMembershipStartDate().isBefore(membershipStartFrom)))
+                        return false;
+                    if (membershipStartTo != null &&
+                            (m.getMembershipStartDate() == null || m.getMembershipStartDate().isAfter(membershipStartTo)))
                         return false;
                     return true;
                 })
@@ -121,6 +176,7 @@ public class MemberService {
                 .orElseThrow(() -> new RuntimeException("Member not found"));
         applyNonNullFields(existing, dto);
         Member updated = memberRepository.save(existing);
+        auditService.record(AuditService.MODULE_MEMBER, updated.getId(), "Profile Updated");
         return convertToDTO(updated);
     }
 
@@ -177,9 +233,41 @@ public class MemberService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Member not found"));
 
-        member.setStatus(status);
+        // Real activation is supposed to come from the Finance Module once the member's
+        // accounts are created there (out of scope for this build). Until that
+        // integration exists, allow Super Admin only to flip a member to ACTIVE, as a
+        // clearly testing-only stand-in — never treat this as the real activation path.
+        if (status == MemberStatus.ACTIVE && !currentUserIsSuperAdmin()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Activating a member is a testing-only override reserved for Super Admin " +
+                            "until the Finance Module integration exists."
+            );
+        }
 
-        return convertToDTO(memberRepository.save(member));
+        boolean isActivating = status == MemberStatus.ACTIVE && member.getStatus() != MemberStatus.ACTIVE;
+        MemberStatus before = member.getStatus();
+
+        member.setStatus(status);
+        Member saved = memberRepository.save(member);
+        auditService.record(AuditService.MODULE_MEMBER, saved.getId(), "Status Changed",
+                before == null ? null : before.name(),
+                status == null ? null : status.name(), null);
+
+        // MR12 — notify the member once their membership becomes active. Best-effort:
+        // NotificationService swallows delivery failures so activation still succeeds.
+        if (isActivating) {
+            notificationService.sendMembershipActivated(saved);
+        }
+
+        return convertToDTO(saved);
+    }
+
+    private boolean currentUserIsSuperAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null
+                && auth.getPrincipal() instanceof User user
+                && user.getRole() == Role.SUPER_ADMIN;
     }
 
     private MemberDTO convertToDTO(Member member) {
