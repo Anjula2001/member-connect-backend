@@ -5,10 +5,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "loan")
+@Table(
+    name = "loan",
+    indexes = @Index(name = "idx_loan_member_id", columnList = "member_id")
+)
 public class Loan {
 
     @Id
