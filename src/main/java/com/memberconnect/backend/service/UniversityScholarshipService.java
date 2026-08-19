@@ -1,5 +1,6 @@
 package com.memberconnect.backend.service;
 
+import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.ProgramOptionDto;
 import com.memberconnect.backend.dto.UniversityScholarshipFundRequestDto;
 import com.memberconnect.backend.dto.UniversityScholarshipRequestDto;
@@ -25,6 +26,7 @@ import com.memberconnect.backend.repository.UniversityRepository;
 import com.memberconnect.backend.repository.UniversityScholarshipExamMasterRepository;
 import com.memberconnect.backend.repository.UniversityScholarshipFundRequestRepository;
 import com.memberconnect.backend.repository.UniversityScholarshipRequestRepository;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.repository.MemberRepository;
@@ -40,6 +42,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +69,9 @@ public class UniversityScholarshipService {
 
     @Autowired
     private S3Service s3Service;
+
+    @Autowired
+    private com.memberconnect.backend.config.CurrentUserService currentUserService;
 
     @Value("${scholarship.required.remitted.months}")
     private int requiredRemittedMonths;
@@ -266,9 +272,28 @@ public class UniversityScholarshipService {
     }
 
     // Get all scholarship requests with member and university details
+    /**
+     * Every University Scholarship the caller is allowed to see.
+     *
+     * The MMS22 filters (status, date period, search key, sort) are still applied in
+     * the browser, but Location is enforced here. It has to be: a District Office user
+     * must not receive another branch's records at all, and a filter the client applies
+     * to data it already holds is a display preference, not a control.
+     */
     public List<UniversityScholarshipListDto> getAllScholarshipRequests() {
+        CurrentUserService.LocationScope locationScope =
+                currentUserService.resolveLocationScope(null);
+
+        // Restricted, but no district on the account: return nothing rather than
+        // falling back to "everything".
+        if (locationScope.showsNothing()) {
+            return List.of();
+        }
+
         return scholarshipRequestRepository.findAll()
                 .stream()
+                .filter(request -> currentUserService.matchesScope(
+                        locationScope, request.getSubmissionLocation()))
                 .map(this::toListDto)
                 .toList();
     }
@@ -278,6 +303,15 @@ public class UniversityScholarshipService {
         UniversityScholarshipRequest request = scholarshipRequestRepository
                 .findByUniversityScholarshipRequestID(requestId)
                 .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
+
+        // Scoping the list but not the by-ID lookup would leave the whole dataset
+        // reachable by iterating request IDs.
+        CurrentUserService.LocationScope locationScope =
+                currentUserService.resolveLocationScope(null);
+        if (locationScope.showsNothing()
+                || !currentUserService.matchesScope(locationScope, request.getSubmissionLocation())) {
+            throw new AccessDeniedException("This scholarship request belongs to another District Office");
+        }
 
         return toListDto(request);
     }
@@ -330,6 +364,10 @@ public class UniversityScholarshipService {
         dto.setAvailablePeriod(calculateAvailablePeriod(request, null));
         dto.setFundRequests(fundRequests.stream().map(this::toFundRequestDto).toList());
         dto.setTotalUniversityScholarships(countApprovedUniversityScholarships(request));
+        // The District Office that owns the request. The MMS22 Location filter reads
+        // this; it previously had nothing to read and fell back to the student's
+        // free-text address, which could never match a district name.
+        dto.setSubmissionLocation(request.getSubmissionLocation());
         return dto;
     }
 
@@ -864,7 +902,13 @@ public class UniversityScholarshipService {
 
         request.setFollowDeviationProcess(followDeviation);
 
-        request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
+        // Location comes from the member's administering District Office, not from the
+        // logged-in user — a member may apply at any office (MMS21) but the request
+        // belongs to the branch that holds their membership.
+        request.setSubmissionLocation(member.getSubmissionLocation());
+        com.memberconnect.backend.model.User currentUser = currentUserService.current();
+        request.setCreatedBy(currentUser != null ? currentUser.getUsername() : null);
+        request.setCreatedAt(LocalDateTime.now());
 
         // Set status NEW
         request.setStatus(UniversityScholarshipRequestStatus.NEW);
@@ -1095,26 +1139,67 @@ public class UniversityScholarshipService {
         return scholarshipRequestRepository.save(request);
     }
 
-    // Approve request by committee and forward to appropriate board list, or approve from board list
-    public UniversityScholarshipRequest approveRequest(String requestId) {
-                 UniversityScholarshipRequest request = scholarshipRequestRepository
-                         .findByUniversityScholarshipRequestID(requestId)
-                         .orElseThrow(() -> new RuntimeException("Request not found"));
+    /**
+     * MMS26 — the University Scholarship Committee clears a request for the Board.
+     *
+     * Previously this method also handled ADDED_TO_*_LIST -> APPROVED, which meant one
+     * endpoint served two different authority levels and gave a single caller a route
+     * from committee straight to final approval, skipping the Board Meeting entirely —
+     * no actual meeting date, no scanned report, no summary confirmation. That branch
+     * is gone: final approval now happens only through processApprovalDecisions.
+     */
+    public UniversityScholarshipRequest committeeApproveRequest(String requestId) {
+        UniversityScholarshipRequest request = scholarshipRequestRepository
+                .findByUniversityScholarshipRequestID(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
 
-                 if (request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST ||
-                     request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST) {
-                         request.setStatus(UniversityScholarshipRequestStatus.APPROVED);
-                 } else if (request.getStatus() == UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
-                         if (Boolean.TRUE.equals(request.getFollowDeviationProcess())) {
-                                 request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL);
-                         } else {
-                                 request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_BOARD_APPROVAL);
-                         }
-                 } else {
-                         throw new RuntimeException("Only requests submitted for committee approval or added to board approval list can be approved");
-                 }
+        if (request.getStatus() != UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
+            throw new RuntimeException(
+                    "Only requests submitted for Committee Approval can be approved by the Committee");
+        }
 
-                 return scholarshipRequestRepository.save(request);
+        // The Board track is decided here rather than at save time, per 3.2.1: the
+        // deviation check runs "once the approval is given by the University
+        // Scholarship Committee".
+        if (Boolean.TRUE.equals(request.getFollowDeviationProcess())) {
+            request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL);
+        } else {
+            request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_BOARD_APPROVAL);
+        }
+
+        stampCommitteeDecision(request);
+
+        return scholarshipRequestRepository.save(request);
+    }
+
+    /** MMS26 — the Committee rejects a request outright. */
+    public UniversityScholarshipRequest committeeRejectRequest(String requestId, String reason) {
+        if (!StringUtils.hasText(reason)) {
+            throw new RuntimeException("A reason is required to reject a scholarship request");
+        }
+
+        UniversityScholarshipRequest request = scholarshipRequestRepository
+                .findByUniversityScholarshipRequestID(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
+
+        // Previously this ran straight off the controller with no status check at all,
+        // so an already-Approved award could be flipped to Rejected.
+        if (request.getStatus() != UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
+            throw new RuntimeException(
+                    "Only requests submitted for Committee Approval can be rejected by the Committee");
+        }
+
+        request.setStatus(UniversityScholarshipRequestStatus.REJECTED);
+        request.setRejectReason(reason.trim());
+        stampCommitteeDecision(request);
+
+        return scholarshipRequestRepository.save(request);
+    }
+
+    private void stampCommitteeDecision(UniversityScholarshipRequest request) {
+        com.memberconnect.backend.model.User currentUser = currentUserService.current();
+        request.setCommitteeDecisionBy(currentUser != null ? currentUser.getUsername() : null);
+        request.setCommitteeDecisionAt(LocalDateTime.now());
     }
     
     // Mark request as incomplete with reason
@@ -1291,6 +1376,8 @@ public class UniversityScholarshipService {
             }
 
             java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            com.memberconnect.backend.model.User currentUser = currentUserService.current();
+            String processedBy = currentUser != null ? currentUser.getUsername() : null;
 
             for (Map<String, Object> dec : decisions) {
                 String requestId = (String) dec.get("requestId");
@@ -1301,9 +1388,27 @@ public class UniversityScholarshipService {
                         .findByUniversityScholarshipRequestID(requestId)
                         .orElseThrow(() -> new RuntimeException("Request not found: " + requestId));
 
+                // The expectedStatus argument used to be accepted and never read, so the
+                // normal and deviation endpoints behaved identically and neither checked
+                // that the request was actually on a list. A crafted payload could take a
+                // NEW request straight to APPROVED, skipping Committee and Board both.
+                if (request.getStatus() != expectedStatus) {
+                    throw new RuntimeException("Request " + requestId + " is not awaiting this approval list"
+                            + " (expected " + expectedStatus + ", found " + request.getStatus() + ")");
+                }
+
+                if (approvalListId != null && !approvalListId.equals(request.getApprovalListId())) {
+                    throw new RuntimeException("Request " + requestId
+                            + " does not belong to approval list " + approvalListId);
+                }
+
                 if ("reject".equalsIgnoreCase(action)) {
+                    // MMS32/MMS39 make the rejection reason mandatory.
+                    if (!StringUtils.hasText(reason)) {
+                        throw new RuntimeException("A rejection reason is required for request " + requestId);
+                    }
                     request.setStatus(UniversityScholarshipRequestStatus.REJECTED);
-                    request.setRejectReason(reason);
+                    request.setRejectReason(reason.trim());
                     System.out.println("SIMULATING NOTIFICATION: SMS sent to Student " + request.getStudentName() + " and Member: Request rejected. Reason: " + reason);
                     System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request rejected. Reason: " + reason);
                 } else {
@@ -1312,7 +1417,10 @@ public class UniversityScholarshipService {
                     System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request approved.");
                 }
 
-                request.setProcessedBy("user1");
+                // MMS33/MMS40 require the processing user's name to be displayed on the
+                // list afterwards. This was hardcoded to the literal "user1", which made
+                // every board decision in the system unattributable.
+                request.setProcessedBy(processedBy);
                 request.setProcessedAt(now);
                 if (scannedReportPath != null) {
                     request.setScannedReportPath(scannedReportPath);

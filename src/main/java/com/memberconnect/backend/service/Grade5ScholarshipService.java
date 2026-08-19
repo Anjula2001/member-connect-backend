@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.Grade5RequestListDTO;
 import com.memberconnect.backend.dto.Grade5StudentDTO;
 import com.memberconnect.backend.enums.MemberStatus;
@@ -492,23 +493,22 @@ public class Grade5ScholarshipService {
         LocalDate today = LocalDate.now();
 
         // A District Office user is pinned to their own branch regardless of what the
-        // client asked for; the requested locations only narrow within what they may
-        // already see. Enforcing this here rather than in the UI is what stops a
-        // hand-crafted request from reading another branch's records.
-        String pinnedLocation = currentUserService.restrictedToLocation();
+        // client asked for. Enforcing this here rather than in the UI is what stops a
+        // hand-crafted request from reading another branch's records. Shared with the
+        // University module so the two cannot drift apart on who sees what.
+        CurrentUserService.LocationScope locationScope =
+                currentUserService.resolveLocationScope(locations);
 
         // Restricted, but no district on the account: return nothing rather than
         // falling back to "everything". Failing open here would hand a misconfigured
         // District Office login the national dataset.
-        if (currentUserService.isLocationRestricted() && pinnedLocation == null) {
+        if (locationScope.showsNothing()) {
             return List.of();
         }
 
-        List<String> effectiveLocations = resolveLocationFilter(locations, pinnedLocation);
-
         return repository.findAll()
                 .stream()
-                .filter(r -> matchesLocation(r.getSubmissionLocation(), effectiveLocations))
+                .filter(r -> currentUserService.matchesScope(locationScope, r.getSubmissionLocation()))
                 .filter(r -> years == null || years.isEmpty()
                         || years.contains(String.valueOf(r.getExamYear())))
                 .filter(r -> statuses == null || statuses.isEmpty()
