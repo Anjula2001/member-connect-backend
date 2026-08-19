@@ -149,16 +149,23 @@ public class CurrentUserService {
     /**
      * Whether a record with the given location should be visible under a scope.
      *
-     * Records saved before the location column existed carry a null location. They
-     * stay visible rather than vanishing, so switching scoping on does not hide
-     * historical requests that nobody is able to re-tag.
+     * An untagged record (null or blank location) is hidden from a location-restricted
+     * caller. This reversed on 2026-08-19: it used to return true so that rows predating
+     * the location column stayed visible to everyone, but the practical effect was that
+     * a District Office user saw every untagged request in the system alongside their
+     * own, which makes the Location filter untrustworthy and leaks other branches' work.
+     *
+     * Untagged rows remain fully visible to unrestricted roles (Head Office, Board
+     * Secretary, Accounts, Scholarship Officer, Super Admin), so nothing becomes
+     * unreachable — and UniversityScholarshipLocationBackfill tags rows on every start
+     * once their member has a location on file.
      */
     public boolean matchesScope(LocationScope scope, String recordLocation) {
         if (!scope.filtered()) {
             return true;
         }
         if (recordLocation == null || recordLocation.isBlank()) {
-            return true;
+            return false;
         }
         return scope.locations().stream().anyMatch(recordLocation::equalsIgnoreCase);
     }
