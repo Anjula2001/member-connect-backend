@@ -43,6 +43,9 @@ public class MembershipDocumentService {
     @Autowired
     private ModelMapper modelMapper;
 
+    @Autowired
+    private AuditService auditService;
+
     /**
      * When true, only members with every document printed can be dispatched.
      * Spec 4.10 requires this to be configurable.
@@ -85,9 +88,20 @@ public class MembershipDocumentService {
                                 + ". Use Re-Print instead.");
             }
             setPrintedAt(member, type, now);
+            auditService.record(AuditService.MODULE_MEMBER, member.getId(),
+                    reprint ? "Documentation Re-Printed" : "Documentation Printed",
+                    null, label(type), null);
         }
 
         return memberRepository.saveAll(members).stream().map(this::toMemberDto).toList();
+    }
+
+    private String label(MembershipDocumentType type) {
+        return switch (type) {
+            case MEMBERSHIP_CARD -> "Membership Card";
+            case SIGNATURE_CARD -> "Signature Card";
+            case PASSBOOK -> "Passbook";
+        };
     }
 
     private LocalDateTime printedAt(Member member, MembershipDocumentType type) {
@@ -160,6 +174,11 @@ public class MembershipDocumentService {
 
         memberRepository.saveAll(members);
         MemberDocumentDispatch saved = dispatchRepository.save(dispatch);
+
+        for (Member member : members) {
+            auditService.record(AuditService.MODULE_MEMBER, member.getId(),
+                    "Documentation Dispatched", null, saved.getDispatchNo(), null);
+        }
 
         // Best-effort: a bounced notification must not roll back the dispatch.
         for (Member member : members) {

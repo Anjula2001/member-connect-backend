@@ -7,6 +7,13 @@ import org.springframework.stereotype.Repository;
 
 import com.memberconnect.backend.model.Audit;
 
+/**
+ * Queries over the audit trail.
+ *
+ * Both orderings are kept deliberately: the Progress tabs read oldest-first, because
+ * they render a chronological history, while the profile-change screens read
+ * newest-first, because they answer "what happened to this record most recently".
+ */
 @Repository
 public interface AuditRepository extends JpaRepository<Audit, Long> {
 
@@ -18,4 +25,13 @@ public interface AuditRepository extends JpaRepository<Audit, Long> {
     List<Audit> findByReferenceIdOrderByActionAtDesc(Long referenceId);
 
     List<Audit> findByModuleNameAndReferenceIdOrderByActionAtDesc(String moduleName, Long referenceId);
+
+    List<Audit> findByModuleNameAndReferenceIdOrderByActionAtAsc(String moduleName, Long referenceId);
+
+    /**
+     * A member's history spans two records: the member itself and the application it
+     * grew from. The spec requires both on the one Progress tab.
+     */
+    List<Audit> findByModuleNameInAndReferenceIdInOrderByActionAtAsc(
+            List<String> moduleNames, List<Long> referenceIds);
 }

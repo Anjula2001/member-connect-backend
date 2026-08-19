@@ -156,6 +156,9 @@ public class BoardApprovalListService {
 						.orElseThrow(() -> new RuntimeException("Application not found: " + applicationId));
 				application.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 				memberApplicationRepository.save(application);
+				// From dev: the Progress tab records the application joining the list.
+				auditService.record(AuditService.MODULE_APPLICATION, application.getId(),
+						"Added to Board Approval List", null, entity.getListId(), null);
 				entity.getApplications().add(application);
 			}
 		}

@@ -1,15 +1,12 @@
 package com.memberconnect.backend.service;
 
 import java.io.IOException;
-import java.io.File;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Optional;
-import java.util.HashSet;
 import java.util.stream.Collectors;
 
 import org.modelmapper.ModelMapper;

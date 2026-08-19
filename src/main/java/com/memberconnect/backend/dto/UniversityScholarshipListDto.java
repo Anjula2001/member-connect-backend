@@ -15,6 +15,9 @@ public class UniversityScholarshipListDto {
     private String nic;
     private String birthCertificateNumber;
     private String address;
+
+    /** District Office that owns the request — the field the Location filter reads. */
+    private String submissionLocation;
     private String mobile;
     private String applicantType;
     private String examYear;
@@ -325,5 +328,13 @@ public class UniversityScholarshipListDto {
 
     public void setFollowDeviationProcess(Boolean followDeviationProcess) {
         this.followDeviationProcess = followDeviationProcess;
+    }
+
+    public String getSubmissionLocation() {
+        return submissionLocation;
+    }
+
+    public void setSubmissionLocation(String submissionLocation) {
+        this.submissionLocation = submissionLocation;
     }
 }

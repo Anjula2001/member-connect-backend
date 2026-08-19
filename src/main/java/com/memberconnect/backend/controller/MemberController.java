@@ -10,9 +10,11 @@ import com.memberconnect.backend.service.RetirementService;
 import com.memberconnect.backend.service.TerminationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -80,8 +82,12 @@ public class MemberController {
             @RequestParam(required = false) List<MemberStatus> statuses,
             @RequestParam(required = false) List<String> locations,
             @RequestParam(required = false) String workingLocationType,
-            @RequestParam(required = false) String educationalZone) {
-        return memberService.searchMembers(query, statuses, locations, workingLocationType, educationalZone);
+            @RequestParam(required = false) String educationalZone,
+            @RequestParam(required = false) String educationalDistrict,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartTo) {
+        return memberService.searchMembers(query, statuses, locations, workingLocationType, educationalZone,
+                educationalDistrict, membershipStartFrom, membershipStartTo);
     }
 
     @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
