@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.Grade5RequestListDTO;
 import com.memberconnect.backend.dto.Grade5StudentDTO;
 import com.memberconnect.backend.enums.MemberStatus;
@@ -413,23 +414,22 @@ public class Grade5ScholarshipService {
         LocalDate today = LocalDate.now();
 
         // A District Office user is pinned to their own branch regardless of what the
-        // client asked for; the requested locations only narrow within what they may
-        // already see. Enforcing this here rather than in the UI is what stops a
-        // hand-crafted request from reading another branch's records.
-        String pinnedLocation = currentUserService.restrictedToLocation();
+        // client asked for. Enforcing this here rather than in the UI is what stops a
+        // hand-crafted request from reading another branch's records. Shared with the
+        // University module so the two cannot drift apart on who sees what.
+        CurrentUserService.LocationScope locationScope =
+                currentUserService.resolveLocationScope(locations);
 
         // Restricted, but no district on the account: return nothing rather than
         // falling back to "everything". Failing open here would hand a misconfigured
         // District Office login the national dataset.
-        if (currentUserService.isLocationRestricted() && pinnedLocation == null) {
+        if (locationScope.showsNothing()) {
             return List.of();
         }
 
-        List<String> effectiveLocations = resolveLocationFilter(locations, pinnedLocation);
-
         return repository.findAll()
                 .stream()
-                .filter(r -> matchesLocation(r.getSubmissionLocation(), effectiveLocations))
+                .filter(r -> currentUserService.matchesScope(locationScope, r.getSubmissionLocation()))
                 .filter(r -> years == null || years.isEmpty()
                         || years.contains(String.valueOf(r.getExamYear())))
                 .filter(r -> statuses == null || statuses.isEmpty()
@@ -538,44 +538,6 @@ public class Grade5ScholarshipService {
                     );
                 })
                 .toList();
-    }
-
-    /**
-     * Works out which locations a search may actually cover.
-     *
-     * A pinned user (District Office) can never widen beyond their own branch: if they
-     * ask for other locations the request is narrowed back to theirs rather than
-     * rejected, so a stale filter in the UI degrades to "your own district" instead of
-     * an error. An unpinned user gets exactly what they asked for, and "ALL" or an
-     * empty selection means no location filtering at all.
-     */
-    private List<String> resolveLocationFilter(List<String> requested, String pinnedLocation) {
-        if (pinnedLocation != null) {
-            return List.of(pinnedLocation);
-        }
-        if (requested == null || requested.isEmpty()) {
-            return List.of();
-        }
-        List<String> cleaned = requested.stream()
-                .filter(location -> location != null && !location.isBlank())
-                .filter(location -> !"ALL".equalsIgnoreCase(location))
-                .toList();
-        return cleaned;
-    }
-
-    /**
-     * Rows saved before the location column existed carry a null location. They stay
-     * visible to everyone rather than disappearing, so enabling location scoping does
-     * not hide historical requests that nobody can re-tag.
-     */
-    private boolean matchesLocation(String requestLocation, List<String> locations) {
-        if (locations.isEmpty()) {
-            return true;
-        }
-        if (requestLocation == null || requestLocation.isBlank()) {
-            return true;
-        }
-        return locations.stream().anyMatch(location -> location.equalsIgnoreCase(requestLocation));
     }
 
     private boolean contains(String value, String key) {
@@ -704,4 +666,4 @@ public class Grade5ScholarshipService {
         }
     }
 
-}
+}

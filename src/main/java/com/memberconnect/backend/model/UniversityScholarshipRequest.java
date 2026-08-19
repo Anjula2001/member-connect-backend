@@ -125,6 +125,75 @@ public class UniversityScholarshipRequest {
     @Column(name = "scanned_report_path")
     private String scannedReportPath;
 
+    /**
+     * The District Office this request belongs to, for the Location filter in MMS22.
+     *
+     * Copied from the member's SubmissionLocation at save time rather than from the
+     * logged-in user, because the SRS lets a member apply at any District Office
+     * "irrespective of the district of their working address" — the request stays with
+     * the office that administers the member. Deliberately a snapshot: moving a member
+     * later must not relocate scholarship history a Board already acted on.
+     *
+     * The Location filter previously matched the student's free-text permanent address
+     * against a district name, which could never match. This is the field it should
+     * have been reading.
+     */
+    @Column(name = "SubmissionLocation")
+    private String submissionLocation;
+
+    @Column(name = "CreatedBy")
+    private String createdBy;
+
+    @Column(name = "CreatedAt")
+    private LocalDateTime createdAt;
+
+    /** MMS26 — who cleared the Committee gate, and when. */
+    @Column(name = "CommitteeDecisionBy")
+    private String committeeDecisionBy;
+
+    @Column(name = "CommitteeDecisionAt")
+    private LocalDateTime committeeDecisionAt;
+
+    public String getSubmissionLocation() {
+        return submissionLocation;
+    }
+
+    public void setSubmissionLocation(String submissionLocation) {
+        this.submissionLocation = submissionLocation;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public String getCommitteeDecisionBy() {
+        return committeeDecisionBy;
+    }
+
+    public void setCommitteeDecisionBy(String committeeDecisionBy) {
+        this.committeeDecisionBy = committeeDecisionBy;
+    }
+
+    public LocalDateTime getCommitteeDecisionAt() {
+        return committeeDecisionAt;
+    }
+
+    public void setCommitteeDecisionAt(LocalDateTime committeeDecisionAt) {
+        this.committeeDecisionAt = committeeDecisionAt;
+    }
+
     public UniversityScholarshipRequest() {}
     
     public Long getId() { return id; }
