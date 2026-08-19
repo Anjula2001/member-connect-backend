@@ -73,7 +73,7 @@ public class Grade5ScholarshipController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-    
+
     // Get minor account details
     @PreAuthorize("hasAuthority('G5_REQUEST_CREATE') or hasAuthority('G5_REQUEST_EDIT')")
     @GetMapping("/minor-account")
@@ -91,6 +91,17 @@ public class Grade5ScholarshipController {
             @RequestParam(required = false) Integer examYear
     ) {
         return service.getFundDisbursementDetails(birthCertificateNo, examYear);
+    }
+
+    // Calculate fund disbursement breakdown
+    @PreAuthorize("hasAuthority('G5_REQUEST_CREATE') or hasAuthority('G5_REQUEST_EDIT')")
+    @GetMapping("/calculate-disbursement")
+    public Map<String, Object> calculateDisbursement(
+            @RequestParam(defaultValue = "0") Integer months,
+            @RequestParam(required = false) String option,
+            @RequestParam(defaultValue = "false") Boolean hasMinorAccount
+    ) {
+        return service.calculateDisbursement(months, option, hasMinorAccount);
     }
 
     // Get latest request for member
@@ -129,7 +140,7 @@ public class Grade5ScholarshipController {
         String reason = body.get("reason");
         return service.markIncomplete(requestNo, reason);
     }
-    
+
     // Submit request
     @PreAuthorize("hasAuthority('G5_REQUEST_SUBMIT')")
     @PutMapping("/{requestNo}/submit")

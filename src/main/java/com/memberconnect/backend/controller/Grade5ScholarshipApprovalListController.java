@@ -14,8 +14,10 @@ import java.util.Map;
 /**
  * Head Office / Board Secretary territory (MMS07-MMS19).
  *
- * Annotations sit on the controller rather than the service so that a denial is not
- * swallowed by the catch(RuntimeException) inside each method and downgraded from 403
+ * Annotations sit on the controller rather than the service so that a denial is
+ * not
+ * swallowed by the catch(RuntimeException) inside each method and downgraded
+ * from 403
  * to 400 — AccessDeniedException is itself a RuntimeException.
  */
 @RestController
@@ -26,6 +28,7 @@ public class Grade5ScholarshipApprovalListController {
     @Autowired
     private Grade5ScholarshipApprovalListService service;
 
+    // Create a new Grade 5 scholarship approval list.
     @PreAuthorize("hasAuthority('G5_LIST_CREATE')")
     @PostMapping("/create")
     public ResponseEntity<?> createApprovalList(@RequestBody Grade5ScholarshipApprovalListDTO dto) {
@@ -37,12 +40,14 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
+    // Retrieve all Grade 5 scholarship approval lists.
     @PreAuthorize("hasAuthority('G5_LIST_VIEW')")
     @GetMapping("/all")
     public ResponseEntity<List<Grade5ScholarshipApprovalListDTO>> getAllApprovalLists() {
         return ResponseEntity.ok(service.getAllApprovalLists());
     }
 
+    // Get approval list details by list ID.
     @PreAuthorize("hasAuthority('G5_LIST_VIEW')")
     @GetMapping("/{listId}")
     public ResponseEntity<?> getApprovalListByListId(@PathVariable String listId) {
@@ -53,6 +58,7 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
+    // Get all scholarship requests associated with a specific approval list.
     @PreAuthorize("hasAuthority('G5_LIST_VIEW')")
     @GetMapping("/{listId}/requests")
     public ResponseEntity<?> getRequestsByListId(@PathVariable String listId) {
@@ -64,6 +70,7 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
+    // Soft-delete or cancel an approval list by list ID.
     @PreAuthorize("hasAuthority('G5_LIST_DELETE')")
     @DeleteMapping("/{listId}")
     public ResponseEntity<?> deleteApprovalList(@PathVariable String listId) {
@@ -75,12 +82,12 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
+    // Process /update the status and details of an approval list.
     @PreAuthorize("hasAuthority('G5_LIST_PROCESS')")
     @PutMapping("/{listId}/process")
     public ResponseEntity<?> processApprovalList(
             @PathVariable String listId,
-            @RequestBody Grade5ScholarshipApprovalListDTO dto
-    ) {
+            @RequestBody Grade5ScholarshipApprovalListDTO dto) {
         try {
             Grade5ScholarshipApprovalListDTO processed = service.processApprovalList(listId, dto);
             return ResponseEntity.ok(processed);
@@ -89,7 +96,9 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
-    // Repairs a list's own type/status metadata. Grouped with delete rights because it
+    // Restore a deleted or cancelled approval list.
+    // Repairs a list's own type/status metadata. Grouped with delete rights because
+    // it
     // rewrites list bookkeeping rather than acting on any individual request.
     @PreAuthorize("hasAuthority('G5_LIST_DELETE')")
     @PostMapping("/{listId}/restore")
