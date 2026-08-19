@@ -49,23 +49,19 @@ public final class RolePermissions {
                 Permission.G5_REQUEST_SUBMIT,
                 Permission.G5_REQUEST_INCOMPLETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-                // University (MMS21-MMS25), and fund request preparation (MMS42-MMS46)
-                // as of 2026-08-19. This role now raises fund requests but still cannot
-                // decide them — US_FUND_APPROVE stays with Head Office / Board Secretary.
+                // University scholarship requests (MMS21-MMS25) only.
                 //
-                // That split is the point: it puts preparation and approval in different
-                // offices again, which is what granting US_FUND_APPROVE to Head Office
-                // had collapsed.
+                // Fund requests (MMS42-MMS47) are deliberately absent in full — not even
+                // US_FUND_VIEW. Briefly granted on 2026-08-19 and revoked on 2026-08-20:
+                // the disbursement track belongs to Head Office / Board Secretary, and
+                // this role neither raises nor reads it. Because US_FUND_VIEW is what
+                // canAccessFundRequests() keys on, dropping it also removes the Fund
+                // Requests item from this role's sidebar.
                 Permission.US_REQUEST_VIEW,
                 Permission.US_REQUEST_CREATE,
                 Permission.US_REQUEST_EDIT,
                 Permission.US_REQUEST_SUBMIT,
                 Permission.US_REQUEST_INCOMPLETE,
-                Permission.US_FUND_VIEW,
-                Permission.US_FUND_CREATE,
-                Permission.US_FUND_EDIT,
-                Permission.US_FUND_SUBMIT,
-                Permission.US_FUND_INCOMPLETE,
                 Permission.US_MASTER_VIEW));
 
         // Head Office — MMS06-MMS19. Owns the approval track end to end.
