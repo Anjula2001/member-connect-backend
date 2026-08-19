@@ -16,4 +16,7 @@ public interface TerminationApprovalListRepository extends JpaRepository<Termina
 
     @Query("SELECT tal FROM TerminationApprovalList tal LEFT JOIN FETCH tal.requests WHERE tal.listId = :listId")
     Optional<TerminationApprovalList> findByListIdWithRequests(String listId);
+
+	// Used to block deletion of a Board Meeting that still has approvals attached.
+	boolean existsByBoardMeetingId(Long boardMeetingId);
 }

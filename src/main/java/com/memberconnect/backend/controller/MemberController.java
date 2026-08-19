@@ -10,8 +10,11 @@ import com.memberconnect.backend.service.RetirementService;
 import com.memberconnect.backend.service.TerminationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -35,26 +38,32 @@ public class MemberController {
         this.memberDeathRecordService = memberDeathRecordService;
     }
 
+    // Member records are only ever created from an approved Board Approval List.
+    @PreAuthorize("hasAnyRole('HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @PostMapping("/createMember")
     public MemberDTO createMember(@RequestBody MemberDTO memberDTO) {
         return memberService.saveMember(memberDTO);
     }
 
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/getMembers")
     public List<MemberDTO> getAllMembers() {
         return memberService.getAllMembers();
     }
 
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/getMemberById/{id}")
     public ResponseEntity<MemberDTO> getMemberById(@PathVariable Long id) {
         return ResponseEntity.ok(memberService.getMemberById(id));
     }
 
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/by-member-id/{memberId}")
     public ResponseEntity<MemberDTO> getMemberByMemberId(@PathVariable String memberId) {
         return ResponseEntity.ok(memberService.getMemberByMemberId(memberId));
     }
 
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/getMemberByNic/{nic}")
     public ResponseEntity<MemberDTO> getMemberByNic(@PathVariable String nic) {
         return ResponseEntity.ok(memberService.getMemberByNic(nic));
@@ -66,16 +75,22 @@ public class MemberController {
      * GET
      * /api/members/search?query=&statuses=ACTIVE,INACTIVE&locations=Colombo&workingLocationType=school&educationalZone=colombo-zone
      */
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/search")
     public List<MemberDTO> searchMembers(
             @RequestParam(required = false) String query,
             @RequestParam(required = false) List<MemberStatus> statuses,
             @RequestParam(required = false) List<String> locations,
             @RequestParam(required = false) String workingLocationType,
-            @RequestParam(required = false) String educationalZone) {
-        return memberService.searchMembers(query, statuses, locations, workingLocationType, educationalZone);
+            @RequestParam(required = false) String educationalZone,
+            @RequestParam(required = false) String educationalDistrict,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartTo) {
+        return memberService.searchMembers(query, statuses, locations, workingLocationType, educationalZone,
+                educationalDistrict, membershipStartFrom, membershipStartTo);
     }
 
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @PutMapping("/updateMember/{id}")
     public MemberDTO updateMember(
             @PathVariable Long id,
@@ -83,11 +98,17 @@ public class MemberController {
         return memberService.updateMember(id, memberDTO);
     }
 
+    // Not a defined business function anywhere in the spec — admin-only safety valve.
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @DeleteMapping("/deleteMember/{id}")
     public String deleteMember(@PathVariable Long id) {
         return memberService.deleteMember(id);
     }
 
+    // Real activation is meant to come from the Finance Module (out of scope here). Until
+    // that integration exists, MemberService.updateStatus() restricts the ACTIVE target
+    // specifically to Super Admin as a clearly-labelled testing-only override.
+    @PreAuthorize("hasAnyRole('HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @PatchMapping("/{id}/status")
     public MemberDTO updateStatus(
             @PathVariable Long id,

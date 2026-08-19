@@ -22,18 +22,27 @@ import com.memberconnect.backend.dto.UploadDocumentRequestDTO;
 import com.memberconnect.backend.dto.UploadDocumentResponseDTO;
 import com.memberconnect.backend.model.UploadedDocument;
 import com.memberconnect.backend.service.DocumentService;
+import com.memberconnect.backend.service.TerminationService;
 
 @RestController
 @RequestMapping("/api")
 @CrossOrigin(origins = "http://localhost:3000")
 public class DocumentController {
 
+    private static final String TERMINATION_REQUEST_TYPE = "termination-requests";
+
     private final DocumentService documentService;
     private final com.memberconnect.backend.service.S3Service s3Service;
+    private final TerminationService terminationService;
 
-    public DocumentController(DocumentService documentService, com.memberconnect.backend.service.S3Service s3Service) {
+    public DocumentController(
+            DocumentService documentService,
+            com.memberconnect.backend.service.S3Service s3Service,
+            TerminationService terminationService
+    ) {
         this.documentService = documentService;
         this.s3Service = s3Service;
+        this.terminationService = terminationService;
     }
 
     // --- Member application document endpoints ---
@@ -89,6 +98,11 @@ public class DocumentController {
             @RequestParam("file") MultipartFile file
     ) throws IOException {
         String applicationType = mapRequestTypeToApplicationType(requestType);
+
+        if (TERMINATION_REQUEST_TYPE.equals(requestType)) {
+            terminationService.assertDocumentsEditable(requestNo);
+        }
+
         return documentService.uploadDocument(
                 requestNo,
                 requiredDocumentId,
@@ -139,6 +153,11 @@ public class DocumentController {
             @PathVariable String requestType,
             @PathVariable Long uploadedDocumentId
     ) {
+        if (TERMINATION_REQUEST_TYPE.equals(requestType)) {
+            UploadedDocument document = documentService.getUploadedDocumentById(uploadedDocumentId);
+            terminationService.assertDocumentsEditable(document.getRequestNo());
+        }
+
         documentService.deleteUploadedDocument(uploadedDocumentId);
     }
 

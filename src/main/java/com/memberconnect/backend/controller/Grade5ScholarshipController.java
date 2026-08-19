@@ -16,11 +16,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
+import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.Grade5StudentDTO;
+import com.memberconnect.backend.enums.Permission;
+import com.memberconnect.backend.enums.ScholarshipRequestStatus;
 import com.memberconnect.backend.model.Grade5ScholarshipRequest;
 import com.memberconnect.backend.model.MinorSavingsAccount;
 import com.memberconnect.backend.service.Grade5ScholarshipService;
 
+/**
+ * Authorization note: the @PreAuthorize annotations sit on the controller rather than
+ * the service on purpose. Every method here wraps its service call in
+ * catch(RuntimeException) and AccessDeniedException extends RuntimeException, so a
+ * denial raised inside the service would be caught and downgraded to 400 Bad Request.
+ * Annotating the controller means Spring rejects the call before the method body runs
+ * and GlobalExceptionHandler returns a proper 403.
+ */
 @RestController
 @RequestMapping("/api/grade5")
 @CrossOrigin(origins = "http://localhost:3000")
@@ -29,7 +42,11 @@ public class Grade5ScholarshipController {
     @Autowired
     private Grade5ScholarshipService service;
 
+    @Autowired
+    private CurrentUserService currentUserService;
+
     // Validate exam number
+    @PreAuthorize("hasAuthority('G5_REQUEST_CREATE') or hasAuthority('G5_REQUEST_EDIT')")
     @GetMapping("/exists")
     public Map<String, Boolean> checkExamNumber(
             @RequestParam String examNo
@@ -43,6 +60,7 @@ public class Grade5ScholarshipController {
     }
 
     // Save full request
+    @PreAuthorize("hasAuthority('G5_REQUEST_CREATE')")
     @PostMapping("/save")
     public ResponseEntity<?> saveRequest(
             @RequestParam String memberId,
@@ -57,6 +75,7 @@ public class Grade5ScholarshipController {
     }
     
     // Get minor account details
+    @PreAuthorize("hasAuthority('G5_REQUEST_CREATE') or hasAuthority('G5_REQUEST_EDIT')")
     @GetMapping("/minor-account")
     public List<MinorSavingsAccount> getMinorAccount(
             @RequestParam String birthCertificateNo
@@ -65,6 +84,7 @@ public class Grade5ScholarshipController {
     }
 
     // Get fund disbursement details
+    @PreAuthorize("hasAuthority('G5_REQUEST_CREATE') or hasAuthority('G5_REQUEST_EDIT')")
     @GetMapping("/fund-details")
     public Map<String, Object> getFundDetails(
             @RequestParam String birthCertificateNo,
@@ -74,6 +94,7 @@ public class Grade5ScholarshipController {
     }
 
     // Calculate fund disbursement breakdown
+    @PreAuthorize("hasAuthority('G5_REQUEST_CREATE') or hasAuthority('G5_REQUEST_EDIT')")
     @GetMapping("/calculate-disbursement")
     public Map<String, Object> calculateDisbursement(
             @RequestParam(defaultValue = "0") Integer months,
@@ -84,6 +105,7 @@ public class Grade5ScholarshipController {
     }
 
     // Get latest request for member
+    @PreAuthorize("hasAuthority('G5_REQUEST_VIEW')")
     @GetMapping("/{memberId}/request")
     public ResponseEntity<?> getLatestRequest(
             @PathVariable String memberId
@@ -98,6 +120,7 @@ public class Grade5ScholarshipController {
     }
 
     // Get a specific request by requestNo
+    @PreAuthorize("hasAuthority('G5_REQUEST_VIEW')")
     @GetMapping("/request/{requestNo}")
     public ResponseEntity<?> getRequestByRequestNo(
             @PathVariable String requestNo
@@ -108,6 +131,7 @@ public class Grade5ScholarshipController {
     }
 
     // Mark incomplete
+    @PreAuthorize("hasAuthority('G5_REQUEST_INCOMPLETE')")
     @PutMapping("/{requestNo}/mark-incomplete")
     public Grade5ScholarshipRequest markIncomplete(
             @PathVariable String requestNo,
@@ -118,6 +142,7 @@ public class Grade5ScholarshipController {
     }
     
     // Submit request
+    @PreAuthorize("hasAuthority('G5_REQUEST_SUBMIT')")
     @PutMapping("/{requestNo}/submit")
     public ResponseEntity<?> submitRequest(
             @PathVariable String requestNo,
@@ -137,12 +162,14 @@ public class Grade5ScholarshipController {
     }
 
     // Get exam years for dropdown
+    @PreAuthorize("hasAuthority('G5_REQUEST_VIEW') or hasAuthority('G5_EXAM_MASTER_VIEW')")
     @GetMapping("/exam-years")
     public List<Integer> getExamYears() {
         return service.getExamYears();
     }
 
     // Check deviation info for a requested date and exam year
+    @PreAuthorize("hasAuthority('G5_REQUEST_CREATE') or hasAuthority('G5_REQUEST_EDIT')")
     @GetMapping("/check-deviation")
     public ResponseEntity<?> checkDeviation(
             @RequestParam String requestedDate,
@@ -158,8 +185,10 @@ public class Grade5ScholarshipController {
     }
 
     //get all created scholarship requests
+    @PreAuthorize("hasAuthority('G5_REQUEST_VIEW')")
     @GetMapping("/requests/search")
     public ResponseEntity<?> searchRequests(
+            @RequestParam(required = false) List<String> locations,
             @RequestParam(required = false) List<String> years,
             @RequestParam(required = false) List<String> statuses,
             @RequestParam(defaultValue = "ALL_DAYS") String receivedOn,
@@ -171,7 +200,7 @@ public class Grade5ScholarshipController {
     ) {
         try {
             return ResponseEntity.ok(
-                    service.searchRequests(years,statuses,receivedOn,fromDate,toDate,search,sortBy,sortDirection)
+                    service.searchRequests(locations,years,statuses,receivedOn,fromDate,toDate,search,sortBy,sortDirection)
             );
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -179,6 +208,7 @@ public class Grade5ScholarshipController {
     }
 
     // Update request details
+    @PreAuthorize("hasAuthority('G5_REQUEST_EDIT')")
     @PutMapping("/{requestNo}/update")
     public ResponseEntity<?> updateRequest(
             @PathVariable String requestNo,
@@ -192,12 +222,25 @@ public class Grade5ScholarshipController {
         }
     }
 
-    // Change request status (view mode)
+    /**
+     * Change request status (view mode).
+     *
+     * The right required depends on the target status, not on the endpoint, so this
+     * cannot be a single @PreAuthorize. The check runs before the try/catch below —
+     * inside it, the AccessDeniedException would be caught as a RuntimeException and
+     * returned as 400 instead of 403.
+     */
     @PutMapping("/{requestNo}/status")
     public ResponseEntity<?> changeRequestStatus(
             @PathVariable String requestNo,
             @RequestBody Map<String, String> body
     ) {
+        String currentStatus = service.getRequestByRequestNo(requestNo)
+                .map(Grade5ScholarshipRequest::getStatus)
+                .orElse(null);
+        currentUserService.require(
+                requiredPermissionForStatusChange(currentStatus, body.get("status")));
+
         try {
             String status = body.get("status");
             Grade5ScholarshipRequest updated = service.changeRequestStatus(requestNo, status);
@@ -206,4 +249,39 @@ public class Grade5ScholarshipController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
-}
+
+    /**
+     * Maps a status change to the right needed to perform it.
+     *
+     * Two moves are deliberately privileged above ordinary edit rights:
+     *   -> INACTIVE            SRS 2.3.4 qualifies this everywhere with "the user needs
+     *                          Inactive rights", so it is not part of everyday editing.
+     *   REJECTED -> NEW        This reverses a Board decision, so it needs
+     *                          G5_REQUEST_REOPEN, which District Office does not hold.
+     *
+     * Every other move to NEW stays on ordinary edit rights: INCOMPLETE -> NEW is the
+     * normal "fix the request and carry on" path, and SUBMITTED -> NEW is explicitly
+     * granted to the originating office by MMS05.
+     *
+     * An unrecognised status falls through to G5_REQUEST_EDIT and is then rejected by
+     * the service's own validation, so a bad payload cannot pick a weaker right.
+     */
+    private Permission requiredPermissionForStatusChange(String currentStatus, String requestedStatus) {
+        if (requestedStatus == null) {
+            return Permission.G5_REQUEST_EDIT;
+        }
+
+        if (ScholarshipRequestStatus.INACTIVE.name().equalsIgnoreCase(requestedStatus)) {
+            return Permission.G5_REQUEST_SET_INACTIVE;
+        }
+
+        boolean isReopeningRejection =
+                ScholarshipRequestStatus.NEW.name().equalsIgnoreCase(requestedStatus)
+                        && ScholarshipRequestStatus.REJECTED.name().equalsIgnoreCase(currentStatus);
+        if (isReopeningRejection) {
+            return Permission.G5_REQUEST_REOPEN;
+        }
+
+        return Permission.G5_REQUEST_EDIT;
+    }
+}
