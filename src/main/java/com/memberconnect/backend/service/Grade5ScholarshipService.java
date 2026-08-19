@@ -17,6 +17,7 @@ import com.memberconnect.backend.model.Grade5ExamMaster;
 import com.memberconnect.backend.model.Grade5ScholarshipRequest;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.model.MinorSavingsAccount;
+import com.memberconnect.backend.model.User;
 import com.memberconnect.backend.repository.Grade5ExamMasterRepository;
 import com.memberconnect.backend.repository.Grade5ScholarshipRepository;
 import com.memberconnect.backend.repository.MemberRepository;
@@ -43,6 +44,8 @@ public class Grade5ScholarshipService {
     private ScholarshipRemittanceRepository remittanceRepository;
     @Autowired
     private ScholarshipConfigRepository scholarshipConfigRepository;
+    @Autowired
+    private com.memberconnect.backend.config.CurrentUserService currentUserService;
 
     @Value("${grade5.scholarship.required.remitted.months:6}")
     private int defaultRequiredRemittedMonths;
@@ -269,518 +272,6 @@ public class Grade5ScholarshipService {
         entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
         entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
 
-        List<MinorSavingsAccount> accounts = minorRepo.findByBirthCertificateNo(dto.getBirthCertificateNumber());
-
-        boolean hasMinorAccount = !accounts.isEmpty();
-
-        if (hasMinorAccount) {
-            System.out.println("Minor account found");
-        } else {
-            System.out.println("No minor account found");
-            entity = new Grade5ScholarshipRequest();
-            entity.setRequestNo(generateRequestNo());
-            entity.setMemberId(memberId);
-            entity.setRequestedDate(LocalDate.now());
-            entity.setCreatedDate(LocalDate.now());
-            entity.setOfficeLocation(resolveCurrentUserLocation());
-        }
-
-        entity.setStudentName(dto.getStudentName());
-        entity.setBirthDate(dto.getBirthDate());
-        entity.setGender(dto.getGender());
-        entity.setExaminationNumber(dto.getExaminationNumber());
-        entity.setExamYear(dto.getExamYear());
-        entity.setMarksObtained(dto.getMarksObtained());
-        entity.setBirthCertificateNumber(dto.getBirthCertificateNumber());
-        entity.setSchool(dto.getStudentSchool());
-        entity.setDistrict(dto.getSchoolDistrict());
-        entity.setDistrictCutOffMark(dto.getDistrictCutOffMark());
-
-        Map<String, Object> calc = calculateDisbursement(dto.getEligibleMonths(), dto.getDisbursementOption(), dto.getMinorAccountExists());
-        entity.setMinorAccountExists(dto.getMinorAccountExists());
-        entity.setMinorAccountNumber(dto.getMinorAccountNumber());
-        entity.setEligibleMonths(dto.getEligibleMonths());
-        entity.setDisbursementOption((String) calc.get("disbursementOption"));
-        entity.setMemberAmount((Integer) calc.get("memberAmount"));
-        entity.setMinorAmount((Integer) calc.get("minorAmount"));
-        entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
-        entity.setIncompleteReason(null);
-        entity.setHasDeviation(shouldFollowDeviationProcess(entity.getRequestedDate(), entity.getExamYear()));
-        entity.setStatus("NEW");
-
-        Grade5ScholarshipRequest saved = repository.save(entity);
-        try { notificationService.sendGrade5SubmissionNotification(saved, member); } catch (Exception e) { System.err.println("Notification trigger failed: " + e.getMessage()); }
-        return saved;
-    }
-
-    private String resolveCurrentUserLocation() {
-        try {
-            User currentUser = currentUserService.getCurrentUser();
-            if (currentUser != null && currentUser.getWorkLocation() != null) return currentUser.getWorkLocation();
-        } catch (Exception e) {}
-        return "Head Office";
-    }
-
-    public Map<String, Object> computeDeviationInfo(LocalDate requestedDate, Integer examYear) {
-        Map<String, Object> result = new HashMap<>();
-        if (examYear == null || requestedDate == null) {
-            result.put("isDeviation", false);
-            result.put("reason", null);
-            return result;
-        }
-        Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear).orElse(null);
-        if (examMaster == null || examMaster.getClosingDate() == null) {
-            result.put("isDeviation", false);
-            result.put("reason", null);
-            return result;
-        }
-        LocalDate closingDate = examMaster.getClosingDate();
-        boolean isLate = requestedDate.isAfter(closingDate);
-        result.put("isDeviation", isLate);
-        result.put("closingDate", closingDate.toString());
-        result.put("requestedDate", requestedDate.toString());
-        result.put("reason", isLate ? "Requested date (" + requestedDate + ") is after closing date (" + closingDate + ")." : "Requested date is on or before closing date (" + closingDate + ").");
-        return result;
-    }
-
-    private boolean shouldFollowDeviationProcess(LocalDate requestedDate, Integer examYear) {
-        return Boolean.TRUE.equals(computeDeviationInfo(requestedDate, examYear).get("isDeviation"));
-    }
-
-    private String generateRequestNo() {
-        int currentYear = LocalDate.now().getYear();
-        String prefix = "G5-" + currentYear + "-";
-        return repository.findTopByRequestNoStartingWithOrderByIdDesc(prefix)
-                .map(last -> {
-                    String lastNo = last.getRequestNo();
-                    int lastSeq = Integer.parseInt(lastNo.substring(lastNo.lastIndexOf("-") + 1));
-                    return prefix + String.format("%03d", lastSeq + 1);
-                })
-                .orElse(prefix + "001");
-    }
-
-    public Map<String, Object> getFundDisbursementDetails(String birthCertificateNo, Integer examYear) {
-        List<MinorSavingsAccount> accounts = minorRepo.findByBirthCertificateNo(birthCertificateNo);
-        Map<String, Object> result = new HashMap<>();
-        boolean hasMinor = !accounts.isEmpty();
-        result.put("hasMinorAccount", hasMinor);
-        if (!hasMinor) {
-            result.put("minorAccountNo", null);
-            result.put("totalMonths", 0);
-            result.put("eligibleMonths", 0);
-            result.put("doubleAmount", false);
-            result.putAll(calculateDisbursement(0, "MEMBER_ONLY", false));
-            return result;
-        }
-        MinorSavingsAccount account = accounts.get(0);
-        result.put("minorAccountNo", account.getMinorAccountNo());
-        String examMonthLimit = null;
-        if (examYear != null) {
-            Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear).orElse(null);
-            if (examMaster != null && examMaster.getExamDate() != null) {
-                examMonthLimit = examMaster.getExamDate().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
-            }
-        }
-        List<com.memberconnect.backend.model.MinorAccountRemittance> remittances = minorAccountRemittanceRepository.findByMinorAccountNo(account.getMinorAccountNo());
-        final String targetExamMonth = examMonthLimit;
-        double minAmount = scholarshipConfigRepository.findByConfigKey("grade5.minor.account.required.remittance.amount")
-                .or(() -> scholarshipConfigRepository.findByConfigKey("minor.account.required.remittance.amount"))
-                .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue).map(Double::valueOf).orElse(defaultMinMinorRemittanceAmount);
-        int eligibleMonths = (int) remittances.stream()
-                .filter(r -> r.getRemittanceAmount() != null && r.getRemittanceAmount() >= minAmount)
-                .filter(r -> {
-                    if (targetExamMonth == null) return true;
-                    String month = r.getRemittanceMonth();
-                    if (month == null) return false;
-                    return month.replace(".", "-").compareTo(targetExamMonth.replace(".", "-")) <= 0;
-                }).count();
-        result.put("totalMonths", eligibleMonths);
-        result.put("eligibleMonths", eligibleMonths);
-        result.putAll(calculateDisbursement(eligibleMonths, hasMinor ? "MEMBER_AND_MINOR" : "MEMBER_ONLY", hasMinor));
-        return result;
-    }
-
-    public Map<String, Object> calculateDisbursement(Integer months, String option, Boolean hasMinorAccount) {
-        int eligibleMonths = (months != null && months >= 0) ? months : 0;
-        boolean isDouble = eligibleMonths >= 36;
-        int totalAmount = isDouble ? 10000 : 5000;
-        boolean minorExists = Boolean.TRUE.equals(hasMinorAccount);
-        String resolvedOption = minorExists ? (option != null && !option.trim().isEmpty() ? option : "MEMBER_AND_MINOR") : "MEMBER_ONLY";
-        int memberAmount = 0, minorAmount = 0;
-        if ("MEMBER_ONLY".equalsIgnoreCase(resolvedOption)) memberAmount = totalAmount;
-        else if ("MEMBER_AND_MINOR".equalsIgnoreCase(resolvedOption)) { memberAmount = totalAmount / 2; minorAmount = totalAmount / 2; }
-        else if ("MINOR_ONLY".equalsIgnoreCase(resolvedOption)) minorAmount = totalAmount;
-        Map<String, Object> result = new HashMap<>();
-        result.put("isDoubleAmount", isDouble);
-        result.put("doubleAmount", isDouble);
-        result.put("totalAmount", totalAmount);
-        result.put("memberAmount", memberAmount);
-        result.put("minorAmount", minorAmount);
-        result.put("disbursementOption", resolvedOption);
-        return result;
-    }
-
-    public Grade5ScholarshipRequest getLatestRequest(String memberId) {
-        return repository.findTopByMemberIdOrderByIdDesc(memberId).orElse(null);
-    }
-
-    public java.util.Optional<Grade5ScholarshipRequest> getRequestByRequestNo(String requestNo) {
-        return repository.findByRequestNo(requestNo);
-    }
-
-    public Grade5ScholarshipRequest submitRequest(String requestNo, String status) {
-        Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo)
-                .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
-        if (!"NEW".equals(request.getStatus()) && !"INCOMPLETE".equals(request.getStatus())) {
-            throw new RuntimeException("Only NEW or INCOMPLETE requests can be submitted");
-        }
-        boolean isDeviation = Boolean.TRUE.equals(request.getHasDeviation()) || shouldFollowDeviationProcess(request.getRequestedDate(), request.getExamYear()) || (status != null && status.toUpperCase().contains("DEVIATION"));
-        request.setStatus(isDeviation ? ScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_APPROVAL.name() : ScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_APPROVAL.name());
-        request.setHasDeviation(isDeviation);
-        request.setIncompleteReason(null);
-        return repository.save(request);
-    }
-
-    public List<Integer> getExamYears() {
-        return Grade5ExamMasterRepository.findAll().stream().map(Grade5ExamMaster::getYear).sorted(Comparator.reverseOrder()).toList();
-    }
-
-    public List<Grade5RequestListDTO> searchRequests(List<String> locations, List<String> years, List<String> statuses, String receivedOn, String fromDate, String toDate, String search, String sortBy, String sortDirection) {
-        return repository.findAll().stream()
-                .filter(req -> {
-                    if (locations == null || locations.isEmpty()) return true;
-                    if (req.getOfficeLocation() != null && locations.contains(req.getOfficeLocation())) return true;
-                    if (req.getDistrict() != null && locations.contains(req.getDistrict())) return true;
-                    if (req.getDistrict() != null) {
-                        for (String z : educationalDistrictZoneRepository.findZoneByDistrictIgnoreCase(req.getDistrict())) { if (locations.contains(z)) return true; }
-                    }
-                    return false;
-                })
-                .filter(req -> years == null || years.isEmpty() || (req.getExamYear() != null && years.contains(String.valueOf(req.getExamYear()))))
-                .filter(req -> statuses == null || statuses.isEmpty() || (req.getStatus() != null && statuses.contains(req.getStatus())))
-                .filter(req -> {
-                    if (req.getRequestedDate() == null) return false;
-                    LocalDate reqDate = req.getRequestedDate(), today = LocalDate.now();
-                    if ("TODAY".equalsIgnoreCase(receivedOn)) return reqDate.equals(today);
-                    if ("LAST_7_DAYS".equalsIgnoreCase(receivedOn)) return !reqDate.isBefore(today.minusDays(7));
-                    if ("LAST_30_DAYS".equalsIgnoreCase(receivedOn)) return !reqDate.isBefore(today.minusDays(30));
-                    if ("THIS_MONTH".equalsIgnoreCase(receivedOn)) return reqDate.getYear() == today.getYear() && reqDate.getMonth() == today.getMonth();
-                    if ("THIS_YEAR".equalsIgnoreCase(receivedOn)) return reqDate.getYear() == today.getYear();
-                    if ("CUSTOM".equalsIgnoreCase(receivedOn)) {
-                        if (fromDate != null && !fromDate.isBlank() && reqDate.isBefore(LocalDate.parse(fromDate))) return false;
-                        if (toDate != null && !toDate.isBlank() && reqDate.isAfter(LocalDate.parse(toDate))) return false;
-                    }
-                    return true;
-                })
-                .filter(req -> {
-                    if (search == null || search.isBlank()) return true;
-                    String query = search.trim().toLowerCase();
-                    return (req.getRequestNo() != null && req.getRequestNo().toLowerCase().contains(query)) ||
-                           (req.getMemberId() != null && req.getMemberId().toLowerCase().contains(query)) ||
-                           (req.getStudentName() != null && req.getStudentName().toLowerCase().contains(query)) ||
-                           (req.getExaminationNumber() != null && req.getExaminationNumber().toLowerCase().contains(query)) ||
-                           (req.getBirthCertificateNumber() != null && req.getBirthCertificateNumber().toLowerCase().contains(query));
-                })
-                .map(this::mapToRequestListDTO)
-                .sorted((a, b) -> {
-                    int comp;
-                    if ("REQUEST_NO".equalsIgnoreCase(sortBy)) comp = compareNullable(a.getRequestNo(), b.getRequestNo());
-                    else if ("STUDENT_NAME".equalsIgnoreCase(sortBy)) comp = compareNullable(a.getStudentName(), b.getStudentName());
-                    else if ("MEMBER_NAME".equalsIgnoreCase(sortBy)) comp = compareNullable(a.getMemberName(), b.getMemberName());
-                    else if ("MARKS".equalsIgnoreCase(sortBy)) comp = (a.getMarksObtained() != null ? a.getMarksObtained() : 0).compareTo(b.getMarksObtained() != null ? b.getMarksObtained() : 0);
-                    else {
-                        LocalDate d1 = a.getRequestedDate() != null ? LocalDate.parse(a.getRequestedDate()) : LocalDate.MIN;
-                        LocalDate d2 = b.getRequestedDate() != null ? LocalDate.parse(b.getRequestedDate()) : LocalDate.MIN;
-                        comp = d1.compareTo(d2);
-                    }
-                    return "DESC".equalsIgnoreCase(sortDirection) ? -comp : comp;
-                }).toList();
-    }
-
-    private <T extends Comparable<T>> int compareNullable(T a, T b) {
-        if (a == null && b == null) return 0;
-        if (a == null) return -1;
-        if (b == null) return 1;
-        return a.compareTo(b);
-    }
-
-    private Grade5RequestListDTO mapToRequestListDTO(Grade5ScholarshipRequest req) {
-        Grade5RequestListDTO dto = new Grade5RequestListDTO();
-        dto.setId(req.getId());
-        dto.setRequestNo(req.getRequestNo());
-        dto.setMemberId(req.getMemberId());
-        memberRepo.findByMemberId(req.getMemberId()).ifPresent(m -> { dto.setMemberName(m.getNameWithInitials()); dto.setMemberNic(m.getNic()); });
-        dto.setStudentName(req.getStudentName());
-        dto.setBirthDate(req.getBirthDate() != null ? req.getBirthDate().toString() : null);
-        dto.setGender(req.getGender());
-        dto.setExaminationNumber(req.getExaminationNumber());
-        dto.setExamYear(req.getExamYear());
-        dto.setMarksObtained(req.getMarksObtained());
-        dto.setBirthCertificateNumber(req.getBirthCertificateNumber());
-        dto.setStudentSchool(req.getSchool());
-        dto.setSchoolDistrict(req.getDistrict());
-        dto.setDistrictCutOffMark(req.getDistrictCutOffMark());
-        dto.setMinorAccountExists(req.getMinorAccountExists());
-        dto.setMinorAccountNumber(req.getMinorAccountNumber());
-        dto.setEligibleMonths(req.getEligibleMonths());
-        dto.setDisbursementOption(req.getDisbursementOption());
-        dto.setMemberAmount(req.getMemberAmount());
-        dto.setMinorAmount(req.getMinorAmount());
-        dto.setIsDoubleAmount(req.getIsDoubleAmount());
-        dto.setHasDeviation(req.getHasDeviation());
-        dto.setOfficeLocation(req.getOfficeLocation());
-        dto.setStatus(req.getStatus());
-        if (req.getRequestedDate() != null) dto.setRequestedDate(req.getRequestedDate().toString());
-        dto.setIncompleteReason(req.getIncompleteReason());
-        return dto;
-    }
-
-    public Grade5ScholarshipRequest updateRequest(String requestNo, Grade5StudentDTO dto) {
-        Grade5ScholarshipRequest entity = repository.findByRequestNo(requestNo).orElseThrow(() -> new RuntimeException("Grade 5 request not found: " + requestNo));
-        String status = entity.getStatus();
-        if ("APPROVED".equalsIgnoreCase(status) || "REJECTED".equalsIgnoreCase(status) || "SUBMITTED_FOR_APPROVAL".equalsIgnoreCase(status) || "SUBMITTED_FOR_NORMAL_APPROVAL".equalsIgnoreCase(status) || "SUBMITTED_FOR_DEVIATION_APPROVAL".equalsIgnoreCase(status) || "ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST".equalsIgnoreCase(status) || "ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST".equalsIgnoreCase(status)) throw new RuntimeException("Cannot edit a request with status: " + status);
-        entity.setStudentName(dto.getStudentName());
-        entity.setBirthDate(dto.getBirthDate());
-        entity.setGender(dto.getGender());
-        entity.setExaminationNumber(dto.getExaminationNumber());
-        entity.setExamYear(dto.getExamYear());
-        entity.setMarksObtained(dto.getMarksObtained());
-        entity.setBirthCertificateNumber(dto.getBirthCertificateNumber());
-        entity.setSchool(dto.getStudentSchool());
-        entity.setDistrict(dto.getSchoolDistrict());
-        entity.setDistrictCutOffMark(dto.getDistrictCutOffMark());
-        Map<String, Object> calc = calculateDisbursement(dto.getEligibleMonths(), dto.getDisbursementOption(), dto.getMinorAccountExists());
-        entity.setMinorAccountExists(dto.getMinorAccountExists());
-        entity.setMinorAccountNumber(dto.getMinorAccountNumber());
-        entity.setEligibleMonths(dto.getEligibleMonths());
-        entity.setDisbursementOption((String) calc.get("disbursementOption"));
-        entity.setMemberAmount((Integer) calc.get("memberAmount"));
-        entity.setMinorAmount((Integer) calc.get("minorAmount"));
-        entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
-        entity.setHasDeviation(shouldFollowDeviationProcess(entity.getRequestedDate(), entity.getExamYear()));
-        return repository.save(entity);
-    }
-
-    public Grade5ScholarshipRequest changeRequestStatus(String requestNo, String newStatusStr) {
-        Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo).orElseThrow(() -> new RuntimeException("Grade 5 request not found: " + requestNo));
-        ScholarshipRequestStatus newStatus;
-        try { newStatus = ScholarshipRequestStatus.valueOf(newStatusStr); } catch (IllegalArgumentException ex) { throw new RuntimeException("Invalid target status: " + newStatusStr); }
-        ScholarshipRequestStatus currentStatus;
-        try { currentStatus = ScholarshipRequestStatus.valueOf(request.getStatus()); } catch (IllegalArgumentException ex) { throw new RuntimeException("Current status unrecognized: " + request.getStatus()); }
-        if (currentStatus == newStatus) return request;
-        if (!isGrade5StatusTransitionAllowed(currentStatus, newStatus)) throw new RuntimeException("Cannot change status from " + currentStatus + " to " + newStatus);
-        if (newStatus == ScholarshipRequestStatus.NEW && request.getApprovalListId() != null && !request.getApprovalListId().isBlank()) throw new RuntimeException("This request is attached to approval list " + request.getApprovalListId() + " and cannot be returned to New.");
-        request.setStatus(newStatus.name());
-        if (newStatus == ScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_APPROVAL || newStatus == ScholarshipRequestStatus.ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST) request.setHasDeviation(true);
-        else if (newStatus == ScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_APPROVAL || newStatus == ScholarshipRequestStatus.ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST) request.setHasDeviation(false);
-        if (newStatus == ScholarshipRequestStatus.NEW) request.setIncompleteReason(null);
-        return repository.save(request);
-    }
-
-    private boolean isGrade5StatusTransitionAllowed(ScholarshipRequestStatus current, ScholarshipRequestStatus next) {
-        switch (current) {
-    @Autowired
-    private Grade5ScholarshipRepository repository;
-    @Autowired
-    private MinorSavingsAccountRepository minorRepo;
-    @Autowired
-    private MinorAccountRemittanceRepository minorAccountRemittanceRepository;
-    @Autowired
-    private Grade5ExamMasterRepository Grade5ExamMasterRepository;
-    @Autowired
-    private MemberRepository memberRepository;
-    @Autowired
-    private ScholarshipRemittanceRepository remittanceRepository;
-    @Autowired
-    private ScholarshipConfigRepository scholarshipConfigRepository;
-    @Autowired
-    private com.memberconnect.backend.config.CurrentUserService currentUserService;
-
-    @Value("${grade5.scholarship.required.remitted.months:6}")
-    private int defaultRequiredRemittedMonths;
-
-    @Value("${grade5.minor.account.required.remittance.amount:250.0}")
-    private double defaultMinMinorRemittanceAmount;
-
-    // Check exam number exists
-    public boolean isExamNumberExists(String examNo) {
-        return repository.existsByExaminationNumber(examNo);
-    }
-
-    public List<MinorSavingsAccount> getMinorAccounts(String birthCertificateNo) {
-        return minorRepo.findByBirthCertificateNo(birthCertificateNo);
-    }
-
-    private void validateMemberActiveOnExamLastDate(String memberId, Integer examYear) {
-        Member member = memberRepository.findByMemberId(memberId)
-                .orElseThrow(() -> new RuntimeException("Member not found"));
-
-        if (examYear == null) {
-            throw new RuntimeException("Selected exam year is required");
-        }
-
-        Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear)
-                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
-
-        LocalDate examLastDate = examMaster.getExamDate();
-
-        if (examLastDate == null) {
-            throw new RuntimeException("Selected exam date not found in Exam Master");
-        }
-
-        if (member.getStatus() != MemberStatus.ACTIVE
-                || member.getMembershipStartDate() == null
-                || member.getMembershipStartDate().isAfter(examLastDate)) {
-            throw new RuntimeException(
-                    "The Grade 5 Scholarship Request cannot be saved. The Member is not Active during the selected Exam"
-            );
-        }
-
-        LocalDate membershipStartDate = member.getMembershipStartDate();
-        if (membershipStartDate != null) {
-            LocalDate start = membershipStartDate.withDayOfMonth(1);
-            
-            // Validate membership age today
-            LocalDate today = LocalDate.now().withDayOfMonth(1);
-            long monthsToday = java.time.temporal.ChronoUnit.MONTHS.between(start, today);
-            if (monthsToday < 36) {
-                throw new RuntimeException("The required continues Membership period does not comply (36 months)");
-            }
-
-            // Validate membership age as of the exam date
-            LocalDate end = examLastDate.withDayOfMonth(1);
-            long monthsExam = java.time.temporal.ChronoUnit.MONTHS.between(start, end);
-            if (monthsExam < 36) {
-                throw new RuntimeException("The required continues Membership period does not comply (36 months)");
-            }
-        }
-    }
-
-    private void validateScholarshipRemittance(String memberId, Integer examYear) {
-        Member member = memberRepository.findByMemberId(memberId)
-                .orElseThrow(() -> new RuntimeException("Member not found"));
-
-        if (examYear == null) {
-            throw new RuntimeException("Selected exam year is required");
-        }
-
-        Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear)
-                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
-
-        LocalDate examLastDate = examMaster.getExamDate();
-        if (examLastDate == null) {
-            throw new RuntimeException("Selected exam date not found in Exam Master");
-        }
-
-        int requiredMonths = scholarshipConfigRepository.findByConfigKey("grade5.scholarship.required.remitted.months")
-                .or(() -> scholarshipConfigRepository.findByConfigKey("scholarship.required.remitted.months"))
-                .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue)
-                .orElse(defaultRequiredRemittedMonths > 0 ? defaultRequiredRemittedMonths : 6);
-
-        LocalDate examMonthDate = examLastDate.withDayOfMonth(1);
-        System.out.println("Validating Scholarship Remittance for Member: " + memberId + ", Exam Year: " + examYear + ", Exam Date: " + examLastDate + ", Required Months: " + requiredMonths);
-
-        for (int i = 1; i <= requiredMonths; i++) {
-            LocalDate targetMonth = examMonthDate.minusMonths(i);
-            String monthHyphen = String.format("%04d-%02d", targetMonth.getYear(), targetMonth.getMonthValue());
-            String monthDot = String.format("%04d.%02d", targetMonth.getYear(), targetMonth.getMonthValue());
-
-            boolean remitted = remittanceRepository.existsByMember_IdAndRemittanceMonthAndRemittedTrue(member.getId(), monthHyphen)
-                    || remittanceRepository.existsByMember_IdAndRemittanceMonthAndRemittedTrue(member.getId(), monthDot)
-                    || remittanceRepository.existsByMember_MemberIdAndRemittanceMonthAndRemittedTrue(memberId, monthHyphen)
-                    || remittanceRepository.existsByMember_MemberIdAndRemittanceMonthAndRemittedTrue(memberId, monthDot);
-
-            System.out.println("Checking month " + i + " (" + monthHyphen + "): remitted=" + remitted);
-
-            if (!remitted) {
-                System.out.println("Remittance check FAILED for month: " + monthHyphen);
-                throw new RuntimeException(
-                        "Scholarship deduction was not continuously remitted from Member for the specific period (" + requiredMonths + " months)"
-                );
-            }
-        }
-    }
-
-    private boolean shouldFollowDeviationProcess(LocalDate requestedDate, Integer examYear) {
-        if (requestedDate == null || examYear == null) {
-            return false;
-        }
-
-        Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear).orElse(null);
-        if (examMaster == null || examMaster.getExamDate() == null) {
-            return false;
-        }
-
-        LocalDate examDate = examMaster.getExamDate();
-        LocalDate latestAllowed = examDate.plusYears(1);
-
-        return requestedDate.isBefore(examDate) || requestedDate.isAfter(latestAllowed);
-    }
-
-    public Map<String, Object> computeDeviationInfo(LocalDate requestedDate, Integer examYear) {
-        Map<String, Object> result = new HashMap<>();
-
-        result.put("deviation", false);
-
-        if (requestedDate == null || examYear == null) {
-            return result;
-        }
-
-        Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear).orElse(null);
-        if (examMaster == null || examMaster.getExamDate() == null) {
-            return result;
-        }
-
-        LocalDate examDate = examMaster.getExamDate();
-        LocalDate latestAllowed = examDate.plusYears(1);
-
-        boolean deviation = requestedDate.isBefore(examDate) || requestedDate.isAfter(latestAllowed);
-
-        result.put("deviation", deviation);
-        result.put("examDate", examDate.toString());
-        result.put("latestAllowed", latestAllowed.toString());
-
-        return result;
-    }
-
-    // Save request
-    public Grade5ScholarshipRequest saveRequest(String memberId, Grade5StudentDTO dto)  {
-        
-        Member member = memberRepository.findByMemberId(memberId)
-                .orElseThrow(() -> new RuntimeException("Member not found"));
-
-        validateMemberActiveOnExamLastDate(memberId, dto.getExamYear());
-        validateScholarshipRemittance(memberId, dto.getExamYear());
-
-        // Prevent duplicate
-        if (repository.existsByExaminationNumber(dto.getExaminationNumber())) {
-            throw new RuntimeException("Examination number already exists");
-        }
-
-        Grade5ScholarshipRequest entity = new Grade5ScholarshipRequest();
-        LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
-        
-        entity.setRequestNo(generateRequestNo());
-        entity.setRequestedDate(requestedDate);
-        entity.setMemberId(memberId);
-        entity.setStatus("NEW");
-        entity.setStudentName(dto.getStudentName());
-        entity.setExaminationNumber(dto.getExaminationNumber());
-        entity.setExamYear(dto.getExamYear());
-        entity.setMarksObtained(dto.getMarksObtained());
-        entity.setBirthCertificateNumber(dto.getBirthCertificateNumber());
-        entity.setSchool(dto.getStudentSchool());
-        entity.setDistrict(dto.getSchoolDistrict());
-        entity.setDistrictCutOffMark(dto.getDistrictCutOffMark());
-        entity.setMinorAccountExists(dto.getMinorAccountExists());
-        entity.setMinorAccountNumber(dto.getMinorAccountNumber());
-        entity.setEligibleMonths(dto.getEligibleMonths());
-        entity.setDisbursementOption(dto.getDisbursementOption());
-        entity.setMemberAmount(dto.getMemberAmount());
-        entity.setMinorAmount(dto.getMinorAmount());
-        entity.setIsDoubleAmount(dto.getIsDoubleAmount());
-        entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
-
         // Location comes from the member's administering District Office, not from the
         // logged-in user — a member may apply at any office (SRS 2.3.1) but the request
         // belongs to the branch that holds their membership.
@@ -789,8 +280,7 @@ public class Grade5ScholarshipService {
         entity.setCreatedBy(currentUser != null ? currentUser.getUsername() : null);
         entity.setCreatedAt(java.time.LocalDateTime.now());
 
-        List<MinorSavingsAccount> accounts =
-                minorRepo.findByBirthCertificateNo(dto.getBirthCertificateNumber());
+        List<MinorSavingsAccount> accounts = minorRepo.findByBirthCertificateNo(dto.getBirthCertificateNumber());
 
         boolean hasMinorAccount = !accounts.isEmpty();
 
@@ -813,8 +303,7 @@ public class Grade5ScholarshipService {
                     String lastNo = lastRequest.getRequestNo();
 
                     int lastSeq = Integer.parseInt(
-                            lastNo.substring(lastNo.lastIndexOf("-") + 1)
-                    );
+                            lastNo.substring(lastNo.lastIndexOf("-") + 1));
 
                     return prefix + String.format("%03d", lastSeq + 1);
                 })
@@ -824,8 +313,7 @@ public class Grade5ScholarshipService {
     // Get fund disbursement details
     public Map<String, Object> getFundDisbursementDetails(String birthCertificateNo, Integer examYear) {
 
-        List<MinorSavingsAccount> accounts =
-                minorRepo.findByBirthCertificateNo(birthCertificateNo);
+        List<MinorSavingsAccount> accounts = minorRepo.findByBirthCertificateNo(birthCertificateNo);
 
         Map<String, Object> result = new HashMap<>();
 
@@ -850,16 +338,18 @@ public class Grade5ScholarshipService {
         if (examYear != null) {
             Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear).orElse(null);
             if (examMaster != null && examMaster.getExamDate() != null) {
-                examMonthLimit = examMaster.getExamDate().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
+                examMonthLimit = examMaster.getExamDate()
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
             }
         }
 
-        List<com.memberconnect.backend.model.MinorAccountRemittance> remittances =
-                minorAccountRemittanceRepository.findByMinorAccountNo(account.getMinorAccountNo());
+        List<com.memberconnect.backend.model.MinorAccountRemittance> remittances = minorAccountRemittanceRepository
+                .findByMinorAccountNo(account.getMinorAccountNo());
 
         final String targetExamMonth = examMonthLimit;
 
-        double minAmount = scholarshipConfigRepository.findByConfigKey("grade5.minor.account.required.remittance.amount")
+        double minAmount = scholarshipConfigRepository
+                .findByConfigKey("grade5.minor.account.required.remittance.amount")
                 .or(() -> scholarshipConfigRepository.findByConfigKey("minor.account.required.remittance.amount"))
                 .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue)
                 .map(Double::valueOf)
@@ -868,9 +358,11 @@ public class Grade5ScholarshipService {
         int eligibleMonths = (int) remittances.stream()
                 .filter(r -> r.getRemittanceAmount() != null && r.getRemittanceAmount() >= minAmount)
                 .filter(r -> {
-                    if (targetExamMonth == null) return true;
+                    if (targetExamMonth == null)
+                        return true;
                     String month = r.getRemittanceMonth();
-                    if (month == null) return false;
+                    if (month == null)
+                        return false;
                     String normMonth = month.replace(".", "-");
                     String normTarget = targetExamMonth.replace(".", "-");
                     return normMonth.compareTo(normTarget) <= 0;
@@ -879,7 +371,46 @@ public class Grade5ScholarshipService {
 
         result.put("totalMonths", eligibleMonths);
         result.put("eligibleMonths", eligibleMonths);
-        result.put("doubleAmount", eligibleMonths >= 36);
+
+        String defaultOption = hasMinor ? "MEMBER_AND_MINOR" : "MEMBER_ONLY";
+        Map<String, Object> calc = calculateDisbursement(eligibleMonths, defaultOption, hasMinor);
+        result.putAll(calc);
+
+        return result;
+    }
+
+    // Calculate fund disbursement breakdown
+    public Map<String, Object> calculateDisbursement(Integer months, String option, Boolean hasMinorAccount) {
+        int eligibleMonths = (months != null && months >= 0) ? months : 0;
+        boolean isDouble = eligibleMonths >= 36;
+        int normalAmount = 5000;
+        int doubleAmount = 10000;
+        int totalAmount = isDouble ? doubleAmount : normalAmount;
+
+        boolean minorExists = Boolean.TRUE.equals(hasMinorAccount);
+        String resolvedOption = minorExists ? (option != null && !option.trim().isEmpty() ? option : "MEMBER_AND_MINOR") : "MEMBER_ONLY";
+
+        int memberAmount = 0;
+        int minorAmount = 0;
+
+        if ("MEMBER_ONLY".equalsIgnoreCase(resolvedOption)) {
+            memberAmount = totalAmount;
+            minorAmount = 0;
+        } else if ("MEMBER_AND_MINOR".equalsIgnoreCase(resolvedOption)) {
+            memberAmount = totalAmount / 2;
+            minorAmount = totalAmount / 2;
+        } else if ("MINOR_ONLY".equalsIgnoreCase(resolvedOption)) {
+            memberAmount = 0;
+            minorAmount = totalAmount;
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("isDoubleAmount", isDouble);
+        result.put("doubleAmount", isDouble);
+        result.put("totalAmount", totalAmount);
+        result.put("memberAmount", memberAmount);
+        result.put("minorAmount", minorAmount);
+        result.put("disbursementOption", resolvedOption);
 
         return result;
     }
@@ -891,8 +422,8 @@ public class Grade5ScholarshipService {
     // Get latest request for member
     public Grade5ScholarshipRequest getLatestRequest(String memberId) {
         return repository
-            .findTopByMemberIdOrderByIdDesc(memberId)
-            .orElse(null);
+                .findTopByMemberIdOrderByIdDesc(memberId)
+                .orElse(null);
     }
 
     // Get a specific request by requestNo
@@ -921,7 +452,8 @@ public class Grade5ScholarshipService {
             throw new RuntimeException("Only NEW or INCOMPLETE requests can be submitted");
         }
 
-        // Decide final submit status on the server to avoid relying on client-provided values.
+        // Decide final submit status on the server to avoid relying on client-provided
+        // values.
         boolean isDeviation = Boolean.TRUE.equals(request.getHasDeviation())
                 || shouldFollowDeviationProcess(request.getRequestedDate(), request.getExamYear())
                 || (status != null && status.toUpperCase().contains("DEVIATION"));
@@ -936,7 +468,7 @@ public class Grade5ScholarshipService {
 
         return repository.save(request);
     }
-    
+
     // Get exam years
     public List<Integer> getExamYears() {
         return Grade5ExamMasterRepository.findAll()
@@ -956,8 +488,7 @@ public class Grade5ScholarshipService {
             String toDate,
             String search,
             String sortBy,
-            String sortDirection
-    ) {
+            String sortDirection) {
         LocalDate today = LocalDate.now();
 
         // A District Office user is pinned to their own branch regardless of what the
@@ -1038,12 +569,10 @@ public class Grade5ScholarshipService {
 
                     if ("STATUS".equals(sortBy)) {
                         result = safeString(result1.getStatus()).compareToIgnoreCase(
-                                safeString(result2.getStatus())
-                        );
+                                safeString(result2.getStatus()));
                     } else if ("MEMBER_ID".equals(sortBy)) {
                         result = safeString(result1.getMemberId()).compareToIgnoreCase(
-                                safeString(result2.getMemberId())
-                        );
+                                safeString(result2.getMemberId()));
                     } else {
                         LocalDate dateA = result1.getRequestedDate();
                         LocalDate dateB = result2.getRequestedDate();
@@ -1083,7 +612,7 @@ public class Grade5ScholarshipService {
                             r.getSubmissionLocation(),
                             Boolean.TRUE.equals(r.getHasDeviation())
 
-                    );
+                );
                 })
                 .toList();
     }
@@ -1091,9 +620,11 @@ public class Grade5ScholarshipService {
     /**
      * Works out which locations a search may actually cover.
      *
-     * A pinned user (District Office) can never widen beyond their own branch: if they
+     * A pinned user (District Office) can never widen beyond their own branch: if
+     * they
      * ask for other locations the request is narrowed back to theirs rather than
-     * rejected, so a stale filter in the UI degrades to "your own district" instead of
+     * rejected, so a stale filter in the UI degrades to "your own district" instead
+     * of
      * an error. An unpinned user gets exactly what they asked for, and "ALL" or an
      * empty selection means no location filtering at all.
      */
@@ -1112,8 +643,10 @@ public class Grade5ScholarshipService {
     }
 
     /**
-     * Rows saved before the location column existed carry a null location. They stay
-     * visible to everyone rather than disappearing, so enabling location scoping does
+     * Rows saved before the location column existed carry a null location. They
+     * stay
+     * visible to everyone rather than disappearing, so enabling location scoping
+     * does
      * not hide historical requests that nobody can re-tag.
      */
     private boolean matchesLocation(String requestLocation, List<String> locations) {
@@ -1141,11 +674,11 @@ public class Grade5ScholarshipService {
 
         validateMemberActiveOnExamLastDate(entity.getMemberId(), dto.getExamYear());
         validateScholarshipRemittance(entity.getMemberId(), dto.getExamYear());
+        validateFundDisbursement(dto);
 
         if (repository.existsByExaminationNumberAndRequestNoNot(
                 dto.getExaminationNumber(),
-                requestNo
-        )) {
+                requestNo)) {
             throw new RuntimeException("Examination number already exists");
         }
 
@@ -1161,13 +694,19 @@ public class Grade5ScholarshipService {
         entity.setDistrict(dto.getSchoolDistrict());
         entity.setDistrictCutOffMark(dto.getDistrictCutOffMark());
 
+        Map<String, Object> calc = calculateDisbursement(
+                dto.getEligibleMonths(),
+                dto.getDisbursementOption(),
+                dto.getMinorAccountExists()
+        );
+
         entity.setMinorAccountExists(dto.getMinorAccountExists());
         entity.setMinorAccountNumber(dto.getMinorAccountNumber());
         entity.setEligibleMonths(dto.getEligibleMonths());
-        entity.setDisbursementOption(dto.getDisbursementOption());
-        entity.setMemberAmount(dto.getMemberAmount());
-        entity.setMinorAmount(dto.getMinorAmount());
-        entity.setIsDoubleAmount(dto.getIsDoubleAmount());
+        entity.setDisbursementOption((String) calc.get("disbursementOption"));
+        entity.setMemberAmount((Integer) calc.get("memberAmount"));
+        entity.setMinorAmount((Integer) calc.get("minorAmount"));
+        entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
         entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
 
         entity.setIncompleteReason(null);
@@ -1200,8 +739,7 @@ public class Grade5ScholarshipService {
 
         if (!isGrade5StatusTransitionAllowed(currentStatus, newStatus)) {
             throw new RuntimeException(
-                    "Cannot change status from " + currentStatus + " to " + newStatus
-            );
+                    "Cannot change status from " + currentStatus + " to " + newStatus);
         }
 
         // A request that has already been picked up onto an approval list cannot be
@@ -1213,210 +751,16 @@ public class Grade5ScholarshipService {
                 && !request.getApprovalListId().isBlank()) {
             throw new RuntimeException(
                     "This request is attached to approval list " + request.getApprovalListId()
-                            + " and cannot be returned to New. Remove it from the list first."
-            );
+                            + " and cannot be returned to New. Remove it from the list first.");
         }
 
         request.setStatus(newStatus.name());
 
-        if (newStatus == ScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_APPROVAL || newStatus == ScholarshipRequestStatus.ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST) {
+        if (newStatus == ScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_APPROVAL
+                || newStatus == ScholarshipRequestStatus.ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST) {
             request.setHasDeviation(true);
-        } else if (newStatus == ScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_APPROVAL || newStatus == ScholarshipRequestStatus.ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST) {
-            request.setHasDeviation(false);
-        }
-
-        // Clear reasons when returning to New
-        if (newStatus == ScholarshipRequestStatus.NEW) {
-            request.setIncompleteReason(null);
-        }
-
-        return repository.save(request);
-    }
-
-    private boolean isGrade5StatusTransitionAllowed(ScholarshipRequestStatus current, ScholarshipRequestStatus next) {
-        switch (current) {
-            case NEW:
-                return next == ScholarshipRequestStatus.INACTIVE;
-            case INCOMPLETE:
-                return next == ScholarshipRequestStatus.NEW || next == ScholarshipRequestStatus.INACTIVE;
-            case SUBMITTED_FOR_NORMAL_APPROVAL:
-                return next == ScholarshipRequestStatus.NEW || next == ScholarshipRequestStatus.INACTIVE;
-            case SUBMITTED_FOR_DEVIATION_APPROVAL:
-                return next == ScholarshipRequestStatus.NEW || next == ScholarshipRequestStatus.INACTIVE;
-            case REJECTED:
-                return next == ScholarshipRequestStatus.INACTIVE || next == ScholarshipRequestStatus.NEW;
-} else if (dateA == null) {
-                            result = 1;
-                        } else if (dateB == null) {
-                            result = -1;
-                        } else {
-                            result = dateA.compareTo(dateB);
-                        }
-                    }
-
-                    return "DESC".equals(sortDirection) ? -result : result;
-                })
-                .map(r -> {
-                    Member member = memberRepository.findByMemberId(r.getMemberId())
-                            .orElse(null);
-
-                    return new Grade5RequestListDTO(
-                            r.getId(),
-                            r.getRequestNo(),
-                            r.getMemberId(),
-                            member != null ? member.getFullName() : "",
-                            member != null ? member.getNameWithInitials() : "",
-                            member != null ? member.getNic() : "",
-                            r.getRequestedDate() != null ? r.getRequestedDate().toString() : null,
-                            r.getStudentName(),
-                            r.getExaminationNumber(),
-                            r.getExamYear(),
-                            r.getStatus(),
-                            // The Location column means the District Office that owns the
-                            // request, not the student's school district — those are
-                            // different concepts and were previously conflated here.
-                            r.getSubmissionLocation(),
-                            Boolean.TRUE.equals(r.getHasDeviation())
-
-                    );
-                })
-                .toList();
-    }
-
-    /**
-     * Works out which locations a search may actually cover.
-     *
-     * A pinned user (District Office) can never widen beyond their own branch: if they
-     * ask for other locations the request is narrowed back to theirs rather than
-     * rejected, so a stale filter in the UI degrades to "your own district" instead of
-     * an error. An unpinned user gets exactly what they asked for, and "ALL" or an
-     * empty selection means no location filtering at all.
-     */
-    private List<String> resolveLocationFilter(List<String> requested, String pinnedLocation) {
-        if (pinnedLocation != null) {
-            return List.of(pinnedLocation);
-        }
-        if (requested == null || requested.isEmpty()) {
-            return List.of();
-        }
-        List<String> cleaned = requested.stream()
-                .filter(location -> location != null && !location.isBlank())
-                .filter(location -> !"ALL".equalsIgnoreCase(location))
-                .toList();
-        return cleaned;
-    }
-
-    /**
-     * Rows saved before the location column existed carry a null location. They stay
-     * visible to everyone rather than disappearing, so enabling location scoping does
-     * not hide historical requests that nobody can re-tag.
-     */
-    private boolean matchesLocation(String requestLocation, List<String> locations) {
-        if (locations.isEmpty()) {
-            return true;
-        }
-        if (requestLocation == null || requestLocation.isBlank()) {
-            return true;
-        }
-        return locations.stream().anyMatch(location -> location.equalsIgnoreCase(requestLocation));
-    }
-
-    private boolean contains(String value, String key) {
-        return value != null && value.toLowerCase().contains(key);
-    }
-
-    private String safeString(String value) {
-        return value == null ? "" : value;
-    }
-
-    // Update request
-    public Grade5ScholarshipRequest updateRequest(String requestNo, Grade5StudentDTO dto) {
-        Grade5ScholarshipRequest entity = repository.findByRequestNo(requestNo)
-                .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
-
-        validateMemberActiveOnExamLastDate(entity.getMemberId(), dto.getExamYear());
-        validateScholarshipRemittance(entity.getMemberId(), dto.getExamYear());
-
-        if (repository.existsByExaminationNumberAndRequestNoNot(
-                dto.getExaminationNumber(),
-                requestNo
-        )) {
-            throw new RuntimeException("Examination number already exists");
-        }
-
-        LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
-
-        entity.setRequestedDate(requestedDate);
-        entity.setStudentName(dto.getStudentName());
-        entity.setExaminationNumber(dto.getExaminationNumber());
-        entity.setExamYear(dto.getExamYear());
-        entity.setMarksObtained(dto.getMarksObtained());
-        entity.setBirthCertificateNumber(dto.getBirthCertificateNumber());
-        entity.setSchool(dto.getStudentSchool());
-        entity.setDistrict(dto.getSchoolDistrict());
-        entity.setDistrictCutOffMark(dto.getDistrictCutOffMark());
-
-        entity.setMinorAccountExists(dto.getMinorAccountExists());
-        entity.setMinorAccountNumber(dto.getMinorAccountNumber());
-        entity.setEligibleMonths(dto.getEligibleMonths());
-        entity.setDisbursementOption(dto.getDisbursementOption());
-        entity.setMemberAmount(dto.getMemberAmount());
-        entity.setMinorAmount(dto.getMinorAmount());
-        entity.setIsDoubleAmount(dto.getIsDoubleAmount());
-        entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
-
-        entity.setIncompleteReason(null);
-
-        return repository.save(entity);
-    }
-
-    // Change Grade 5 Scholarship request status (view mode)
-    public Grade5ScholarshipRequest changeRequestStatus(String requestNo, String newStatusStr) {
-        Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo)
-                .orElseThrow(() -> new RuntimeException("Grade 5 Scholarship request not found"));
-
-        ScholarshipRequestStatus newStatus;
-        try {
-            newStatus = ScholarshipRequestStatus.valueOf(newStatusStr);
-        } catch (IllegalArgumentException ex) {
-            throw new RuntimeException("Invalid status: " + newStatusStr);
-        }
-
-        ScholarshipRequestStatus currentStatus;
-        try {
-            currentStatus = ScholarshipRequestStatus.valueOf(request.getStatus());
-        } catch (IllegalArgumentException ex) {
-            throw new RuntimeException("Current request status is unrecognized: " + request.getStatus());
-        }
-
-        if (currentStatus == newStatus) {
-            return request;
-        }
-
-        if (!isGrade5StatusTransitionAllowed(currentStatus, newStatus)) {
-            throw new RuntimeException(
-                    "Cannot change status from " + currentStatus + " to " + newStatus
-            );
-        }
-
-        // A request that has already been picked up onto an approval list cannot be
-        // pulled back to New by the originating office — Head Office may be mid-way
-        // through a Board Meeting with it on the printed list. Deleting the list
-        // (MMS09/MMS16) is the supported way to release it.
-        if (newStatus == ScholarshipRequestStatus.NEW
-                && request.getApprovalListId() != null
-                && !request.getApprovalListId().isBlank()) {
-            throw new RuntimeException(
-                    "This request is attached to approval list " + request.getApprovalListId()
-                            + " and cannot be returned to New. Remove it from the list first."
-            );
-        }
-
-        request.setStatus(newStatus.name());
-
-        if (newStatus == ScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_APPROVAL || newStatus == ScholarshipRequestStatus.ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST) {
-            request.setHasDeviation(true);
-        } else if (newStatus == ScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_APPROVAL || newStatus == ScholarshipRequestStatus.ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST) {
+        } else if (newStatus == ScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_APPROVAL
+                || newStatus == ScholarshipRequestStatus.ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST) {
             request.setHasDeviation(false);
         }
 

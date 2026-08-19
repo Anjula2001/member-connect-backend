@@ -73,7 +73,7 @@ public class Grade5ScholarshipController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-    
+
     // Get minor account details
     @PreAuthorize("hasAuthority('G5_REQUEST_CREATE') or hasAuthority('G5_REQUEST_EDIT')")
     @GetMapping("/minor-account")
@@ -140,7 +140,7 @@ public class Grade5ScholarshipController {
         String reason = body.get("reason");
         return service.markIncomplete(requestNo, reason);
     }
-    
+
     // Submit request
     @PreAuthorize("hasAuthority('G5_REQUEST_SUBMIT')")
     @PutMapping("/{requestNo}/submit")

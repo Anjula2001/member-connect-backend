@@ -396,8 +396,7 @@ public class RetirementService {
             RetirementRequest request,
             Member member,
             boolean hasLoanBalance,
-            boolean hasIndirectObligations
-    ) {
+            boolean hasIndirectObligations) {
         return new RetirementRequestResponseDTO(
                 request.getId(),
                 request.getRequestNo(),
@@ -469,17 +468,20 @@ public class RetirementService {
             List<String> statuses,
             String fromDate,
             String toDate,
-            String sortOrder) {
+            String searchKey,
+            String sortBy,
+            String sortOrder
+    ) {
         // Status and date filtering needs no extra queries, so it runs first and
         // shrinks the set the member lookup below has to cover.
-        return requestRepository.findAll()
+        List<RetirementRequest> candidates = requestRepository.findAll()
                 .stream()
 
                 // status filter
                 .filter(r -> statuses == null || statuses.isEmpty()
                         || statuses.contains(r.getStatus().name()))
 
-                // date filter
+                //date filter
                 .filter(r -> {
                     if (r.getRequestedDate() == null)
                         return false;
@@ -552,8 +554,7 @@ public class RetirementService {
      */
     private List<RetirementRequestResponseDTO> mapToResponses(
             List<RetirementRequest> requests,
-            Map<String, Member> membersById
-    ) {
+            Map<String, Member> membersById) {
         if (requests.isEmpty()) {
             return List.of();
         }
@@ -576,8 +577,7 @@ public class RetirementService {
                         request,
                         membersById.get(request.getMemberId()),
                         membersWithLoanBalance.contains(request.getMemberId()),
-                        membersWithObligations.contains(request.getMemberId())
-                ))
+                        membersWithObligations.contains(request.getMemberId())))
                 .toList();
     }
 
@@ -596,8 +596,7 @@ public class RetirementService {
                 .collect(Collectors.toMap(
                         Member::getMemberId,
                         member -> member,
-                        (first, second) -> first
-                ));
+                        (first, second) -> first));
     }
 
     private boolean contains(String value, String key) {
