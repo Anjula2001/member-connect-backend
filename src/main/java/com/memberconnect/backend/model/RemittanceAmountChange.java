@@ -1,40 +1,43 @@
 package com.memberconnect.backend.model;
 
-import com.memberconnect.backend.enums.ApplicationStatus;
 import jakarta.persistence.*;
 
+/**
+ * A Remittance Amount Change Request (Requirement 02, MMC14-MMC17).
+ *
+ * Status, member linkage, request number, requested date and reject reason live on
+ * {@link ProfileChangeRequest}. The status column keeps its original new_status name
+ * via @AttributeOverride so existing rows are not orphaned by the rename.
+ *
+ * NOTE: the newRemittanceAmount / remittanceAccountType pair below cannot express what
+ * MMC14 asks for — a request covering several remittance accounts, each with its own
+ * amount validated against that account's configured minimum. The entry screen was
+ * already collecting multiple rows and then flattening them, storing the summed total
+ * as the amount and the first row's type as the account type, discarding the rest.
+ * These two fields are retained only until the per-account line items land; do not
+ * build anything new on them.
+ */
 @Entity
 @Table(name = "RemittanceAmountChange")
-public class RemittanceAmountChange {
+@AttributeOverride(name = "status", column = @Column(name = "new_status"))
+public class RemittanceAmountChange extends ProfileChangeRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Enumerated(EnumType.STRING)
-    private ApplicationStatus newStatus;
-
+    /** @deprecated flattened total; replaced by per-account line items. */
+    @Deprecated
     private String newRemittanceAmount;
-    private String newRemittanceCurrency;
-    private String remittanceAccountType;
-    private String memberId;
 
-    // --- 1. No-Args Constructor (Required by JPA) ---
+    private String newRemittanceCurrency;
+
+    /** @deprecated only ever held the first selected account; see the class comment. */
+    @Deprecated
+    private String remittanceAccountType;
+
     public RemittanceAmountChange() {
     }
-
-    // --- 2. All-Args Constructor ---
-    public RemittanceAmountChange(Integer id, ApplicationStatus newStatus,
-                                  String newRemittanceAmount, String newRemittanceCurrency, String remittanceAccountType, String memberId) {
-        this.id = id;
-        this.newStatus = newStatus;
-        this.newRemittanceAmount = newRemittanceAmount;
-        this.newRemittanceCurrency = newRemittanceCurrency;
-        this.remittanceAccountType = remittanceAccountType;
-        this.memberId = memberId;
-    }
-
-    // --- 3. Getters and Setters ---
 
     public Integer getId() {
         return id;
@@ -44,18 +47,12 @@ public class RemittanceAmountChange {
         this.id = id;
     }
 
-    public ApplicationStatus getNewStatus() {
-        return newStatus;
-    }
-
-    public void setNewStatus(ApplicationStatus newStatus) {
-        this.newStatus = newStatus;
-    }
-
+    @Deprecated
     public String getNewRemittanceAmount() {
         return newRemittanceAmount;
     }
 
+    @Deprecated
     public void setNewRemittanceAmount(String newRemittanceAmount) {
         this.newRemittanceAmount = newRemittanceAmount;
     }
@@ -68,19 +65,13 @@ public class RemittanceAmountChange {
         this.newRemittanceCurrency = newRemittanceCurrency;
     }
 
+    @Deprecated
     public String getRemittanceAccountType() {
         return remittanceAccountType;
     }
 
+    @Deprecated
     public void setRemittanceAccountType(String remittanceAccountType) {
         this.remittanceAccountType = remittanceAccountType;
-    }
-
-    public String getMemberId() {
-        return memberId;
-    }
-
-    public void setMemberId(String memberId) {
-        this.memberId = memberId;
     }
 }

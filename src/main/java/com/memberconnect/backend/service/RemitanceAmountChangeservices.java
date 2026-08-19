@@ -1,6 +1,5 @@
 package com.memberconnect.backend.service;
 
-import com.memberconnect.backend.dto.NommineChangeRequestDTO;
 import com.memberconnect.backend.dto.RemittanceAmountChangeDTO;
 import com.memberconnect.backend.model.RemittanceAmountChange;
 import com.memberconnect.backend.repository.RemittanceAmountChangeRepo;
@@ -22,6 +21,8 @@ public class RemitanceAmountChangeservices {
     public RemittanceAmountChangeRepo remittanceAmountChangeRepo;
     @Autowired
     public ModelMapper modelMapper;
+    @Autowired
+    private RequestNumberGenerator requestNumberGenerator;
 
     public List<RemittanceAmountChangeDTO> getRemitanceRequests(){
         List<RemittanceAmountChange> remittanceAmountChanges = remittanceAmountChangeRepo.findAll();
@@ -36,10 +37,31 @@ public class RemitanceAmountChangeservices {
         }
     }
 
+    /**
+     * MMC14 submit: the Request ID, requested date and status are decided here rather
+     * than taken from the request body, so they cannot be set or skipped by the client.
+     */
     public String saveRemittanceRequest(RemittanceAmountChangeDTO remittanceAmountChangeDTO){
         RemittanceAmountChange entity = modelMapper.map(remittanceAmountChangeDTO, RemittanceAmountChange.class);
+
+        entity.setId(null);
+        entity.setRequestNo(nextRequestNo());
+        entity.setRequestedDate(java.time.LocalDate.now());
+        entity.setStatus(com.memberconnect.backend.enums.ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+        entity.setRejectReason(null);
+
         remittanceAmountChangeRepo.save(entity);
         return  "success";
+    }
+
+    private String nextRequestNo() {
+        var type = com.memberconnect.backend.enums.ProfileChangeType.REMITTANCE;
+        String prefix = requestNumberGenerator.prefixFor(type);
+        return requestNumberGenerator.next(
+                type,
+                remittanceAmountChangeRepo.findFirstByRequestNoStartingWithOrderByRequestNoDesc(prefix)
+                        .map(RemittanceAmountChange::getRequestNo)
+        );
     }
     public String DeleteRemittanceRequest(@NonNull Integer id){
         if(!remittanceAmountChangeRepo.existsById(id)){
@@ -52,7 +74,7 @@ public class RemitanceAmountChangeservices {
 
     public RemittanceAmountChangeDTO updateRemittanceRequest(Integer id,RemittanceAmountChangeDTO dto){
         RemittanceAmountChange existingAmount = remittanceAmountChangeRepo.findById(id).orElseThrow(() -> new RuntimeException("Request not found with id: " + id));
-        existingAmount.setNewStatus(dto.getNewStatus());
+        existingAmount.setStatus(dto.getStatus());
         existingAmount.setNewRemittanceAmount(dto.getNewRemittanceAmount());
         existingAmount.setNewRemittanceCurrency(dto.getNewRemittanceCurrency());
         existingAmount.setRemittanceAccountType(dto.getRemittanceAccountType());

@@ -23,11 +23,11 @@ public class RemittanceAmountChangeRequestsController {
         return remittanceAmountChangeservices.remitanceRequestgetBhyID(id);
     }
     @PostMapping("/saveRemitance")
-    public String saveRemitance(@RequestBody RemittanceAmountChangeDTO dto){
+    public String saveRemitance(@jakarta.validation.Valid @RequestBody RemittanceAmountChangeDTO dto){
         return remittanceAmountChangeservices.saveRemittanceRequest(dto);
     }
     @PutMapping("/updateRemitance/{id}")
-    public RemittanceAmountChangeDTO updateRemitance(@PathVariable Integer id,@RequestBody RemittanceAmountChangeDTO dto){
+    public RemittanceAmountChangeDTO updateRemitance(@PathVariable Integer id,@jakarta.validation.Valid @RequestBody RemittanceAmountChangeDTO dto){
         return remittanceAmountChangeservices.updateRemittanceRequest(id,dto);
     }
     @DeleteMapping("/deleteRemitance/{id}")

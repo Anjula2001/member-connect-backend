@@ -1,11 +1,21 @@
 package com.memberconnect.backend.model;
 
-import com.memberconnect.backend.enums.ApplicationStatus;
 import jakarta.persistence.*;
 
+/**
+ * A Name Change Request (Requirement 02, MMC05-MMC13).
+ *
+ * Status, member linkage, request number, requested date and reject reason live on
+ * {@link ProfileChangeRequest}. The status column here was already named "status",
+ * so no @AttributeOverride is needed and existing rows keep their values.
+ *
+ * The "Name with initials" column was renamed to name_with_initials: a quoted
+ * identifier containing spaces has to be escaped everywhere it is referenced and is
+ * a standing hazard in hand-written SQL and migrations.
+ */
 @Table(name = "NameChangeRequestsTable")
 @Entity
-public class NameChangeRequest {
+public class NameChangeRequest extends ProfileChangeRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -21,30 +31,11 @@ public class NameChangeRequest {
     @Column(name = "nameAszPayroll")
     private String newNameAsInPayroll;
 
-    @Column(name = "Name with initials")
+    @Column(name = "name_with_initials")
     private String newNameWithInitials;
 
-    @Column(name = "status")
-    @Enumerated(EnumType.STRING)
-    private ApplicationStatus newStatus;
-
-    // --- 1. No-Args Constructor (Required by JPA) ---
     public NameChangeRequest() {
     }
-
-    // --- 2. All-Args Constructor ---
-    public NameChangeRequest(Integer nameChangeRequestID, String newTitle, String newFullName,
-                             String newNameAsInPayroll, String newNameWithInitials,
-                             ApplicationStatus newStatus) {
-        this.nameChangeRequestID = nameChangeRequestID;
-        this.newTitle = newTitle;
-        this.newFullName = newFullName;
-        this.newNameAsInPayroll = newNameAsInPayroll;
-        this.newNameWithInitials = newNameWithInitials;
-        this.newStatus = newStatus;
-    }
-
-    // --- 3. Getters and Setters ---
 
     public Integer getNameChangeRequestID() {
         return nameChangeRequestID;
@@ -84,13 +75,5 @@ public class NameChangeRequest {
 
     public void setNewNameWithInitials(String newNameWithInitials) {
         this.newNameWithInitials = newNameWithInitials;
-    }
-
-    public ApplicationStatus getNewStatus() {
-        return newStatus;
-    }
-
-    public void setNewStatus(ApplicationStatus newStatus) {
-        this.newStatus = newStatus;
     }
 }

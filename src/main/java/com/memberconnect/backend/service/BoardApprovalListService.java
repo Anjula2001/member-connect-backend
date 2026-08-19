@@ -47,6 +47,9 @@ public class BoardApprovalListService {
 	@Autowired
 	private NominneChangeRequestRepo nomineeChangeRequestRepo;
 
+	@Autowired
+	private ProfileChangeStatusPolicy statusPolicy;
+
 	// ── CSV helpers ──────────────────────────────────────────────────────
 
 	private List<String> parseCsv(String csv) {
@@ -145,7 +148,8 @@ public class BoardApprovalListService {
 			for (Integer id : dto.getNameChangeRequestIds()) {
 				NameChangeRequest ncr = nameChangeRequestRepo.findById(id)
 						.orElseThrow(() -> new RuntimeException("Name change request not found: " + id));
-				ncr.setNewStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
+				statusPolicy.assertListable(ncr.getStatus(), ncr.getRequestNo());
+				ncr.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 				nameChangeRequestRepo.save(ncr);
 			}
 		}
@@ -156,6 +160,7 @@ public class BoardApprovalListService {
 			for (Integer id : dto.getNomineeChangeRequestIds()) {
 				NommineChangeRequests ncr = nomineeChangeRequestRepo.findById(id)
 						.orElseThrow(() -> new RuntimeException("Nominee change request not found: " + id));
+				statusPolicy.assertListable(ncr.getStatus(), ncr.getRequestNo());
 				ncr.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 				nomineeChangeRequestRepo.save(ncr);
 			}
@@ -247,12 +252,12 @@ public class BoardApprovalListService {
 				.map(id -> nameChangeRequestRepo.findById(id)
 						.map(ncr -> {
 							NameChangeRequestDTO dto = new NameChangeRequestDTO();
-							dto.setNameChangeRequestID(String.valueOf(ncr.getNameChangeRequestID()));
+							dto.setNameChangeRequestID(ncr.getNameChangeRequestID());
 							dto.setNewTitle(ncr.getNewTitle());
 							dto.setNewFullName(ncr.getNewFullName());
 							dto.setNewNameAsInPayroll(ncr.getNewNameAsInPayroll());
 							dto.setNewNameWithInitials(ncr.getNewNameWithInitials());
-							dto.setNewStatus(ncr.getNewStatus());
+							dto.setStatus(ncr.getStatus());
 							return dto;
 						})
 						.orElseThrow(() -> new RuntimeException("Name change request not found: " + id)))
@@ -277,7 +282,7 @@ public class BoardApprovalListService {
 							dto.setRelationship(ncr.getRelationship());
 							dto.setNic(ncr.getNic());
 							dto.setAddress(ncr.getAddress());
-							dto.setNewStatus(ncr.getStatus());
+							dto.setStatus(ncr.getStatus());
 							return dto;
 						})
 						.orElseThrow(() -> new RuntimeException("Nominee change request not found: " + id)))
@@ -328,7 +333,7 @@ public class BoardApprovalListService {
 		List<Integer> nameChangeIds = parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv());
 		for (Integer id : nameChangeIds) {
 			nameChangeRequestRepo.findById(id).ifPresent(ncr -> {
-				ncr.setNewStatus(approved ? ApplicationStatus.APPROVED : ApplicationStatus.REJECTED);
+				ncr.setStatus(approved ? ApplicationStatus.APPROVED : ApplicationStatus.REJECTED);
 				nameChangeRequestRepo.save(ncr);
 			});
 		}
@@ -377,8 +382,8 @@ public class BoardApprovalListService {
 		List<Integer> nameChangeIds = parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv());
 		for (Integer id : nameChangeIds) {
 			nameChangeRequestRepo.findById(id).ifPresent(ncr -> {
-				if (ncr.getNewStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
-					ncr.setNewStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+				if (ncr.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
+					ncr.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
 					nameChangeRequestRepo.save(ncr);
 				}
 			});

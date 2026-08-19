@@ -1,39 +1,32 @@
 package com.memberconnect.backend.model;
 
-import com.memberconnect.backend.enums.ApplicationStatus;
 import jakarta.persistence.*;
 
+/**
+ * A Nominee Change Request (Requirement 02, MMC18-MMC26).
+ *
+ * Status, member linkage, request number, requested date and reject reason all live
+ * on {@link ProfileChangeRequest}. The status column was already named "status" here,
+ * so no @AttributeOverride is needed and existing rows keep their values.
+ */
 @Entity
 @Table(name = "NommineChangeRequests")
-public class NommineChangeRequests {
+public class NommineChangeRequests extends ProfileChangeRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Enumerated(EnumType.STRING)
-    private ApplicationStatus status;// Changed to ApplicationStatus enum for type safety
     private String newnommineName;
+
     private String relationship;
+
     private String nic;
+
     private String address;
 
-    // --- 1. No-Args Constructor (Required by JPA) ---
     public NommineChangeRequests() {
     }
-
-    // --- 2. All-Args Constructor ---
-    public NommineChangeRequests(Integer id, ApplicationStatus status, String newnommineName,
-                                 String relationship, String nic, String address) {
-        this.id = id;
-        this.status = status;
-        this.newnommineName = newnommineName;
-        this.relationship = relationship;
-        this.nic = nic;
-        this.address = address;
-    }
-
-    // --- 3. Getters and Setters ---
 
     public Integer getId() {
         return id;
@@ -41,14 +34,6 @@ public class NommineChangeRequests {
 
     public void setId(Integer id) {
         this.id = id;
-    }
-
-    public ApplicationStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(ApplicationStatus status) {
-        this.status = status;
     }
 
     public String getNewnommineName() {
@@ -82,6 +67,4 @@ public class NommineChangeRequests {
     public void setAddress(String address) {
         this.address = address;
     }
-
-    // --- 4. toString (Optional but very helpful for debugging) ---
 }
