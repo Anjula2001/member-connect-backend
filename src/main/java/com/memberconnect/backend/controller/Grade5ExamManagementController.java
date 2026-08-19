@@ -3,6 +3,7 @@ package com.memberconnect.backend.controller;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +26,9 @@ public class Grade5ExamManagementController {
         this.service = service;
     }
 
+    // Read is open to anyone who works with requests — the cut-off marks are shown on
+    // the request entry screen, so District Office needs them to key a request at all.
+    @PreAuthorize("hasAuthority('G5_EXAM_MASTER_VIEW')")
     @GetMapping("/current")
     public ResponseEntity<?> getCurrentExamDetails(@RequestParam(required = false) Integer year) {
         try {
@@ -35,6 +39,9 @@ public class Grade5ExamManagementController {
         }
     }
 
+    // Writing exam dates and cut-off marks changes the outcome of every eligibility
+    // check in the module, so it is held far more narrowly than reading them.
+    @PreAuthorize("hasAuthority('G5_EXAM_MASTER_MANAGE')")
     @PostMapping("/save")
     public ResponseEntity<?> saveExamDetails(@RequestBody Grade5ExamManagementDTO dto) {
         try {

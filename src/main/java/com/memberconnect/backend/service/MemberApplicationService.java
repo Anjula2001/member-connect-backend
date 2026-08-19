@@ -71,6 +71,9 @@ public class MemberApplicationService {
     @Autowired
     private ModelMapper modelMapper;
 
+    @Autowired
+    private AuditService auditService;
+
     public MemberApplicationDTO saveMemberApplication(MemberApplicationDTO memberApplicationDTO) {
         // Same "Inactive rights" rule as updateStatus()/updatePartial() — the create form
         // exposes a Status Override field that a District Office user could otherwise use
@@ -96,6 +99,8 @@ public class MemberApplicationService {
         // same terminated-member lookup the NIC 'Validate' button surfaces.
         application.setRejoinFlag(findTerminatedMemberByNic(memberApplicationDTO.getNicNumber()).isPresent());
         Member_Application saved = memberApplicationRepository.save(application);
+        auditService.record(AuditService.MODULE_APPLICATION, saved.getId(),
+                "Application Created", null, saved.getApplicationID(), null);
         return modelMapper.map(saved, MemberApplicationDTO.class);
     }
 
@@ -435,9 +440,14 @@ public class MemberApplicationService {
             );
         }
 
+        ApplicationStatus before = app.getStatus();
         app.setStatus(status);
+        Member_Application saved = memberApplicationRepository.save(app);
+        auditService.record(AuditService.MODULE_APPLICATION, saved.getId(), "Status Changed",
+                before == null ? null : before.name(),
+                status == null ? null : status.name(), null);
 
-        return modelMapper.map(memberApplicationRepository.save(app), MemberApplicationDTO.class);
+        return modelMapper.map(saved, MemberApplicationDTO.class);
     }
 
     private boolean currentUserHasInactiveRights() {
