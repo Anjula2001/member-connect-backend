@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -43,6 +44,29 @@ public class NameChangeRequestController {
     @PostMapping("/savenamechange")
     public NameChangeRequestDTO saveNameChangeRequest(@Valid @RequestBody NameChangeRequestDTO dto) {
         return nameChangeRequstServices.addNameChangeRequestService(dto);
+    }
+
+    /**
+     * Create with a supporting document (MMC05). The document part is optional, so the
+     * same screen serves requests with and without one.
+     *
+     * The JSON travels as a "request" part rather than as form fields, which keeps the
+     * DTO's validation working on a multipart submit.
+     */
+    @PostMapping(value = "/savenamechangeWithDocument", consumes = {"multipart/form-data"})
+    public NameChangeRequestDTO saveNameChangeWithDocument(
+            @Valid @RequestPart("request") NameChangeRequestDTO dto,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+        return nameChangeRequstServices.saveWithDocument(dto, file);
+    }
+
+    /** Update, optionally replacing the supporting document. */
+    @PutMapping(value = "/updatenamechangeWithDocument/{id}", consumes = {"multipart/form-data"})
+    public NameChangeRequestDTO updateNameChangeWithDocument(
+            @PathVariable Integer id,
+            @Valid @RequestPart("request") NameChangeRequestDTO dto,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+        return nameChangeRequstServices.updateWithDocument(id, dto, file);
     }
 
     @PutMapping("/updatenamechange/{id}")

@@ -48,6 +48,15 @@ public class NommineChangeRequestDTO {
     private String memberNameWithInitials;
     private String memberNic;
 
+    // --- Supporting document (MMC18). documentStoragePath is the S3 object key; the
+    // --- screen sends it back unchanged on edit so an unrelated edit does not drop the
+    // --- file. Sending it blank is what asks for the document to be removed.
+    private String documentType;
+    private String documentFileName;
+    private String documentFileType;
+    private String documentStoragePath;
+    private Long documentFileSize;
+
     @NotBlank(message = "Nominee full name is required")
     private String newnommineName;
 

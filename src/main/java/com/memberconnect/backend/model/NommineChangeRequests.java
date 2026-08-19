@@ -37,6 +37,15 @@ public class NommineChangeRequests extends ProfileChangeRequest {
 
     private String address;
 
+    // --- Supporting document (MMC18's "Upload Supporting Documents" section).
+    // --- Stored in S3 via S3Service, the same store every other module uses; the
+    // --- column holds the object key, not the bytes.
+    private String documentType;
+    private String documentFileName;
+    private String documentFileType;
+    private String documentStoragePath;
+    private Long documentFileSize;
+
     public NommineChangeRequests() {
     }
 
@@ -110,5 +119,46 @@ public class NommineChangeRequests extends ProfileChangeRequest {
 
     public void setAddress(String address) {
         this.address = address;
+    }
+
+    public String getDocumentType() {
+        return documentType;
+    }
+
+    public void setDocumentType(String documentType) {
+        this.documentType = documentType;
+    }
+
+    public String getDocumentFileName() {
+        return documentFileName;
+    }
+
+    public void setDocumentFileName(String documentFileName) {
+        this.documentFileName = documentFileName;
+    }
+
+    public String getDocumentFileType() {
+        return documentFileType;
+    }
+
+    public void setDocumentFileType(String documentFileType) {
+        this.documentFileType = documentFileType;
+    }
+
+    /** The S3 object key. */
+    public String getDocumentStoragePath() {
+        return documentStoragePath;
+    }
+
+    public void setDocumentStoragePath(String documentStoragePath) {
+        this.documentStoragePath = documentStoragePath;
+    }
+
+    public Long getDocumentFileSize() {
+        return documentFileSize;
+    }
+
+    public void setDocumentFileSize(Long documentFileSize) {
+        this.documentFileSize = documentFileSize;
     }
 }

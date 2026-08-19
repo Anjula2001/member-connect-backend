@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -44,6 +45,29 @@ public class NommineChangeRequestController {
     @PostMapping("/saveNommine")
     public NommineChangeRequestDTO saveNommineChangeRequest(@Valid @RequestBody NommineChangeRequestDTO dto) {
         return nommineChangeRequestServices.NommineChangeRequestaddService(dto);
+    }
+
+    /**
+     * Create with a supporting document (MMC18). The document part is optional, so the
+     * same screen serves requests with and without one.
+     *
+     * The JSON travels as a "request" part rather than as form fields, which keeps the
+     * DTO's validation working on a multipart submit.
+     */
+    @PostMapping(value = "/saveNommineWithDocument", consumes = {"multipart/form-data"})
+    public NommineChangeRequestDTO saveNommineWithDocument(
+            @Valid @RequestPart("request") NommineChangeRequestDTO dto,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+        return nommineChangeRequestServices.saveWithDocument(dto, file);
+    }
+
+    /** Update, optionally replacing the supporting document. */
+    @PutMapping(value = "/updateNommineWithDocument/{id}", consumes = {"multipart/form-data"})
+    public NommineChangeRequestDTO updateNommineWithDocument(
+            @PathVariable Integer id,
+            @Valid @RequestPart("request") NommineChangeRequestDTO dto,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+        return nommineChangeRequestServices.updateWithDocument(id, dto, file);
     }
 
     /**

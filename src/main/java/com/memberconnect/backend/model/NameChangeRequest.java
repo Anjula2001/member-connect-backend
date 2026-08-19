@@ -50,6 +50,15 @@ public class NameChangeRequest extends ProfileChangeRequest {
     @Column(name = "name_with_initials")
     private String newNameWithInitials;
 
+    // --- Supporting document (MMC05's "Upload Supporting Documents" section).
+    // --- Stored in S3 via S3Service, the same store every other module uses; the
+    // --- column holds the object key, not the bytes.
+    private String documentType;
+    private String documentFileName;
+    private String documentFileType;
+    private String documentStoragePath;
+    private Long documentFileSize;
+
     public NameChangeRequest() {
     }
 
@@ -123,5 +132,46 @@ public class NameChangeRequest extends ProfileChangeRequest {
 
     public void setNewNameWithInitials(String newNameWithInitials) {
         this.newNameWithInitials = newNameWithInitials;
+    }
+
+    public String getDocumentType() {
+        return documentType;
+    }
+
+    public void setDocumentType(String documentType) {
+        this.documentType = documentType;
+    }
+
+    public String getDocumentFileName() {
+        return documentFileName;
+    }
+
+    public void setDocumentFileName(String documentFileName) {
+        this.documentFileName = documentFileName;
+    }
+
+    public String getDocumentFileType() {
+        return documentFileType;
+    }
+
+    public void setDocumentFileType(String documentFileType) {
+        this.documentFileType = documentFileType;
+    }
+
+    /** The S3 object key. */
+    public String getDocumentStoragePath() {
+        return documentStoragePath;
+    }
+
+    public void setDocumentStoragePath(String documentStoragePath) {
+        this.documentStoragePath = documentStoragePath;
+    }
+
+    public Long getDocumentFileSize() {
+        return documentFileSize;
+    }
+
+    public void setDocumentFileSize(Long documentFileSize) {
+        this.documentFileSize = documentFileSize;
     }
 }

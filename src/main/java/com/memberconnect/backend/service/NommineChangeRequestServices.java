@@ -42,6 +42,9 @@ public class NommineChangeRequestServices {
     @Autowired
     private MemberRepository memberRepository;
 
+    @Autowired
+    private S3Service s3Service;
+
     public List<NommineChangeRequestDTO> nommineChangeRequestFindService() {
         return nominneChangeRequestRepo.findAll().stream()
                 .map(this::toDtoWithMemberDetails)
@@ -93,6 +96,131 @@ public class NommineChangeRequestServices {
 
         NommineChangeRequests saved = nominneChangeRequestRepo.save(entity);
         return toDtoWithMemberDetails(saved);
+    }
+
+    /**
+     * Creates the request and stores its supporting document (MMC18).
+     *
+     * The document goes to S3 through {@link S3Service}, the same store Basic Profile,
+     * Death Donation, Member Death and University Scholarship use. S3Service keeps its
+     * own local fallback, so an S3 outage stores the file rather than losing the user's
+     * upload.
+     */
+    public NommineChangeRequestDTO saveWithDocument(
+            NommineChangeRequestDTO dto,
+            org.springframework.web.multipart.MultipartFile file) {
+
+        NommineChangeRequests entity = modelMapper.map(dto, NommineChangeRequests.class);
+
+        entity.setId(null);
+        entity.setRequestNo(nextRequestNo());
+        entity.setRequestedDate(LocalDate.now());
+        entity.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+        entity.setRejectReason(null);
+
+        snapshotCurrentValues(entity);
+        handleFileUpload(entity, file);
+
+        return toDtoWithMemberDetails(nominneChangeRequestRepo.save(entity));
+    }
+
+    /**
+     * Updates the request, optionally replacing its document.
+     *
+     * A new file replaces and deletes the old object. No file plus a blank storage path
+     * means "remove the document". No file plus the existing key means "leave it alone" -
+     * which is what the screen sends on an ordinary edit, so editing the nominee details
+     * does not disturb the uploaded file.
+     */
+    public NommineChangeRequestDTO updateWithDocument(
+            Integer id,
+            NommineChangeRequestDTO dto,
+            org.springframework.web.multipart.MultipartFile file) {
+
+        NommineChangeRequests existing = nominneChangeRequestRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Nominee change request not found: " + id));
+
+        String requestNo = existing.getRequestNo();
+        String memberId = existing.getMemberId();
+        LocalDate requestedDate = existing.getRequestedDate();
+        ApplicationStatus previousStatus = existing.getStatus();
+        // The whole document block has to be captured, not just the key: the DTO the
+        // screen sends back carries only documentStoragePath, so mapping it over the
+        // entity nulls the file name, type and size. Restoring the key alone left the
+        // file downloadable but nameless on the screen.
+        String oldStorageKey = existing.getDocumentStoragePath();
+        String oldFileName = existing.getDocumentFileName();
+        String oldFileType = existing.getDocumentFileType();
+        Long oldFileSize = existing.getDocumentFileSize();
+        String oldDocumentType = existing.getDocumentType();
+
+        modelMapper.map(dto, existing);
+
+        existing.setId(id);
+        existing.setRequestNo(requestNo);
+        existing.setMemberId(memberId);
+        existing.setRequestedDate(requestedDate);
+
+        resubmit(existing, previousStatus);
+
+        if (file != null && !file.isEmpty()) {
+            deleteFileIfExists(oldStorageKey);
+            handleFileUpload(existing, file);
+        } else if (dto.getDocumentStoragePath() == null || dto.getDocumentStoragePath().isBlank()) {
+            deleteFileIfExists(oldStorageKey);
+            clearDocument(existing);
+        } else {
+            existing.setDocumentStoragePath(oldStorageKey);
+            existing.setDocumentFileName(oldFileName);
+            existing.setDocumentFileType(oldFileType);
+            existing.setDocumentFileSize(oldFileSize);
+            existing.setDocumentType(oldDocumentType);
+        }
+
+        return toDtoWithMemberDetails(nominneChangeRequestRepo.save(existing));
+    }
+
+    /** Stores the file in S3 and records its metadata against the request. */
+    private void handleFileUpload(
+            NommineChangeRequests entity,
+            org.springframework.web.multipart.MultipartFile file) {
+
+        if (file == null || file.isEmpty()) {
+            return;
+        }
+        try {
+            entity.setDocumentStoragePath(s3Service.uploadFile(file));
+            entity.setDocumentFileName(file.getOriginalFilename());
+            entity.setDocumentFileType(file.getContentType());
+            entity.setDocumentFileSize(file.getSize());
+            if (entity.getDocumentType() == null || entity.getDocumentType().isBlank()) {
+                entity.setDocumentType("SUPPORTING_DOC");
+            }
+        } catch (java.io.IOException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not store the supporting document: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Removes the object from S3. S3Service also clears any local fallback copy. Never
+     * throws: failing to delete a file must not roll back the record change.
+     */
+    private void deleteFileIfExists(String storageKey) {
+        if (storageKey == null || storageKey.isBlank()) {
+            return;
+        }
+        s3Service.deleteFile(storageKey);
+    }
+
+    private void clearDocument(NommineChangeRequests entity) {
+        entity.setDocumentStoragePath(null);
+        entity.setDocumentFileName(null);
+        entity.setDocumentFileType(null);
+        entity.setDocumentFileSize(null);
+        entity.setDocumentType(null);
     }
 
     /**
@@ -233,6 +361,10 @@ public class NommineChangeRequestServices {
                 existing.getStatus(),
                 null
         );
+
+        // The supporting document goes with the request; leaving it behind would orphan
+        // an object in S3 that nothing references any more.
+        deleteFileIfExists(existing.getDocumentStoragePath());
 
         nominneChangeRequestRepo.deleteById(id);
         return "Deleted successfully";

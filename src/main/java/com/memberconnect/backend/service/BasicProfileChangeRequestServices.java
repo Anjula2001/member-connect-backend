@@ -53,6 +53,9 @@ public class BasicProfileChangeRequestServices {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private S3Service s3Service;
+
     public List<BasicProfileChangeRequestDTO> getBasicProfileChangeRequests(){
         List<BasicProfileChangeRequest> basicProfileChangeRequests = basicProfileChangeRequestRepo.findAll();
         return modelMapper.map(basicProfileChangeRequests,new TypeToken<List<BasicProfileChangeRequestDTO>>(){}.getType());
@@ -495,35 +498,38 @@ public class BasicProfileChangeRequestServices {
         return "Successfully deleted request";
     }
 
+    /**
+     * Stores the supporting document through {@link S3Service}, the same path every
+     * other module uses (Death Donation, Member Death, University Scholarship, and the
+     * shared DocumentService).
+     *
+     * This class used to write straight to a local "uploads" folder and never touched
+     * S3. It appeared to work only because S3Service falls back to that same folder name
+     * when S3 is unreachable, so upload and download happened to meet on local disk. On
+     * a container or a second instance that coincidence does not hold: the folder is
+     * wiped on redeploy, and a file written by one instance is not on another's disk.
+     *
+     * S3Service keeps its own local fallback, so an S3 outage still stores the file
+     * rather than losing the user's upload.
+     */
     private void handleFileUpload(BasicProfileChangeRequest entity, org.springframework.web.multipart.MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return;
         }
         try {
-            String uploadDir = "uploads";
-            java.nio.file.Path uploadPath = java.nio.file.Paths.get(uploadDir);
-            if (!java.nio.file.Files.exists(uploadPath)) {
-                java.nio.file.Files.createDirectories(uploadPath);
-            }
+            String storageKey = s3Service.uploadFile(file);
 
-            String originalFileName = file.getOriginalFilename();
-            String fileExtension = "";
-            if (originalFileName != null && originalFileName.contains(".")) {
-                fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
-            }
-            String uniqueFileName = java.util.UUID.randomUUID().toString() + fileExtension;
-            java.nio.file.Path targetLocation = uploadPath.resolve(uniqueFileName);
-            java.nio.file.Files.copy(file.getInputStream(), targetLocation, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-
-            entity.setDocumentStoragePath(uniqueFileName);
-            entity.setDocumentFileName(originalFileName);
+            entity.setDocumentStoragePath(storageKey);
+            entity.setDocumentFileName(file.getOriginalFilename());
             entity.setDocumentFileType(file.getContentType());
             entity.setDocumentFileSize(file.getSize());
             if (!dtoHasDocumentType(entity)) {
                 entity.setDocumentType("SUPPORTING_DOC");
             }
         } catch (java.io.IOException e) {
-            throw new RuntimeException("Could not store file: " + e.getMessage(), e);
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not store the supporting document: " + e.getMessage());
         }
     }
 
@@ -531,15 +537,16 @@ public class BasicProfileChangeRequestServices {
         return entity.getDocumentType() != null && !entity.getDocumentType().isBlank();
     }
 
+    /**
+     * Removes the document from S3. S3Service also clears any local fallback copy, so
+     * documents stored before this class moved onto S3 are cleaned up by the same call.
+     * Never throws: losing a stored file must not roll back the record change that
+     * prompted it.
+     */
     private void deleteFileIfExists(String fileName) {
         if (fileName == null || fileName.isBlank()) {
             return;
         }
-        try {
-            java.nio.file.Path filePath = java.nio.file.Paths.get("uploads").resolve(fileName).normalize();
-            java.nio.file.Files.deleteIfExists(filePath);
-        } catch (java.io.IOException e) {
-            System.err.println("Warning: could not delete file: " + e.getMessage());
-        }
+        s3Service.deleteFile(fileName);
     }
 }

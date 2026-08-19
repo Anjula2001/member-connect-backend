@@ -42,6 +42,9 @@ public class NameChangeRequstServices {
     @Autowired
     private MemberRepository memberRepository;
 
+    @Autowired
+    private S3Service s3Service;
+
     public List<NameChangeRequestDTO> NameChangeRequestgetAll() {
         return nameChangeRequestRepo.findAll().stream()
                 .map(this::toDtoWithMemberDetails)
@@ -94,6 +97,130 @@ public class NameChangeRequstServices {
 
         NameChangeRequest saved = nameChangeRequestRepo.save(entity);
         return toDtoWithMemberDetails(saved);
+    }
+
+    /**
+     * Creates the request and stores its supporting document (MMC05).
+     *
+     * The document goes to S3 through {@link S3Service}, the same store Basic Profile,
+     * Nominee, Death Donation and the rest use. S3Service keeps its own local fallback,
+     * so an S3 outage stores the file rather than losing the user's upload.
+     */
+    public NameChangeRequestDTO saveWithDocument(
+            NameChangeRequestDTO dto,
+            org.springframework.web.multipart.MultipartFile file) {
+
+        NameChangeRequest entity = modelMapper.map(dto, NameChangeRequest.class);
+
+        entity.setNameChangeRequestID(null);
+        entity.setRequestNo(nextRequestNo());
+        entity.setRequestedDate(LocalDate.now());
+        entity.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+        entity.setRejectReason(null);
+
+        snapshotCurrentValues(entity);
+        handleFileUpload(entity, file);
+
+        return toDtoWithMemberDetails(nameChangeRequestRepo.save(entity));
+    }
+
+    /**
+     * Updates the request, optionally replacing its document.
+     *
+     * A new file replaces and deletes the old object. No file plus a blank storage path
+     * means "remove the document". No file plus the existing key means "leave it alone" -
+     * which is what the screen sends on an ordinary edit, so editing the names does not
+     * disturb the uploaded file.
+     */
+    public NameChangeRequestDTO updateWithDocument(
+            Integer id,
+            NameChangeRequestDTO dto,
+            org.springframework.web.multipart.MultipartFile file) {
+
+        NameChangeRequest existing = nameChangeRequestRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Name change request not found: " + id));
+
+        String requestNo = existing.getRequestNo();
+        String memberId = existing.getMemberId();
+        LocalDate requestedDate = existing.getRequestedDate();
+        ApplicationStatus previousStatus = existing.getStatus();
+
+        // The whole document block has to be captured, not just the key: the DTO the
+        // screen sends back carries only documentStoragePath, so mapping it over the
+        // entity would null the file name, type and size.
+        String oldStorageKey = existing.getDocumentStoragePath();
+        String oldFileName = existing.getDocumentFileName();
+        String oldFileType = existing.getDocumentFileType();
+        Long oldFileSize = existing.getDocumentFileSize();
+        String oldDocumentType = existing.getDocumentType();
+
+        modelMapper.map(dto, existing);
+
+        existing.setNameChangeRequestID(id);
+        existing.setRequestNo(requestNo);
+        existing.setMemberId(memberId);
+        existing.setRequestedDate(requestedDate);
+
+        resubmit(existing, previousStatus);
+
+        if (file != null && !file.isEmpty()) {
+            deleteFileIfExists(oldStorageKey);
+            handleFileUpload(existing, file);
+        } else if (dto.getDocumentStoragePath() == null || dto.getDocumentStoragePath().isBlank()) {
+            deleteFileIfExists(oldStorageKey);
+            clearDocument(existing);
+        } else {
+            existing.setDocumentStoragePath(oldStorageKey);
+            existing.setDocumentFileName(oldFileName);
+            existing.setDocumentFileType(oldFileType);
+            existing.setDocumentFileSize(oldFileSize);
+            existing.setDocumentType(oldDocumentType);
+        }
+
+        return toDtoWithMemberDetails(nameChangeRequestRepo.save(existing));
+    }
+
+    /** Stores the file in S3 and records its metadata against the request. */
+    private void handleFileUpload(
+            NameChangeRequest entity,
+            org.springframework.web.multipart.MultipartFile file) {
+
+        if (file == null || file.isEmpty()) {
+            return;
+        }
+        try {
+            entity.setDocumentStoragePath(s3Service.uploadFile(file));
+            entity.setDocumentFileName(file.getOriginalFilename());
+            entity.setDocumentFileType(file.getContentType());
+            entity.setDocumentFileSize(file.getSize());
+            if (entity.getDocumentType() == null || entity.getDocumentType().isBlank()) {
+                entity.setDocumentType("SUPPORTING_DOC");
+            }
+        } catch (java.io.IOException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not store the supporting document: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Removes the object from S3. S3Service also clears any local fallback copy. Never
+     * throws: failing to delete a file must not roll back the record change.
+     */
+    private void deleteFileIfExists(String storageKey) {
+        if (storageKey == null || storageKey.isBlank()) {
+            return;
+        }
+        s3Service.deleteFile(storageKey);
+    }
+
+    private void clearDocument(NameChangeRequest entity) {
+        entity.setDocumentStoragePath(null);
+        entity.setDocumentFileName(null);
+        entity.setDocumentFileType(null);
+        entity.setDocumentFileSize(null);
+        entity.setDocumentType(null);
     }
 
     /**
@@ -238,6 +365,10 @@ public class NameChangeRequstServices {
                 existing.getStatus(),
                 null
         );
+
+        // The supporting document goes with the request; leaving it behind would orphan
+        // an object in S3 that nothing references any more.
+        deleteFileIfExists(existing.getDocumentStoragePath());
 
         nameChangeRequestRepo.deleteById(id);
         return "Deleted successfully";
