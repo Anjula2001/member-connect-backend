@@ -22,6 +22,22 @@ public class NameChangeRequest extends ProfileChangeRequest {
     @Column(name = "NameChangeRequestID")
     private Integer nameChangeRequestID;
 
+    // --- "Current Value" snapshot, taken from the Member Profile when the request is
+    // --- submitted. MMC05 shows this section read live from the member; storing it means
+    // --- the board sees the names as they stood when the request was raised.
+    @Column(name = "old_title")
+    private String oldTitle;
+
+    @Column(name = "old_fullname")
+    private String oldFullName;
+
+    @Column(name = "old_name_as_payroll")
+    private String oldNameAsInPayroll;
+
+    @Column(name = "old_name_with_initials")
+    private String oldNameWithInitials;
+
+    // --- "New Value" section ---
     @Column(name = "title")
     private String newTitle;
 
@@ -43,6 +59,38 @@ public class NameChangeRequest extends ProfileChangeRequest {
 
     public void setNameChangeRequestID(Integer nameChangeRequestID) {
         this.nameChangeRequestID = nameChangeRequestID;
+    }
+
+    public String getOldTitle() {
+        return oldTitle;
+    }
+
+    public void setOldTitle(String oldTitle) {
+        this.oldTitle = oldTitle;
+    }
+
+    public String getOldFullName() {
+        return oldFullName;
+    }
+
+    public void setOldFullName(String oldFullName) {
+        this.oldFullName = oldFullName;
+    }
+
+    public String getOldNameAsInPayroll() {
+        return oldNameAsInPayroll;
+    }
+
+    public void setOldNameAsInPayroll(String oldNameAsInPayroll) {
+        this.oldNameAsInPayroll = oldNameAsInPayroll;
+    }
+
+    public String getOldNameWithInitials() {
+        return oldNameWithInitials;
+    }
+
+    public void setOldNameWithInitials(String oldNameWithInitials) {
+        this.oldNameWithInitials = oldNameWithInitials;
     }
 
     public String getNewTitle() {

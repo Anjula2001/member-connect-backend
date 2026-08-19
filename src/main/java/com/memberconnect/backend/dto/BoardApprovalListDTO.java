@@ -26,4 +26,11 @@ public class BoardApprovalListDTO {
 	private String rejectReason;
 	private String boardRemarks;
 	private String approvedListDocument;
+
+	/**
+	 * Per-request decisions for the Name and Nominee change requests on this list
+	 * (MMC12 / MMC25). Empty means "approve everything", which is the screen's default.
+	 */
+	private List<ProfileChangeItemDecisionDTO> nameChangeDecisions = new ArrayList<>();
+	private List<ProfileChangeItemDecisionDTO> nomineeChangeDecisions = new ArrayList<>();
 }

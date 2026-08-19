@@ -33,6 +33,22 @@ public class NameChangeRequestDTO {
 
     private String submissionLocation;
 
+    /** Who decided the request, and when. Set when the board approval list is processed. */
+    private String processedBy;
+    private java.time.LocalDateTime processedAt;
+
+    // --- "Current Value" snapshot, filled in by the server at submit time from the
+    // --- Member Profile. Read-only to clients: anything sent here is overwritten.
+    private String oldTitle;
+    private String oldFullName;
+    private String oldNameAsInPayroll;
+    private String oldNameWithInitials;
+
+    // --- Member Details block (MMC05): resolved from the member, not stored. ---
+    private String memberFullName;
+    private String memberNameWithInitials;
+    private String memberNic;
+
     @NotBlank(message = "Title is required")
     private String newTitle;
 

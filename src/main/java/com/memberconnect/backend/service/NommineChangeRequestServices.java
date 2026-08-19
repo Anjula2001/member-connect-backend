@@ -2,8 +2,11 @@ package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.NommineChangeRequestDTO;
 import com.memberconnect.backend.enums.ApplicationStatus;
+import com.memberconnect.backend.enums.MemberStatus;
 import com.memberconnect.backend.enums.ProfileChangeType;
+import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.model.NommineChangeRequests;
+import com.memberconnect.backend.repository.MemberRepository;
 import com.memberconnect.backend.repository.NominneChangeRequestRepo;
 import jakarta.transaction.Transactional;
 import org.modelmapper.ModelMapper;
@@ -36,16 +39,37 @@ public class NommineChangeRequestServices {
     @Autowired
     private AuditService auditService;
 
+    @Autowired
+    private MemberRepository memberRepository;
+
     public List<NommineChangeRequestDTO> nommineChangeRequestFindService() {
-        List<NommineChangeRequests> requests = nominneChangeRequestRepo.findAll();
-        return modelMapper.map(requests, new TypeToken<List<NommineChangeRequestDTO>>() {}.getType());
+        return nominneChangeRequestRepo.findAll().stream()
+                .map(this::toDtoWithMemberDetails)
+                .toList();
     }
 
     public NommineChangeRequestDTO getNommineChangeRequestById(Integer id) {
-        Optional<NommineChangeRequests> optionalEntity = nominneChangeRequestRepo.findById(id);
-        return optionalEntity
-                .map(entity -> modelMapper.map(entity, NommineChangeRequestDTO.class))
+        return nominneChangeRequestRepo.findById(id)
+                .map(this::toDtoWithMemberDetails)
                 .orElse(null);
+    }
+
+    /**
+     * MMC18's "Member Details" block - Member ID, Name with Initials and NIC - belongs
+     * to the member, so it is resolved on read rather than duplicated onto the request.
+     */
+    private NommineChangeRequestDTO toDtoWithMemberDetails(NommineChangeRequests entity) {
+        NommineChangeRequestDTO dto = modelMapper.map(entity, NommineChangeRequestDTO.class);
+
+        if (entity.getMemberId() != null) {
+            memberRepository.findByMemberId(entity.getMemberId()).ifPresent(member -> {
+                dto.setMemberFullName(member.getFullName());
+                dto.setMemberNameWithInitials(member.getNameWithInitials());
+                dto.setMemberNic(member.getNic());
+            });
+        }
+
+        return dto;
     }
 
     /**
@@ -65,8 +89,57 @@ public class NommineChangeRequestServices {
         entity.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
         entity.setRejectReason(null);
 
+        snapshotCurrentValues(entity);
+
         NommineChangeRequests saved = nominneChangeRequestRepo.save(entity);
-        return modelMapper.map(saved, NommineChangeRequestDTO.class);
+        return toDtoWithMemberDetails(saved);
+    }
+
+    /**
+     * Resolves the member and records the "Current Value" section against the request.
+     *
+     * memberId here is the membership number (MEM-2026-001), not the Member table's
+     * primary key. The entry screen was sending the numeric id it had in the URL, which
+     * matched no member at all: the request saved with member_id "1", and the list could
+     * not resolve a name, NIC or location for it. Failing loudly when the member cannot
+     * be found stops that going unnoticed again.
+     *
+     * The nominee's identification number lives on the member as identificationNumber -
+     * distinct from nic, which is the member's own.
+     */
+    private void snapshotCurrentValues(NommineChangeRequests entity) {
+        String memberId = entity.getMemberId();
+        if (memberId == null || memberId.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "A membership number is required to raise a nominee change request.");
+        }
+
+        Member member = memberRepository.findByMemberId(memberId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "No member found with membership number " + memberId
+                                + ". Raise the request from the member's profile."));
+
+        // MMC18: the request can only be raised against an active membership.
+        if (member.getStatus() != MemberStatus.ACTIVE) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Nominee changes can only be requested for an active member. "
+                            + memberId + " is " + member.getStatus() + ".");
+        }
+
+        entity.setOldNommineName(member.getNomineeFullName());
+        entity.setOldRelationship(member.getNomineeRelationship());
+        entity.setOldNic(member.getIdentificationNumber());
+        entity.setOldAddress(member.getNomineeAddress());
+
+        if (entity.getSubmissionLocation() == null || entity.getSubmissionLocation().isBlank()) {
+            entity.setSubmissionLocation(
+                    member.getSubmissionLocation() != null
+                            ? member.getSubmissionLocation()
+                            : member.getEducationalDistrict());
+        }
     }
 
     /** MMC18: "Once submitted, the user cannot edit the record." */
@@ -75,20 +148,50 @@ public class NommineChangeRequestServices {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Nominee change request not found: " + id));
 
-        statusPolicy.assertEditable(existing.getStatus());
-
         String requestNo = existing.getRequestNo();
+        String memberId = existing.getMemberId();
         LocalDate requestedDate = existing.getRequestedDate();
-        ApplicationStatus status = existing.getStatus();
+        ApplicationStatus previousStatus = existing.getStatus();
 
         modelMapper.map(dto, existing);
 
         existing.setId(id);
         existing.setRequestNo(requestNo);
+        existing.setMemberId(memberId);
         existing.setRequestedDate(requestedDate);
-        existing.setStatus(status);
 
-        return modelMapper.map(nominneChangeRequestRepo.save(existing), NommineChangeRequestDTO.class);
+        resubmit(existing, previousStatus);
+
+        return toDtoWithMemberDetails(nominneChangeRequestRepo.save(existing));
+    }
+
+    /**
+     * Puts an edited request back into the approval queue.
+     *
+     * MMC18 does not allow editing a submitted record at all - it is retired as Inactive
+     * and a new request raised. In-place editing is enabled at the product owner's
+     * direction, so the safeguard is here instead: an edited request returns to Submitted
+     * for Approval and loses any previous decision or approval-list placement, rather
+     * than keeping a stamp that no longer describes its contents. The Current Value
+     * snapshot is retaken so the board compares against the member as they stand now.
+     */
+    private void resubmit(NommineChangeRequests entity, ApplicationStatus previousStatus) {
+        snapshotCurrentValues(entity);
+
+        entity.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+        entity.setRejectReason(null);
+        entity.setProcessedBy(null);
+        entity.setProcessedAt(null);
+
+        if (previousStatus != ApplicationStatus.SUBMITTED_FOR_APPROVAL) {
+            auditService.recordStatusChange(
+                    AuditService.MODULE_NOMINEE_CHANGE,
+                    entity.getMemberId(),
+                    entity.getRequestNo(),
+                    previousStatus,
+                    ApplicationStatus.SUBMITTED_FOR_APPROVAL
+            );
+        }
     }
 
     /** MMC20: Inactive only, from Submitted for Approval or Rejected, with rights. */
@@ -113,7 +216,7 @@ public class NommineChangeRequestServices {
                 target
         );
 
-        return modelMapper.map(saved, NommineChangeRequestDTO.class);
+        return toDtoWithMemberDetails(saved);
     }
 
     public String deleteNommineChangeRequestService(Integer id) {

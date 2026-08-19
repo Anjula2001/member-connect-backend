@@ -2,8 +2,11 @@ package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.NameChangeRequestDTO;
 import com.memberconnect.backend.enums.ApplicationStatus;
+import com.memberconnect.backend.enums.MemberStatus;
 import com.memberconnect.backend.enums.ProfileChangeType;
+import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.model.NameChangeRequest;
+import com.memberconnect.backend.repository.MemberRepository;
 import com.memberconnect.backend.repository.NameChangeRequestRepo;
 import jakarta.transaction.Transactional;
 import org.modelmapper.ModelMapper;
@@ -36,16 +39,37 @@ public class NameChangeRequstServices {
     @Autowired
     private AuditService auditService;
 
+    @Autowired
+    private MemberRepository memberRepository;
+
     public List<NameChangeRequestDTO> NameChangeRequestgetAll() {
-        List<NameChangeRequest> nameChangeRequests = nameChangeRequestRepo.findAll();
-        return modelMapper.map(nameChangeRequests, new TypeToken<List<NameChangeRequestDTO>>() {}.getType());
+        return nameChangeRequestRepo.findAll().stream()
+                .map(this::toDtoWithMemberDetails)
+                .toList();
     }
 
     public NameChangeRequestDTO getRequestById(Integer id) {
-        Optional<NameChangeRequest> optionalEntity = nameChangeRequestRepo.findById(id);
-        return optionalEntity
-                .map(entity -> modelMapper.map(entity, NameChangeRequestDTO.class))
+        return nameChangeRequestRepo.findById(id)
+                .map(this::toDtoWithMemberDetails)
                 .orElse(null);
+    }
+
+    /**
+     * MMC05's "Member Details" block - Member ID, Name with Initials and NIC - belongs
+     * to the member, so it is resolved on read rather than duplicated onto the request.
+     */
+    private NameChangeRequestDTO toDtoWithMemberDetails(NameChangeRequest entity) {
+        NameChangeRequestDTO dto = modelMapper.map(entity, NameChangeRequestDTO.class);
+
+        if (entity.getMemberId() != null) {
+            memberRepository.findByMemberId(entity.getMemberId()).ifPresent(member -> {
+                dto.setMemberFullName(member.getFullName());
+                dto.setMemberNameWithInitials(member.getNameWithInitials());
+                dto.setMemberNic(member.getNic());
+            });
+        }
+
+        return dto;
     }
 
     /**
@@ -66,8 +90,54 @@ public class NameChangeRequstServices {
         entity.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
         entity.setRejectReason(null);
 
+        snapshotCurrentValues(entity);
+
         NameChangeRequest saved = nameChangeRequestRepo.save(entity);
-        return modelMapper.map(saved, NameChangeRequestDTO.class);
+        return toDtoWithMemberDetails(saved);
+    }
+
+    /**
+     * Resolves the member and records the "Current Value" section against the request.
+     *
+     * memberId here is the membership number (MEM-2026-001), not the Member table's
+     * primary key. The entry screen was sending the numeric id it had in the URL, which
+     * matched no member at all: the request saved with member_id "1", and the list could
+     * not resolve a name, NIC or location for it. Failing loudly when the member cannot
+     * be found stops that going unnoticed again.
+     */
+    private void snapshotCurrentValues(NameChangeRequest entity) {
+        String memberId = entity.getMemberId();
+        if (memberId == null || memberId.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "A membership number is required to raise a name change request.");
+        }
+
+        Member member = memberRepository.findByMemberId(memberId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "No member found with membership number " + memberId
+                                + ". Raise the request from the member's profile."));
+
+        // MMC05: the request can only be raised against an active membership.
+        if (member.getStatus() != MemberStatus.ACTIVE) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Name changes can only be requested for an active member. "
+                            + memberId + " is " + member.getStatus() + ".");
+        }
+
+        entity.setOldTitle(member.getTitle());
+        entity.setOldFullName(member.getFullName());
+        entity.setOldNameAsInPayroll(member.getNameAsInPayroll());
+        entity.setOldNameWithInitials(member.getNameWithInitials());
+
+        if (entity.getSubmissionLocation() == null || entity.getSubmissionLocation().isBlank()) {
+            entity.setSubmissionLocation(
+                    member.getSubmissionLocation() != null
+                            ? member.getSubmissionLocation()
+                            : member.getEducationalDistrict());
+        }
     }
 
     /**
@@ -80,20 +150,50 @@ public class NameChangeRequstServices {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Name change request not found: " + id));
 
-        statusPolicy.assertEditable(existing.getStatus());
-
         String requestNo = existing.getRequestNo();
+        String memberId = existing.getMemberId();
         LocalDate requestedDate = existing.getRequestedDate();
-        ApplicationStatus status = existing.getStatus();
+        ApplicationStatus previousStatus = existing.getStatus();
 
         modelMapper.map(dto, existing);
 
         existing.setNameChangeRequestID(id);
         existing.setRequestNo(requestNo);
+        existing.setMemberId(memberId);
         existing.setRequestedDate(requestedDate);
-        existing.setStatus(status);
 
-        return modelMapper.map(nameChangeRequestRepo.save(existing), NameChangeRequestDTO.class);
+        resubmit(existing, previousStatus);
+
+        return toDtoWithMemberDetails(nameChangeRequestRepo.save(existing));
+    }
+
+    /**
+     * Puts an edited request back into the approval queue.
+     *
+     * MMC05 does not allow editing a submitted record at all - it is retired as Inactive
+     * and a new request raised. In-place editing is enabled at the product owner's
+     * direction, so the safeguard is here instead: an edited request returns to Submitted
+     * for Approval and loses any previous decision or approval-list placement, rather
+     * than keeping a stamp that no longer describes its contents. The Current Value
+     * snapshot is retaken so the board compares against the member as they stand now.
+     */
+    private void resubmit(NameChangeRequest entity, ApplicationStatus previousStatus) {
+        snapshotCurrentValues(entity);
+
+        entity.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+        entity.setRejectReason(null);
+        entity.setProcessedBy(null);
+        entity.setProcessedAt(null);
+
+        if (previousStatus != ApplicationStatus.SUBMITTED_FOR_APPROVAL) {
+            auditService.recordStatusChange(
+                    AuditService.MODULE_NAME_CHANGE,
+                    entity.getMemberId(),
+                    entity.getRequestNo(),
+                    previousStatus,
+                    ApplicationStatus.SUBMITTED_FOR_APPROVAL
+            );
+        }
     }
 
     /**
@@ -121,7 +221,7 @@ public class NameChangeRequstServices {
                 target
         );
 
-        return modelMapper.map(saved, NameChangeRequestDTO.class);
+        return toDtoWithMemberDetails(saved);
     }
 
     public String deleteNameChangeRequestService(Integer id) {

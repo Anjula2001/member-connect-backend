@@ -1,10 +1,18 @@
 package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.BoardApprovalListDTO;
+import com.memberconnect.backend.dto.ProfileChangeItemDecisionDTO;
 import com.memberconnect.backend.dto.MemberApplicationDTO;
 import com.memberconnect.backend.dto.NameChangeRequestDTO;
 import com.memberconnect.backend.dto.NommineChangeRequestDTO;
 import com.memberconnect.backend.enums.ApplicationStatus;
+import com.memberconnect.backend.enums.ProfileChangeType;
+import com.memberconnect.backend.model.Member;
+import com.memberconnect.backend.repository.MemberRepository;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import java.util.Map;
+import java.util.function.Function;
 import com.memberconnect.backend.model.BoardApprovalList;
 import com.memberconnect.backend.model.Member_Application;
 import com.memberconnect.backend.model.NameChangeRequest;
@@ -24,6 +32,7 @@ import java.time.LocalDateTime;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -49,6 +58,15 @@ public class BoardApprovalListService {
 
 	@Autowired
 	private ProfileChangeStatusPolicy statusPolicy;
+
+	@Autowired
+	private MemberRepository memberRepository;
+
+	@Autowired
+	private AuditService auditService;
+
+	@Autowired
+	private NotificationService notificationService;
 
 	// ── CSV helpers ──────────────────────────────────────────────────────
 
@@ -168,6 +186,199 @@ public class BoardApprovalListService {
 
 		BoardApprovalList saved = boardApprovalListRepository.save(entity);
 		return toDto(saved);
+	}
+
+	// ── Per-request decisions (MMC12 / MMC25) ────────────────────────────
+
+	/** Indexes the submitted decisions by request id so each row can find its own. */
+	private Map<Integer, ProfileChangeItemDecisionDTO> byRequestId(List<ProfileChangeItemDecisionDTO> decisions) {
+		if (decisions == null) {
+			return Map.of();
+		}
+		return decisions.stream()
+				.filter(d -> d.getRequestId() != null)
+				.collect(Collectors.toMap(
+						ProfileChangeItemDecisionDTO::getRequestId,
+						Function.identity(),
+						(first, second) -> second));
+	}
+
+	/**
+	 * MMC12: on approval the Member Profile takes the requested names; on rejection it
+	 * is left untouched and the reason is stored. Both outcomes are audited and notified.
+	 *
+	 * Approval previously changed only the request's status — the member's name was never
+	 * actually updated, so an approved name change had no effect on the member.
+	 */
+	private void processNameChangeRequests(
+			List<Integer> ids,
+			List<ProfileChangeItemDecisionDTO> decisions,
+			String processedBy) {
+
+		Map<Integer, ProfileChangeItemDecisionDTO> byId = byRequestId(decisions);
+
+		for (Integer id : ids) {
+			NameChangeRequest request = nameChangeRequestRepo.findById(id).orElse(null);
+			if (request == null) {
+				continue;
+			}
+
+			ProfileChangeItemDecisionDTO decision = byId.get(id);
+			boolean reject = decision != null && decision.isReject();
+
+			if (reject) {
+				String reason = decision.getRejectReason() == null ? "" : decision.getRejectReason().trim();
+				if (reason.isEmpty()) {
+					throw new ResponseStatusException(
+							HttpStatus.BAD_REQUEST,
+							"A reject reason is required for request "
+									+ (request.getRequestNo() == null ? id : request.getRequestNo()) + ".");
+				}
+				request.setStatus(ApplicationStatus.REJECTED);
+				request.setRejectReason(reason);
+			} else {
+				request.setStatus(ApplicationStatus.APPROVED);
+				request.setRejectReason(null);
+			}
+
+			request.setProcessedBy(processedBy);
+			request.setProcessedAt(LocalDateTime.now());
+			NameChangeRequest saved = nameChangeRequestRepo.save(request);
+
+			Member member = saved.getMemberId() == null
+					? null
+					: memberRepository.findByMemberId(saved.getMemberId()).orElse(null);
+			if (member == null) {
+				// Nothing to update or notify against; the status change still stands.
+				continue;
+			}
+
+			if (reject) {
+				auditService.record(
+						AuditService.MODULE_NAME_CHANGE, member.getId(), "REJECTED", null, null,
+						"Request " + saved.getRequestNo() + " rejected: " + saved.getRejectReason());
+				notificationService.sendProfileChangeRejected(
+						member, ProfileChangeType.NAME, saved.getRequestNo(), saved.getRejectReason());
+				continue;
+			}
+
+			Map<String, Object> before = nameSnapshot(member);
+			applyNamesToMember(saved, member);
+			Map<String, Object> after = nameSnapshot(member);
+			memberRepository.save(member);
+
+			auditService.recordFieldChanges(
+					AuditService.MODULE_NAME_CHANGE, member.getId(), "APPROVED", before, after,
+					"Request " + saved.getRequestNo() + " approved");
+			notificationService.sendProfileChangeApproved(
+					member, ProfileChangeType.NAME, saved.getRequestNo());
+		}
+	}
+
+	/** MMC25, the same shape as the name path but writing the nominee fields. */
+	private void processNomineeChangeRequests(
+			List<Integer> ids,
+			List<ProfileChangeItemDecisionDTO> decisions,
+			String processedBy) {
+
+		Map<Integer, ProfileChangeItemDecisionDTO> byId = byRequestId(decisions);
+
+		for (Integer id : ids) {
+			NommineChangeRequests request = nomineeChangeRequestRepo.findById(id).orElse(null);
+			if (request == null) {
+				continue;
+			}
+
+			ProfileChangeItemDecisionDTO decision = byId.get(id);
+			boolean reject = decision != null && decision.isReject();
+
+			if (reject) {
+				String reason = decision.getRejectReason() == null ? "" : decision.getRejectReason().trim();
+				if (reason.isEmpty()) {
+					throw new ResponseStatusException(
+							HttpStatus.BAD_REQUEST,
+							"A reject reason is required for request "
+									+ (request.getRequestNo() == null ? id : request.getRequestNo()) + ".");
+				}
+				request.setStatus(ApplicationStatus.REJECTED);
+				request.setRejectReason(reason);
+			} else {
+				request.setStatus(ApplicationStatus.APPROVED);
+				request.setRejectReason(null);
+			}
+
+			request.setProcessedBy(processedBy);
+			request.setProcessedAt(LocalDateTime.now());
+			NommineChangeRequests saved = nomineeChangeRequestRepo.save(request);
+
+			Member member = saved.getMemberId() == null
+					? null
+					: memberRepository.findByMemberId(saved.getMemberId()).orElse(null);
+			if (member == null) {
+				continue;
+			}
+
+			if (reject) {
+				auditService.record(
+						AuditService.MODULE_NOMINEE_CHANGE, member.getId(), "REJECTED", null, null,
+						"Request " + saved.getRequestNo() + " rejected: " + saved.getRejectReason());
+				notificationService.sendProfileChangeRejected(
+						member, ProfileChangeType.NOMINEE, saved.getRequestNo(), saved.getRejectReason());
+				continue;
+			}
+
+			Map<String, Object> before = nomineeSnapshot(member);
+			applyNomineeToMember(saved, member);
+			Map<String, Object> after = nomineeSnapshot(member);
+			memberRepository.save(member);
+
+			auditService.recordFieldChanges(
+					AuditService.MODULE_NOMINEE_CHANGE, member.getId(), "APPROVED", before, after,
+					"Request " + saved.getRequestNo() + " approved");
+			notificationService.sendProfileChangeApproved(
+					member, ProfileChangeType.NOMINEE, saved.getRequestNo());
+		}
+	}
+
+	private void applyNamesToMember(NameChangeRequest request, Member member) {
+		setIfPresent(request.getNewTitle(), member::setTitle);
+		setIfPresent(request.getNewFullName(), member::setFullName);
+		setIfPresent(request.getNewNameAsInPayroll(), member::setNameAsInPayroll);
+		setIfPresent(request.getNewNameWithInitials(), member::setNameWithInitials);
+	}
+
+	private void applyNomineeToMember(NommineChangeRequests request, Member member) {
+		setIfPresent(request.getNewnommineName(), member::setNomineeFullName);
+		setIfPresent(request.getRelationship(), member::setNomineeRelationship);
+		setIfPresent(request.getAddress(), member::setNomineeAddress);
+		// MMC18 lists the nominee's Identification Number among the changeable fields; on
+		// the member it is identificationNumber, not nic, which is the member's own.
+		setIfPresent(request.getNic(), member::setIdentificationNumber);
+	}
+
+	private Map<String, Object> nameSnapshot(Member member) {
+		Map<String, Object> values = new LinkedHashMap<>();
+		values.put("title", String.valueOf(member.getTitle()));
+		values.put("fullName", String.valueOf(member.getFullName()));
+		values.put("nameAsInPayroll", String.valueOf(member.getNameAsInPayroll()));
+		values.put("nameWithInitials", String.valueOf(member.getNameWithInitials()));
+		return values;
+	}
+
+	private Map<String, Object> nomineeSnapshot(Member member) {
+		Map<String, Object> values = new LinkedHashMap<>();
+		values.put("nomineeFullName", String.valueOf(member.getNomineeFullName()));
+		values.put("nomineeRelationship", String.valueOf(member.getNomineeRelationship()));
+		values.put("nomineeAddress", String.valueOf(member.getNomineeAddress()));
+		values.put("nomineeIdentificationNumber", String.valueOf(member.getIdentificationNumber()));
+		return values;
+	}
+
+	/** A blank requested value leaves the member's current value alone. */
+	private void setIfPresent(String value, java.util.function.Consumer<String> setter) {
+		if (value != null && !value.isBlank()) {
+			setter.accept(value.trim());
+		}
 	}
 
 	// ── Read ─────────────────────────────────────────────────────────────
@@ -307,51 +518,53 @@ public class BoardApprovalListService {
 		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
 				.orElseThrow(() -> new RuntimeException("Board approval list not found"));
 
-		if (dto.getDecision() == null || dto.getDecision().trim().isEmpty()) {
-			throw new RuntimeException("Decision is required");
+		List<Integer> nameChangeIds = parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv());
+		List<Integer> nomineeChangeIds = parseCsvAsIntegers(entity.getNomineeChangeRequestIdsCsv());
+		boolean hasApplications = !entity.getApplications().isEmpty();
+
+		// A list holding only Name or Nominee change requests carries no list-wide
+		// decision: MMC12/MMC25 decide those per request. The screen used to derive the
+		// list decision from the application decisions alone, so a change-request-only
+		// list produced decision "Reject" with no reason and processing always failed
+		// with "Reject reason is required when rejecting applications".
+		String decision = dto.getDecision() == null ? "" : dto.getDecision().trim();
+		if (decision.isEmpty() && hasApplications) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Decision is required");
 		}
 
-		String decision = dto.getDecision().trim();
-		boolean approved = "APPROVE".equalsIgnoreCase(decision);
+		boolean approved = decision.isEmpty() || "APPROVE".equalsIgnoreCase(decision);
 		boolean rejected = "REJECT".equalsIgnoreCase(decision);
-		if (!approved && !rejected) {
-			throw new RuntimeException("Decision must be Approve or Reject");
+		if (!decision.isEmpty() && !approved && !rejected) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Decision must be Approve or Reject");
 		}
 
-		if (rejected && (dto.getRejectReason() == null || dto.getRejectReason().trim().isEmpty())) {
-			throw new RuntimeException("Reject reason is required when rejecting applications");
+		if (rejected && hasApplications
+				&& (dto.getRejectReason() == null || dto.getRejectReason().trim().isEmpty())) {
+			throw new ResponseStatusException(
+					HttpStatus.BAD_REQUEST, "Reject reason is required when rejecting applications");
 		}
 
 		LocalDate actualMeetingDate = dto.getActualMeetingDate() != null ? dto.getActualMeetingDate() : LocalDate.now();
 		String boardRemarks = dto.getBoardRemarks();
-		String rejectReason = rejected ? dto.getRejectReason().trim() : null;
+		// Null-safe: a change-request-only list is not required to carry a list-level
+		// reject reason, because its rejections are recorded per request instead.
+		String rejectReason = rejected && dto.getRejectReason() != null
+				? dto.getRejectReason().trim()
+				: null;
 
 		// Note: We deliberately DO NOT update individual Member_Application statuses here.
 		// The frontend handles per-application Approve/Reject updates via `updateMemberApplicationPartial`.
 
-		// Update name change request statuses
-		List<Integer> nameChangeIds = parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv());
-		for (Integer id : nameChangeIds) {
-			nameChangeRequestRepo.findById(id).ifPresent(ncr -> {
-				ncr.setStatus(approved ? ApplicationStatus.APPROVED : ApplicationStatus.REJECTED);
-				nameChangeRequestRepo.save(ncr);
-			});
-		}
+		String processedBy = dto.getProcessedBy() == null || dto.getProcessedBy().trim().isEmpty()
+				? statusPolicy.currentUsername()
+				: dto.getProcessedBy().trim();
 
-		// Update nominee change request statuses
-		List<Integer> nomineeChangeIds = parseCsvAsIntegers(entity.getNomineeChangeRequestIdsCsv());
-		for (Integer id : nomineeChangeIds) {
-			nomineeChangeRequestRepo.findById(id).ifPresent(ncr -> {
-				ncr.setStatus(approved ? ApplicationStatus.APPROVED : ApplicationStatus.REJECTED);
-				nomineeChangeRequestRepo.save(ncr);
-			});
-		}
+		processNameChangeRequests(nameChangeIds, dto.getNameChangeDecisions(), processedBy);
+		processNomineeChangeRequests(nomineeChangeIds, dto.getNomineeChangeDecisions(), processedBy);
 
 		entity.setStatus("PROCESSED");
 		entity.setProcessedAt(LocalDateTime.now());
-		entity.setProcessedBy(dto.getProcessedBy() == null || dto.getProcessedBy().trim().isEmpty()
-				? "Head Office User"
-				: dto.getProcessedBy().trim());
+		entity.setProcessedBy(processedBy);
 		entity.setActualMeetingDate(actualMeetingDate);
 		entity.setDecision(approved ? "Approve" : "Reject");
 		entity.setRejectReason(rejectReason);

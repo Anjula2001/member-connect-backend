@@ -32,6 +32,22 @@ public class NommineChangeRequestDTO {
 
     private String submissionLocation;
 
+    /** Who decided the request, and when. Set when the board approval list is processed. */
+    private String processedBy;
+    private java.time.LocalDateTime processedAt;
+
+    // --- "Current Value" snapshot, filled in by the server at submit time from the
+    // --- Member Profile. Read-only to clients: anything sent here is overwritten.
+    private String oldNommineName;
+    private String oldRelationship;
+    private String oldNic;
+    private String oldAddress;
+
+    // --- Member Details block (MMC18): resolved from the member, not stored. ---
+    private String memberFullName;
+    private String memberNameWithInitials;
+    private String memberNic;
+
     @NotBlank(message = "Nominee full name is required")
     private String newnommineName;
 
