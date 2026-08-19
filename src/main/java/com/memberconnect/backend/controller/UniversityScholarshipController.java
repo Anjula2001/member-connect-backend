@@ -336,6 +336,26 @@ public class UniversityScholarshipController {
         return Permission.US_FUND_SET_INACTIVE;
     }
 
+    /**
+     * MMS48 — hand an approved fund request to the Finance Module.
+     *
+     * A single @PreAuthorize is enough here: unlike the status endpoints, the right
+     * does not vary with the payload. There is no payload.
+     */
+    @PreAuthorize("hasAuthority('US_FINANCE_DISBURSE')")
+    @PostMapping("/university-scholarships/{requestId}/fund-requests/{fundRequestId}/finance-integration")
+    public ResponseEntity<?> integrateFundRequestWithFinance(
+            @PathVariable String requestId,
+            @PathVariable String fundRequestId
+    ) {
+        try {
+            return ResponseEntity.ok(
+                    service.integrateFundRequestWithFinance(requestId, fundRequestId));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
     // Endpoint to change allowed University Scholarship Fund Request statuses
     @PreAuthorize("hasAuthority('US_FUND_APPROVE')")
     @PatchMapping("/university-scholarships/{requestId}/fund-requests/{fundRequestId}/status")

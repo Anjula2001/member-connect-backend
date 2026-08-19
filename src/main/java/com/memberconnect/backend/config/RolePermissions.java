@@ -109,6 +109,11 @@ public final class RolePermissions {
                 // Withheld from District Office, which raises fund requests.
                 Permission.US_FUND_SET_INACTIVE,
                 Permission.US_FUND_REOPEN,
+                // MMS48 — hand an approved fund request to the Finance Module. Granted
+                // here on 2026-08-20 alongside ACCOUNTS, which keeps it as the actual
+                // Finance Department. Deliberately NOT added to BOARD_SECRETARY: that
+                // role mirrors Head Office on the board track, not on finance.
+                Permission.US_FINANCE_DISBURSE,
                 Permission.US_MASTER_VIEW));
 
         // Board Secretary — the same approval track, plus delete privileges. Mirrors

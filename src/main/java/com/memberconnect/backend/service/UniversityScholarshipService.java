@@ -525,9 +525,46 @@ public class UniversityScholarshipService {
         dto.setStatus(request.getStatus() != null ? request.getStatus().name() : null);
         dto.setIncompleteReason(request.getIncompleteReason());
         dto.setDecisionReason(request.getDecisionReason());
+        dto.setFinanceIntegratedAt(request.getFinanceIntegratedAt());
+        dto.setFinanceIntegratedBy(request.getFinanceIntegratedBy());
         return dto;
     }
     
+    /**
+     * MMS48 — hand an approved fund request to the Finance Module.
+     *
+     * Only APPROVED requests qualify: the hand-over releases money, so it must sit
+     * behind the approval gate rather than beside it. Re-running it is rejected rather
+     * than ignored, so a double click or a stale tab cannot queue a second payment.
+     *
+     * There is no Finance Module to call yet, so this records the hand-over and
+     * nothing more. When a real integration lands it goes here, and the timestamp
+     * becomes the thing that proves it already ran.
+     */
+    public UniversityScholarshipFundRequestDto integrateFundRequestWithFinance(
+            String scholarshipRequestId,
+            String fundRequestId
+    ) {
+        UniversityScholarshipFundRequest fundRequest =
+                findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
+
+        if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.APPROVED) {
+            throw new RuntimeException(
+                    "Only Approved Fund Requests can be integrated with the Finance Module");
+        }
+
+        if (fundRequest.getFinanceIntegratedAt() != null) {
+            throw new RuntimeException(
+                    "This Fund Request has already been integrated with the Finance Module");
+        }
+
+        com.memberconnect.backend.model.User currentUser = currentUserService.current();
+        fundRequest.setFinanceIntegratedAt(LocalDateTime.now());
+        fundRequest.setFinanceIntegratedBy(currentUser != null ? currentUser.getUsername() : null);
+
+        return toFundRequestDto(fundRequestRepository.save(fundRequest));
+    }
+
     //Generate Fund Request ID
     private String generateFundRequestId() {
         long nextNumber = fundRequestRepository.count() + 1;
