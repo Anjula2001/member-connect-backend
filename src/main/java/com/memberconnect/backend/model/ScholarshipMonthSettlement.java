@@ -15,7 +15,7 @@ public class ScholarshipMonthSettlement {
     private Member member;
 
     @Column(name = "settlement_month", nullable = false)
-    private String settlementMonth; // yyyy-MM
+    private String settlementMonth;
 
     @Column(name = "settled", nullable = false)
     private Boolean settled;

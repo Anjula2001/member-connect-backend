@@ -39,8 +39,7 @@ public class RetirementService {
             RetirementRequestRepository requestRepository,
             LoanRepository loanRepository,
             LoanObligationRepository obligationRepository,
-            DocumentService documentService
-    ) {
+            DocumentService documentService) {
         this.memberRepository = memberRepository;
         this.requestRepository = requestRepository;
         this.loanRepository = loanRepository;
@@ -70,11 +69,11 @@ public class RetirementService {
                 member.getNameWithInitials(),
                 member.getNic(),
                 member.getStatus().name()
-                
+
         );
     }
 
-    // Validate member for retirement request
+    // Validate member for retirement request (check loan)
     public MemberRetirementValidationDTO validateMemberForRetirement(String memberId) {
         List<Loan> ownLoans = loanRepository.findByMemberId(memberId);
         List<LoanObligation> obligations = obligationRepository.findByMemberId(memberId);
@@ -111,7 +110,7 @@ public class RetirementService {
         return dto;
     }
 
-    //generate request number 
+    // generate request number
     private String generateRequestNo() {
         int year = LocalDate.now().getYear();
         String prefix = "R-" + year + "-";
@@ -122,26 +121,25 @@ public class RetirementService {
                     String lastNo = lastRequest.getRequestNo();
 
                     int lastSeq = Integer.parseInt(
-                            lastNo.substring(lastNo.lastIndexOf("-") + 1)
-                    );
+                            lastNo.substring(lastNo.lastIndexOf("-") + 1));
 
                     return prefix + String.format("%03d", lastSeq + 1);
                 })
                 .orElse(prefix + "001");
     }
 
-   public RetirementRequestResponseDTO saveRequest(String memberId, MemberRetirementRequestDTO dto) {
+    public RetirementRequestResponseDTO saveRequest(String memberId, MemberRetirementRequestDTO dto) {
 
-        //Get member
+        // Get member
         Member member = getMemberEntity(memberId);
 
-        //Validate member status
+        // Validate member status
         if (member.getStatus() != MemberStatus.ACTIVE &&
-            member.getStatus() != MemberStatus.RETIREMENT_REQUESTED) {
+                member.getStatus() != MemberStatus.RETIREMENT_REQUESTED) {
             throw new RuntimeException("Only ACTIVE or RETIREMENT_REQUESTED member can save retirement request");
         }
 
-        //Validate required fields
+        // Validate required fields
         if (dto.getRequestedDate() == null || dto.getRequestedDate().isBlank()) {
             throw new RuntimeException("Requested Date is required");
         }
@@ -150,7 +148,7 @@ public class RetirementService {
             throw new RuntimeException("Effective Date is required");
         }
 
-        //Parse dates
+        // Parse dates
         LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
         LocalDate effectiveDate = LocalDate.parse(dto.getEffectiveDate());
 
@@ -165,7 +163,7 @@ public class RetirementService {
             throw new RuntimeException("Effective Date cannot be a future date");
         }
 
-        //Check existing request (ONLY ONE ACTIVE REQUEST)
+        // Check existing request (ONLY ONE ACTIVE REQUEST)
         RetirementRequest existingRequest = requestRepository
                 .findByMemberId(memberId)
                 .stream()
@@ -177,7 +175,7 @@ public class RetirementService {
 
         if (existingRequest != null) {
 
-            //EDIT MODE
+            // EDIT MODE
             request = existingRequest;
 
             // Prevent editing after submit/approval/rejection
@@ -186,28 +184,28 @@ public class RetirementService {
             }
 
             if (request.getStatus() == RetirementRequestStatus.APPROVED ||
-                request.getStatus() == RetirementRequestStatus.REJECTED) {
+                    request.getStatus() == RetirementRequestStatus.REJECTED) {
                 throw new RuntimeException("Cannot edit approved or rejected request");
             }
 
         } else {
 
-            //NEW MODE
+            // NEW MODE
             request = new RetirementRequest();
             request.setRequestNo(generateRequestNo());
             request.setMemberId(memberId);
             request.setStatus(RetirementRequestStatus.NEW);
         }
 
-        //update values
+        // update values
         request.setRequestedDate(requestedDate);
         request.setEffectiveDate(effectiveDate);
         request.setComment(dto.getComment());
 
-        //Save request
+        // Save request
         RetirementRequest saved = requestRepository.save(request);
 
-        //Update member status
+        // Update member status
         member.setStatus(MemberStatus.RETIREMENT_REQUESTED);
         memberRepository.save(member);
 
@@ -225,10 +223,9 @@ public class RetirementService {
         }
 
         boolean allMandatoryUploaded = documentService.allMandatoryDocumentsUploaded(
-                        request.getRequestNo(),
-                        request.getMemberId(),
-                        "RETIREMENT"
-        );
+                request.getRequestNo(),
+                request.getMemberId(),
+                "RETIREMENT");
 
         if (!allMandatoryUploaded) {
             throw new RuntimeException("Cannot submit. Mandatory documents are missing.");
@@ -240,13 +237,30 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
-    public RetirementRequestResponseDTO getRequestById(Long id) {
-        RetirementRequest request = requestRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Retirement request not found"));
+    // get requestdata
+    public RetirementRequestResponseDTO getRequestByRequestNo(String requestNo) {
+        RetirementRequest request = requestRepository.findByRequestNo(requestNo)
+                .orElseGet(() -> {
+                    try {
+                        Long id = Long.parseLong(requestNo);
+                        return requestRepository.findById(id).orElse(null);
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                });
+
+        if (request == null) {
+            throw new RuntimeException("Retirement request not found: " + requestNo);
+        }
 
         return mapToResponse(request);
     }
 
+    public RetirementRequestResponseDTO getRequestById(Long id) {
+        return getRequestByRequestNo(String.valueOf(id));
+    }
+
+    // change request status
     public RetirementRequestResponseDTO changeRequestStatus(String requestNo, String status) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
@@ -266,8 +280,7 @@ public class RetirementService {
 
         if (!isStatusTransitionAllowed(currentStatus, newStatus)) {
             throw new RuntimeException(
-                    "Cannot change status from " + currentStatus + " to " + newStatus
-            );
+                    "Cannot change status from " + currentStatus + " to " + newStatus);
         }
 
         request.setStatus(newStatus);
@@ -296,10 +309,11 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
+    // in view mode status transition
     private boolean isStatusTransitionAllowed(RetirementRequestStatus current, RetirementRequestStatus next) {
         switch (current) {
             case NEW:
-                return next == RetirementRequestStatus.INACTIVE || next == RetirementRequestStatus.INCOMPLETE;
+                return next == RetirementRequestStatus.INACTIVE;
             case INCOMPLETE:
                 return next == RetirementRequestStatus.NEW || next == RetirementRequestStatus.INACTIVE;
             case SUBMITTED_FOR_APPROVAL:
@@ -340,7 +354,7 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
-    //reject retirement request
+    // reject retirement request
     public RetirementRequestResponseDTO rejectRequest(String requestNo, String reason) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
@@ -364,18 +378,16 @@ public class RetirementService {
                 .map(this::mapToResponse)
                 .toList();
     }
-    
+
     private RetirementRequestResponseDTO mapToResponse(RetirementRequest request) {
         Member member = memberRepository.findByMemberId(request.getMemberId())
                 .orElse(null);
-        
 
         boolean hasLoanBalance = loanRepository
-            .existsByMemberIdAndBalanceGreaterThan(request.getMemberId(), 0.0);
+                .existsByMemberIdAndBalanceGreaterThan(request.getMemberId(), 0.0);
 
-   
         boolean hasIndirectObligations = obligationRepository
-            .existsByMemberId(request.getMemberId());
+                .existsByMemberId(request.getMemberId());
 
         return buildResponse(request, member, hasLoanBalance, hasIndirectObligations);
     }
@@ -384,8 +396,7 @@ public class RetirementService {
             RetirementRequest request,
             Member member,
             boolean hasLoanBalance,
-            boolean hasIndirectObligations
-    ) {
+            boolean hasIndirectObligations) {
         return new RetirementRequestResponseDTO(
                 request.getId(),
                 request.getRequestNo(),
@@ -402,21 +413,19 @@ public class RetirementService {
                 request.getRejectReason(),
 
                 hasLoanBalance,
-                hasIndirectObligations
-        );
+                hasIndirectObligations);
     }
 
     // Update request details
     public RetirementRequestResponseDTO updateRequest(
             String requestNo,
-            MemberRetirementRequestDTO dto
-    ) {
+            MemberRetirementRequestDTO dto) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
 
         if (request.getStatus() == RetirementRequestStatus.SUBMITTED_FOR_APPROVAL ||
-            request.getStatus() == RetirementRequestStatus.APPROVED ||
-            request.getStatus() == RetirementRequestStatus.REJECTED) {
+                request.getStatus() == RetirementRequestStatus.APPROVED ||
+                request.getStatus() == RetirementRequestStatus.REJECTED) {
             throw new RuntimeException("Cannot edit submitted, approved or rejected request");
         }
 
@@ -452,9 +461,9 @@ public class RetirementService {
         RetirementRequest saved = requestRepository.save(request);
 
         return mapToResponse(saved);
-    }   
+    }
 
-    //filtering rquests
+    // filtering rquests
     public List<RetirementRequestResponseDTO> searchRequests(
             List<String> statuses,
             String fromDate,
@@ -468,24 +477,27 @@ public class RetirementService {
         List<RetirementRequest> candidates = requestRepository.findAll()
                 .stream()
 
-                //status filter
+                // status filter
                 .filter(r -> statuses == null || statuses.isEmpty()
                         || statuses.contains(r.getStatus().name()))
 
                 //date filter
                 .filter(r -> {
-                    if (r.getRequestedDate() == null) return false;
+                    if (r.getRequestedDate() == null)
+                        return false;
 
                     LocalDate date = r.getRequestedDate();
 
                     if (fromDate != null && !fromDate.isBlank()) {
                         LocalDate from = LocalDate.parse(fromDate);
-                        if (date.isBefore(from)) return false;
+                        if (date.isBefore(from))
+                            return false;
                     }
 
                     if (toDate != null && !toDate.isBlank()) {
                         LocalDate to = LocalDate.parse(toDate);
-                        if (date.isAfter(to)) return false;
+                        if (date.isAfter(to))
+                            return false;
                     }
 
                     return true;
@@ -500,9 +512,10 @@ public class RetirementService {
 
         List<RetirementRequest> matches = candidates.stream()
 
-                //search filter
+                // search filter
                 .filter(r -> {
-                    if (searchKey == null || searchKey.isBlank()) return true;
+                    if (searchKey == null || searchKey.isBlank())
+                        return true;
 
                     String key = searchKey.toLowerCase();
 
@@ -515,7 +528,7 @@ public class RetirementService {
                             || (member != null && contains(member.getNic(), key));
                 })
 
-                //sorting
+                // sorting
                 .sorted((a, b) -> {
                     int result;
 
@@ -541,8 +554,7 @@ public class RetirementService {
      */
     private List<RetirementRequestResponseDTO> mapToResponses(
             List<RetirementRequest> requests,
-            Map<String, Member> membersById
-    ) {
+            Map<String, Member> membersById) {
         if (requests.isEmpty()) {
             return List.of();
         }
@@ -565,8 +577,7 @@ public class RetirementService {
                         request,
                         membersById.get(request.getMemberId()),
                         membersWithLoanBalance.contains(request.getMemberId()),
-                        membersWithObligations.contains(request.getMemberId())
-                ))
+                        membersWithObligations.contains(request.getMemberId())))
                 .toList();
     }
 
@@ -585,8 +596,7 @@ public class RetirementService {
                 .collect(Collectors.toMap(
                         Member::getMemberId,
                         member -> member,
-                        (first, second) -> first
-                ));
+                        (first, second) -> first));
     }
 
     private boolean contains(String value, String key) {

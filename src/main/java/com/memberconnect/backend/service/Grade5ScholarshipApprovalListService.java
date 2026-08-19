@@ -14,8 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -72,7 +70,7 @@ public class Grade5ScholarshipApprovalListService {
         Grade5ScholarshipApprovalList entity = new Grade5ScholarshipApprovalList();
         String listType = dto.getType() != null ? dto.getType().toUpperCase() : "NORMAL";
         String prefix = listType.equals("DEVIATION") ? "G5-DAL-" : "G5-NAL-";
-        
+
         List<Grade5ScholarshipApprovalList> existing = approvalListRepository.findByType(listType);
         long maxNum = 0;
         for (Grade5ScholarshipApprovalList list : existing) {
@@ -99,14 +97,14 @@ public class Grade5ScholarshipApprovalListService {
         entity.setType(listType);
         entity.setCreatedAt(LocalDateTime.now());
 
-        String targetRequestStatus = listType.equals("DEVIATION") 
-                ? "ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST" 
+        String targetRequestStatus = listType.equals("DEVIATION")
+                ? "ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST"
                 : "ADDED_TO_SCHOLARSHIP_NORMAL_APPROVAL_LIST";
 
         for (String requestNo : dto.getRequestNos()) {
             Grade5ScholarshipRequest request = scholarshipRepository.findByRequestNo(requestNo)
                     .orElseThrow(() -> new RuntimeException("Grade 5 Scholarship Request not found: " + requestNo));
-            
+
             request.setOriginalStatus(request.getStatus());
             request.setApprovalListId(entity.getListId());
             request.setStatus(targetRequestStatus);
@@ -156,8 +154,8 @@ public class Grade5ScholarshipApprovalListService {
                 request.setStatus(original);
             } else {
                 // Fallback default
-                request.setStatus(entity.getType().equals("DEVIATION") 
-                        ? "SUBMITTED_FOR_DEVIATION_APPROVAL" 
+                request.setStatus(entity.getType().equals("DEVIATION")
+                        ? "SUBMITTED_FOR_DEVIATION_APPROVAL"
                         : "SUBMITTED_FOR_NORMAL_APPROVAL");
             }
             request.setApprovalListId(null);
@@ -186,7 +184,8 @@ public class Grade5ScholarshipApprovalListService {
 
         for (Grade5RequestApprovalDetailDTO detail : dto.getRequestDetails()) {
             Grade5ScholarshipRequest request = scholarshipRepository.findByRequestNo(detail.getRequestNo())
-                    .orElseThrow(() -> new RuntimeException("Grade 5 Scholarship Request not found: " + detail.getRequestNo()));
+                    .orElseThrow(() -> new RuntimeException(
+                            "Grade 5 Scholarship Request not found: " + detail.getRequestNo()));
 
             String newStatus = detail.getStatus();
             if (!"APPROVED".equalsIgnoreCase(newStatus) && !"REJECTED".equalsIgnoreCase(newStatus)) {
@@ -197,10 +196,12 @@ public class Grade5ScholarshipApprovalListService {
             if ("REJECTED".equalsIgnoreCase(newStatus)) {
                 request.setIncompleteReason(detail.getRejectReason());
                 rejectedCount++;
-                System.out.println("SMS & EMAIL: Grade 5 Request " + request.getRequestNo() + " rejected. Reason: " + detail.getRejectReason());
+                System.out.println("SMS & EMAIL: Grade 5 Request " + request.getRequestNo() + " rejected. Reason: "
+                        + detail.getRejectReason());
             } else {
                 approvedCount++;
-                System.out.println("SMS & EMAIL: Grade 5 Request " + request.getRequestNo() + " approved. Fund disbursement is underway.");
+                System.out.println("SMS & EMAIL: Grade 5 Request " + request.getRequestNo()
+                        + " approved. Fund disbursement is underway.");
             }
             scholarshipRepository.save(request);
         }
