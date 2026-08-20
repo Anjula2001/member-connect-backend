@@ -79,6 +79,10 @@ public class UniversityScholarshipService {
     @Value("${scholarship.lookback.years}")
     private int lookbackYears;
 
+    /** "member" (temporary flags) or "finance" (real Remittance/Settlement tables). */
+    @Value("${scholarship.finance.validation.source:member}")
+    private String financeValidationSource;
+
     @Value("${university.scholarship.minor.required.amount:500}")
     private int minorRequiredAmount;
 
@@ -239,6 +243,50 @@ public class UniversityScholarshipService {
 
             currentMonth = currentMonth.plusMonths(1);
         }
+    }
+
+    /**
+     * Temporary stand-in for the two checks above, used while the Finance Module is
+     * undelivered. Reads the answer off the Member instead of recomputing it from
+     * Remittance/Settlement rows that nobody can realistically maintain by hand.
+     *
+     * Sequential on purpose: remittance is decided first and throws immediately, so a
+     * member failing both is only ever told about remittance. Settlement is not even
+     * looked at until remittance has passed, which mirrors how the real checks run as
+     * two separate calls.
+     *
+     * The messages are byte-identical to the Finance-based versions, so switching
+     * scholarship.finance.validation.source changes where the answer comes from and
+     * nothing the user sees.
+     */
+    private void validateMemberFinanceEligibility(Member member) {
+
+        if (!member.isRemittance()) {
+            throw new RuntimeException(
+                    "Scholarship amount was not continuously remitted from the Member for the specified period"
+            );
+        }
+
+        if (!member.isSettlement()) {
+            throw new RuntimeException(
+                    "The Scholarship Amounts were not settled for some months"
+            );
+        }
+    }
+
+    /**
+     * Runs whichever finance eligibility check is configured. Both paths stay compiled
+     * and both sets of repositories stay wired, so restoring the real checks is a
+     * property change rather than a code change.
+     */
+    private void validateFinanceEligibility(UniversityScholarshipRequestDto dto, Member member) {
+        if ("finance".equalsIgnoreCase(financeValidationSource)) {
+            validateScholarshipRemittanceMonths(dto);
+            validateRemainingMonthsSettled(dto);
+            return;
+        }
+
+        validateMemberFinanceEligibility(member);
     }
 
     // Validate that no other scholarship was approved for the member within a year from the exam last date
@@ -914,8 +962,7 @@ public class UniversityScholarshipService {
 
         validateMemberActiveOnExamLastDate(dto);
         validateMembershipDuration(dto);
-        validateScholarshipRemittanceMonths(dto);
-        validateRemainingMonthsSettled(dto);
+        validateFinanceEligibility(dto, member);
         validateAnotherApprovedScholarshipWithinYear(dto);
         
 

@@ -171,4 +171,23 @@ public class Member {
     @Column(name = "dormant_selection_date")
     private LocalDate dormantSelectionDate;
 
+    // ---- Temporary Scholarship finance eligibility (MMS23) --------------------
+    //
+    // Stand-ins for the Finance Module, which has not been delivered. Maintaining the
+    // Remittance and Settlement tables by hand purely to answer "may this member apply
+    // for a Scholarship?" is not practical, so the answer is recorded directly here and
+    // set from the admin Member Accounts screen.
+    //
+    // The real month-by-month checks in UniversityScholarshipService are untouched and
+    // still selected by scholarship.finance.validation.source=finance. These two fields
+    // become dead weight once Finance is integrated, not a thing to migrate.
+    //
+    // Primitive boolean with a NOT NULL DEFAULT false column: an unassessed member is
+    // not eligible, and there is no third "unknown" state to reason about.
+    @Column(name = "is_remittance", nullable = false)
+    private boolean isRemittance;
+
+    @Column(name = "is_settlement", nullable = false)
+    private boolean isSettlement;
+
 }
