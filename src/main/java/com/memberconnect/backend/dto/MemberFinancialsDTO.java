@@ -14,4 +14,11 @@ public class MemberFinancialsDTO {
     private List<MemberAccountDTO> accounts;
     /** True while no operative account has been synced from Finance. */
     private Boolean awaitingFinanceIntegration;
+
+    /**
+     * Temporary Scholarship finance eligibility, held on Member until the Finance
+     * Module lands. Boolean (not primitive) so a PUT that omits them leaves them alone.
+     */
+    private Boolean isRemittance;
+    private Boolean isSettlement;
 }

@@ -1,17 +1,43 @@
 package com.memberconnect.backend.model;
 
-import com.memberconnect.backend.enums.ApplicationStatus;
 import jakarta.persistence.*;
 
+/**
+ * A Name Change Request (Requirement 02, MMC05-MMC13).
+ *
+ * Status, member linkage, request number, requested date and reject reason live on
+ * {@link ProfileChangeRequest}. The status column here was already named "status",
+ * so no @AttributeOverride is needed and existing rows keep their values.
+ *
+ * The "Name with initials" column was renamed to name_with_initials: a quoted
+ * identifier containing spaces has to be escaped everywhere it is referenced and is
+ * a standing hazard in hand-written SQL and migrations.
+ */
 @Table(name = "NameChangeRequestsTable")
 @Entity
-public class NameChangeRequest {
+public class NameChangeRequest extends ProfileChangeRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "NameChangeRequestID")
     private Integer nameChangeRequestID;
 
+    // --- "Current Value" snapshot, taken from the Member Profile when the request is
+    // --- submitted. MMC05 shows this section read live from the member; storing it means
+    // --- the board sees the names as they stood when the request was raised.
+    @Column(name = "old_title")
+    private String oldTitle;
+
+    @Column(name = "old_fullname")
+    private String oldFullName;
+
+    @Column(name = "old_name_as_payroll")
+    private String oldNameAsInPayroll;
+
+    @Column(name = "old_name_with_initials")
+    private String oldNameWithInitials;
+
+    // --- "New Value" section ---
     @Column(name = "title")
     private String newTitle;
 
@@ -21,30 +47,20 @@ public class NameChangeRequest {
     @Column(name = "nameAszPayroll")
     private String newNameAsInPayroll;
 
-    @Column(name = "Name with initials")
+    @Column(name = "name_with_initials")
     private String newNameWithInitials;
 
-    @Column(name = "status")
-    @Enumerated(EnumType.STRING)
-    private ApplicationStatus newStatus;
+    // --- Supporting document (MMC05's "Upload Supporting Documents" section).
+    // --- Stored in S3 via S3Service, the same store every other module uses; the
+    // --- column holds the object key, not the bytes.
+    private String documentType;
+    private String documentFileName;
+    private String documentFileType;
+    private String documentStoragePath;
+    private Long documentFileSize;
 
-    // --- 1. No-Args Constructor (Required by JPA) ---
     public NameChangeRequest() {
     }
-
-    // --- 2. All-Args Constructor ---
-    public NameChangeRequest(Integer nameChangeRequestID, String newTitle, String newFullName,
-                             String newNameAsInPayroll, String newNameWithInitials,
-                             ApplicationStatus newStatus) {
-        this.nameChangeRequestID = nameChangeRequestID;
-        this.newTitle = newTitle;
-        this.newFullName = newFullName;
-        this.newNameAsInPayroll = newNameAsInPayroll;
-        this.newNameWithInitials = newNameWithInitials;
-        this.newStatus = newStatus;
-    }
-
-    // --- 3. Getters and Setters ---
 
     public Integer getNameChangeRequestID() {
         return nameChangeRequestID;
@@ -52,6 +68,38 @@ public class NameChangeRequest {
 
     public void setNameChangeRequestID(Integer nameChangeRequestID) {
         this.nameChangeRequestID = nameChangeRequestID;
+    }
+
+    public String getOldTitle() {
+        return oldTitle;
+    }
+
+    public void setOldTitle(String oldTitle) {
+        this.oldTitle = oldTitle;
+    }
+
+    public String getOldFullName() {
+        return oldFullName;
+    }
+
+    public void setOldFullName(String oldFullName) {
+        this.oldFullName = oldFullName;
+    }
+
+    public String getOldNameAsInPayroll() {
+        return oldNameAsInPayroll;
+    }
+
+    public void setOldNameAsInPayroll(String oldNameAsInPayroll) {
+        this.oldNameAsInPayroll = oldNameAsInPayroll;
+    }
+
+    public String getOldNameWithInitials() {
+        return oldNameWithInitials;
+    }
+
+    public void setOldNameWithInitials(String oldNameWithInitials) {
+        this.oldNameWithInitials = oldNameWithInitials;
     }
 
     public String getNewTitle() {
@@ -86,11 +134,44 @@ public class NameChangeRequest {
         this.newNameWithInitials = newNameWithInitials;
     }
 
-    public ApplicationStatus getNewStatus() {
-        return newStatus;
+    public String getDocumentType() {
+        return documentType;
     }
 
-    public void setNewStatus(ApplicationStatus newStatus) {
-        this.newStatus = newStatus;
+    public void setDocumentType(String documentType) {
+        this.documentType = documentType;
+    }
+
+    public String getDocumentFileName() {
+        return documentFileName;
+    }
+
+    public void setDocumentFileName(String documentFileName) {
+        this.documentFileName = documentFileName;
+    }
+
+    public String getDocumentFileType() {
+        return documentFileType;
+    }
+
+    public void setDocumentFileType(String documentFileType) {
+        this.documentFileType = documentFileType;
+    }
+
+    /** The S3 object key. */
+    public String getDocumentStoragePath() {
+        return documentStoragePath;
+    }
+
+    public void setDocumentStoragePath(String documentStoragePath) {
+        this.documentStoragePath = documentStoragePath;
+    }
+
+    public Long getDocumentFileSize() {
+        return documentFileSize;
+    }
+
+    public void setDocumentFileSize(Long documentFileSize) {
+        this.documentFileSize = documentFileSize;
     }
 }

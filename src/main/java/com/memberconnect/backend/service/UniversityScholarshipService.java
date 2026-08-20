@@ -79,6 +79,10 @@ public class UniversityScholarshipService {
     @Value("${scholarship.lookback.years}")
     private int lookbackYears;
 
+    /** "member" (temporary flags) or "finance" (real Remittance/Settlement tables). */
+    @Value("${scholarship.finance.validation.source:member}")
+    private String financeValidationSource;
+
     @Value("${university.scholarship.minor.required.amount:500}")
     private int minorRequiredAmount;
 
@@ -239,6 +243,50 @@ public class UniversityScholarshipService {
 
             currentMonth = currentMonth.plusMonths(1);
         }
+    }
+
+    /**
+     * Temporary stand-in for the two checks above, used while the Finance Module is
+     * undelivered. Reads the answer off the Member instead of recomputing it from
+     * Remittance/Settlement rows that nobody can realistically maintain by hand.
+     *
+     * Sequential on purpose: remittance is decided first and throws immediately, so a
+     * member failing both is only ever told about remittance. Settlement is not even
+     * looked at until remittance has passed, which mirrors how the real checks run as
+     * two separate calls.
+     *
+     * The messages are byte-identical to the Finance-based versions, so switching
+     * scholarship.finance.validation.source changes where the answer comes from and
+     * nothing the user sees.
+     */
+    private void validateMemberFinanceEligibility(Member member) {
+
+        if (!member.isRemittance()) {
+            throw new RuntimeException(
+                    "Scholarship amount was not continuously remitted from the Member for the specified period"
+            );
+        }
+
+        if (!member.isSettlement()) {
+            throw new RuntimeException(
+                    "The Scholarship Amounts were not settled for some months"
+            );
+        }
+    }
+
+    /**
+     * Runs whichever finance eligibility check is configured. Both paths stay compiled
+     * and both sets of repositories stay wired, so restoring the real checks is a
+     * property change rather than a code change.
+     */
+    private void validateFinanceEligibility(UniversityScholarshipRequestDto dto, Member member) {
+        if ("finance".equalsIgnoreCase(financeValidationSource)) {
+            validateScholarshipRemittanceMonths(dto);
+            validateRemainingMonthsSettled(dto);
+            return;
+        }
+
+        validateMemberFinanceEligibility(member);
     }
 
     // Validate that no other scholarship was approved for the member within a year from the exam last date
@@ -508,7 +556,8 @@ public class UniversityScholarshipService {
 
         return 0;
     }
-
+    
+    // Save Fund Request 
     private UniversityScholarshipFundRequestDto toFundRequestDto(UniversityScholarshipFundRequest request) {
         UniversityScholarshipFundRequestDto dto = new UniversityScholarshipFundRequestDto();
         dto.setId(request.getId());
@@ -524,9 +573,47 @@ public class UniversityScholarshipService {
         dto.setStatus(request.getStatus() != null ? request.getStatus().name() : null);
         dto.setIncompleteReason(request.getIncompleteReason());
         dto.setDecisionReason(request.getDecisionReason());
+        dto.setFinanceIntegratedAt(request.getFinanceIntegratedAt());
+        dto.setFinanceIntegratedBy(request.getFinanceIntegratedBy());
         return dto;
     }
+    
+    /**
+     * MMS48 — hand an approved fund request to the Finance Module.
+     *
+     * Only APPROVED requests qualify: the hand-over releases money, so it must sit
+     * behind the approval gate rather than beside it. Re-running it is rejected rather
+     * than ignored, so a double click or a stale tab cannot queue a second payment.
+     *
+     * There is no Finance Module to call yet, so this records the hand-over and
+     * nothing more. When a real integration lands it goes here, and the timestamp
+     * becomes the thing that proves it already ran.
+     */
+    public UniversityScholarshipFundRequestDto integrateFundRequestWithFinance(
+            String scholarshipRequestId,
+            String fundRequestId
+    ) {
+        UniversityScholarshipFundRequest fundRequest =
+                findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
 
+        if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.APPROVED) {
+            throw new RuntimeException(
+                    "Only Approved Fund Requests can be integrated with the Finance Module");
+        }
+
+        if (fundRequest.getFinanceIntegratedAt() != null) {
+            throw new RuntimeException(
+                    "This Fund Request has already been integrated with the Finance Module");
+        }
+
+        com.memberconnect.backend.model.User currentUser = currentUserService.current();
+        fundRequest.setFinanceIntegratedAt(LocalDateTime.now());
+        fundRequest.setFinanceIntegratedBy(currentUser != null ? currentUser.getUsername() : null);
+
+        return toFundRequestDto(fundRequestRepository.save(fundRequest));
+    }
+
+    //Generate Fund Request ID
     private String generateFundRequestId() {
         long nextNumber = fundRequestRepository.count() + 1;
         return String.format("USFR-%03d", nextNumber);
@@ -627,6 +714,7 @@ public class UniversityScholarshipService {
         return fundRequest;
     }
 
+    //Submit Fund Request
     public UniversityScholarshipFundRequestDto submitFundRequest(String scholarshipRequestId, String fundRequestId) {
         UniversityScholarshipFundRequest fundRequest = findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
 
@@ -639,7 +727,8 @@ public class UniversityScholarshipService {
         fundRequest.setIncompleteReason(null);
         return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
-
+ 
+    //Mark Fund Request Incomplete
     public UniversityScholarshipFundRequestDto markFundRequestIncomplete(
             String scholarshipRequestId,
             String fundRequestId,
@@ -661,6 +750,79 @@ public class UniversityScholarshipService {
         return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
 
+    /**
+     * MMS45 — change a fund request's status from View Mode.
+     *
+     * Separate from {@link #updateFundRequestStatus} on purpose: that one carries the
+     * MMS47 approve/reject decision and is gated on US_FUND_APPROVE, whereas this is
+     * the administrative New/Inactive move and is gated on US_FUND_REOPEN /
+     * US_FUND_SET_INACTIVE. Folding them together would let one right serve both.
+     *
+     * INCOMPLETE is absent from the table as a source status because the specification
+     * for this screen does not list it; an incomplete fund request is resubmitted
+     * through the ordinary Submit path. APPROVED is terminal — money has been released.
+     */
+    public UniversityScholarshipFundRequestDto changeFundRequestStatus(
+            String scholarshipRequestId,
+            String fundRequestId,
+            String newStatusStr
+    ) {
+        UniversityScholarshipFundRequest fundRequest =
+                findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
+
+        UniversityScholarshipFundRequestStatus newStatus;
+        try {
+            newStatus = UniversityScholarshipFundRequestStatus.valueOf(
+                    newStatusStr == null ? "" : newStatusStr.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new RuntimeException("Invalid status: " + newStatusStr);
+        }
+
+        UniversityScholarshipFundRequestStatus currentStatus = fundRequest.getStatus();
+        if (currentStatus == null) {
+            throw new RuntimeException("Current fund request status is unrecognized");
+        }
+
+        if (currentStatus == newStatus) {
+            return toFundRequestDto(fundRequest);
+        }
+
+        if (!isFundStatusTransitionAllowed(currentStatus, newStatus)) {
+            throw new RuntimeException(
+                    "Cannot change status from " + currentStatus + " to " + newStatus);
+        }
+
+        fundRequest.setStatus(newStatus);
+
+        // Back to New means the request is being reworked, so the note that explains
+        // why it stopped no longer applies.
+        if (newStatus == UniversityScholarshipFundRequestStatus.NEW) {
+            fundRequest.setIncompleteReason(null);
+            fundRequest.setDecisionReason(null);
+        }
+
+        return toFundRequestDto(fundRequestRepository.save(fundRequest));
+    }
+
+    /** The closed transition table behind {@link #changeFundRequestStatus}. */
+    private boolean isFundStatusTransitionAllowed(
+            UniversityScholarshipFundRequestStatus current,
+            UniversityScholarshipFundRequestStatus next) {
+        switch (current) {
+            case NEW:
+                return next == UniversityScholarshipFundRequestStatus.INACTIVE;
+            case SUBMITTED_FOR_COMMITTEE_APPROVAL:
+            case REJECTED:
+                return next == UniversityScholarshipFundRequestStatus.NEW
+                        || next == UniversityScholarshipFundRequestStatus.INACTIVE;
+            case INACTIVE:
+                return next == UniversityScholarshipFundRequestStatus.NEW;
+            default:
+                return false;
+        }
+    }
+
+    // Update Fund Request Status
     public UniversityScholarshipFundRequestDto updateFundRequestStatus(
             String scholarshipRequestId,
             String fundRequestId,
@@ -800,8 +962,7 @@ public class UniversityScholarshipService {
 
         validateMemberActiveOnExamLastDate(dto);
         validateMembershipDuration(dto);
-        validateScholarshipRemittanceMonths(dto);
-        validateRemainingMonthsSettled(dto);
+        validateFinanceEligibility(dto, member);
         validateAnotherApprovedScholarshipWithinYear(dto);
         
 
@@ -937,7 +1098,7 @@ public class UniversityScholarshipService {
         request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
         return scholarshipRequestRepository.save(request);
     }   
-
+    
     public UniversityScholarshipRequest updateRequestByRequestId(String requestId, UniversityScholarshipRequestDto dto) {
         UniversityScholarshipRequest request = scholarshipRequestRepository
                         .findByUniversityScholarshipRequestID(requestId)
@@ -1218,7 +1379,7 @@ public class UniversityScholarshipService {
                 return scholarshipRequestRepository.save(request);
     }
 
-    // Attach scholarship requests to a board meeting for approval
+    // Attach scholarship requests to a normal board meeting for approval
     @Transactional
     public void attachBoardMeeting(Map<String, Object> payload) {
         Object meetingIdObj = payload.get("boardMeetingId");
@@ -1271,7 +1432,7 @@ public class UniversityScholarshipService {
             scholarshipRequestRepository.save(request);
         }
     }
-
+    
     private synchronized String generateNextApprovalListId(String prefix) {
         List<UniversityScholarshipRequest> requests = scholarshipRequestRepository.findAll();
         int maxVal = 0;
@@ -1285,7 +1446,7 @@ public class UniversityScholarshipService {
                         maxVal = val;
                     }
                 } catch (NumberFormatException e) {
-                    // Ignore non-numeric suffixes or variations
+
                 }
             }
         }
@@ -1354,6 +1515,7 @@ public class UniversityScholarshipService {
         processApprovalDecisions(dataJson, file, UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST);
     }
 
+    // process approvals
     @SuppressWarnings("unchecked")
     private void processApprovalDecisions(String dataJson, MultipartFile file, UniversityScholarshipRequestStatus expectedStatus) {
         try {
@@ -1448,6 +1610,86 @@ public class UniversityScholarshipService {
             } catch (Exception ex) {
                 throw new RuntimeException("File not found: " + fileName);
             }
+        }
+    }
+
+    /**
+     * MMS25 — change a request's status from View Mode.
+     *
+     * Mirrors Grade5ScholarshipService.changeRequestStatus. The permitted moves are a
+     * closed table rather than "anything the caller asks for": every route out of a
+     * submitted or decided state goes back to NEW or to INACTIVE, and APPROVED is
+     * terminal — an awarded scholarship must not be walked backwards once the Board
+     * has granted it, and the ADDED_TO_*_LIST states belong to an in-flight Board
+     * Meeting, which is released by deleting the list, not by editing the request.
+     */
+    public UniversityScholarshipRequest changeRequestStatus(String requestId, String newStatusStr) {
+        UniversityScholarshipRequest request = scholarshipRequestRepository
+                .findByUniversityScholarshipRequestID(requestId)
+                .orElseThrow(() -> new RuntimeException("University Scholarship request not found"));
+
+        UniversityScholarshipRequestStatus newStatus;
+        try {
+            newStatus = UniversityScholarshipRequestStatus.valueOf(newStatusStr);
+        } catch (IllegalArgumentException | NullPointerException ex) {
+            throw new RuntimeException("Invalid status: " + newStatusStr);
+        }
+
+        UniversityScholarshipRequestStatus currentStatus = request.getStatus();
+        if (currentStatus == null) {
+            throw new RuntimeException("Current request status is unrecognized");
+        }
+
+        if (currentStatus == newStatus) {
+            return request;
+        }
+
+        if (!isUniversityStatusTransitionAllowed(currentStatus, newStatus)) {
+            throw new RuntimeException(
+                    "Cannot change status from " + currentStatus + " to " + newStatus);
+        }
+
+        // A request already picked up onto a Board approval list cannot be pulled back
+        // to New by editing it — Head Office may be mid-way through a Board Meeting
+        // with it on the printed list. Deleting the list is the supported release.
+        if (newStatus == UniversityScholarshipRequestStatus.NEW
+                && request.getApprovalListId() != null
+                && !request.getApprovalListId().isBlank()) {
+            throw new RuntimeException(
+                    "This request is attached to approval list " + request.getApprovalListId()
+                            + " and cannot be returned to New. Remove it from the list first.");
+        }
+
+        request.setStatus(newStatus);
+
+        // Returning to New clears the decision trail that put it where it was, so the
+        // request reads as genuinely fresh rather than carrying a stale rejection note.
+        if (newStatus == UniversityScholarshipRequestStatus.NEW) {
+            request.setIncompleteReason(null);
+            request.setRejectReason(null);
+        }
+
+        return scholarshipRequestRepository.save(request);
+    }
+
+    /** The closed transition table behind {@link #changeRequestStatus}. */
+    private boolean isUniversityStatusTransitionAllowed(
+            UniversityScholarshipRequestStatus current,
+            UniversityScholarshipRequestStatus next) {
+        switch (current) {
+            case NEW:
+                return next == UniversityScholarshipRequestStatus.INACTIVE;
+            case INCOMPLETE:
+            case SUBMITTED_FOR_COMMITTEE_APPROVAL:
+            case SUBMITTED_FOR_NORMAL_BOARD_APPROVAL:
+            case SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL:
+            case REJECTED:
+                return next == UniversityScholarshipRequestStatus.NEW
+                        || next == UniversityScholarshipRequestStatus.INACTIVE;
+            case INACTIVE:
+                return next == UniversityScholarshipRequestStatus.NEW;
+            default:
+                return false;
         }
     }
 

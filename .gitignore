@@ -38,3 +38,9 @@ build/
 .env.local
 .env.*.local
 .env.example
+
+# Runtime upload artifacts — written by the app at runtime, never source
+uploads/
+
+# Database dumps — contain real dev data (credentials, NICs, contact details)
+db-backups/

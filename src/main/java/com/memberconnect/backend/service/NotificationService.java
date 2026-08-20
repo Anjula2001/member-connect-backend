@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.memberconnect.backend.enums.ProfileChangeType;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.repository.MemberRepository;
 import com.memberconnect.backend.service.notification.EmailSender;
@@ -124,6 +125,84 @@ public class NotificationService {
                         + " has been posted. Please sign and return the Signature Card.",
                 member.getMemberId(),
                 "documentation dispatched"
+        );
+    }
+
+    /**
+     * MMC04 / MMC12 / MMC17 / MMC25 - sent when a profile change request is approved
+     * and the Member Profile has been updated with the requested values.
+     *
+     * One method covers all four request types because the SRS wording is identical
+     * for each; only the request type name and number differ.
+     */
+    public void sendProfileChangeApproved(Member member, ProfileChangeType type, String requestNo) {
+        String name = displayName(member);
+        String what = type.getLabel();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                what + " approved — request " + requestNo,
+                "Dear " + name + ",\n\n"
+                        + "Your request to update your membership details has been approved and your\n"
+                        + "Member Profile has been updated.\n\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Request Type   : " + what + "\n"
+                        + "Status         : Approved\n\n"
+                        + "If any of the updated details are not correct, please contact any District\n"
+                        + "Office.\n\n"
+                        + "This is an automatically generated message. Please do not reply.\n\n"
+                        + "Future Finance Institute",
+                member.getMemberId(),
+                "profile change approved"
+        );
+
+        dispatchSms(
+                member.getMobileNumber(),
+                "FFI: Your request " + requestNo + " (" + what
+                        + ") has been approved and your member profile has been updated.",
+                member.getMemberId(),
+                "profile change approved"
+        );
+    }
+
+    /**
+     * MMC04 / MMC12 / MMC17 / MMC25 - sent when a profile change request is rejected.
+     * The Member Profile is left untouched, and the reason entered by the approver is
+     * carried in both channels (truncated for SMS only, as elsewhere in this class).
+     */
+    public void sendProfileChangeRejected(
+            Member member,
+            ProfileChangeType type,
+            String requestNo,
+            String reason
+    ) {
+        String name = displayName(member);
+        String what = type.getLabel();
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                what + " rejected — request " + requestNo,
+                "Dear " + name + ",\n\n"
+                        + "Your request to update your membership details has been reviewed and was not\n"
+                        + "approved. Your Member Profile has not been changed.\n\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Request Type   : " + what + "\n"
+                        + "Status         : Rejected\n"
+                        + "Reason         : " + safeReason + "\n\n"
+                        + "Please visit any District Office if you would like to submit a new request.\n\n"
+                        + "This is an automatically generated message. Please do not reply.\n\n"
+                        + "Future Finance Institute",
+                member.getMemberId(),
+                "profile change rejected"
+        );
+
+        dispatchSms(
+                member.getMobileNumber(),
+                "FFI: Your request " + requestNo + " (" + what + ") was rejected. Reason: "
+                        + truncateForSms(safeReason) + ". Contact any District Office for help.",
+                member.getMemberId(),
+                "profile change rejected"
         );
     }
 

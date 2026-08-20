@@ -49,14 +49,19 @@ public final class RolePermissions {
                 Permission.G5_REQUEST_SUBMIT,
                 Permission.G5_REQUEST_INCOMPLETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-                // University (MMS21-MMS25). Fund requests are Head Office work, so
-                // this role can see them but not raise or decide them.
+                // University scholarship requests (MMS21-MMS25) only.
+                //
+                // Fund requests (MMS42-MMS47) are deliberately absent in full — not even
+                // US_FUND_VIEW. Briefly granted on 2026-08-19 and revoked on 2026-08-20:
+                // the disbursement track belongs to Head Office / Board Secretary, and
+                // this role neither raises nor reads it. Because US_FUND_VIEW is what
+                // canAccessFundRequests() keys on, dropping it also removes the Fund
+                // Requests item from this role's sidebar.
                 Permission.US_REQUEST_VIEW,
                 Permission.US_REQUEST_CREATE,
                 Permission.US_REQUEST_EDIT,
                 Permission.US_REQUEST_SUBMIT,
                 Permission.US_REQUEST_INCOMPLETE,
-                Permission.US_FUND_VIEW,
                 Permission.US_MASTER_VIEW));
 
         // Head Office — MMS06-MMS19. Owns the approval track end to end.
@@ -70,43 +75,17 @@ public final class RolePermissions {
                 Permission.G5_LIST_PROCESS,
                 Permission.G5_LIST_DELETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-                // University board track (MMS27-MMS41) and fund request preparation
-                // (MMS42-MMS46). Deliberately WITHOUT US_COMMITTEE_APPROVE, so the
-                // Committee gate is not cleared by the same office that runs the
-                // Board, and WITHOUT US_FUND_APPROVE, so the office that can change
-                // a payee's bank account cannot also release the payment to it.
-                Permission.US_REQUEST_VIEW,
-                Permission.US_REQUEST_SET_INACTIVE,
-                Permission.US_REQUEST_REOPEN,
-                Permission.US_LIST_VIEW,
-                Permission.US_LIST_CREATE,
-                Permission.US_LIST_PRINT,
-                Permission.US_LIST_PROCESS,
-                Permission.US_LIST_DELETE,
-                Permission.US_APPROVED_EDIT,
-                Permission.US_FUND_VIEW,
-                Permission.US_FUND_CREATE,
-                Permission.US_FUND_EDIT,
-                Permission.US_FUND_SUBMIT,
-                Permission.US_FUND_INCOMPLETE,
-                Permission.US_MASTER_VIEW));
-
-        // Board Secretary — the same approval track, plus delete privileges. Mirrors
-        // DELETE_RIGHTS_ROLES in the frontend's Member Registration matrix so the two
-        // modules do not disagree about who may destroy an approval list.
-        MATRIX.put(Role.BOARD_SECRETARY, EnumSet.of(
-                Permission.G5_REQUEST_VIEW,
-                Permission.G5_REQUEST_SET_INACTIVE,
-                Permission.G5_REQUEST_REOPEN,
-                Permission.G5_LIST_VIEW,
-                Permission.G5_LIST_CREATE,
-                Permission.G5_LIST_PRINT,
-                Permission.G5_LIST_PROCESS,
-                Permission.G5_LIST_DELETE,
-                Permission.G5_EXAM_MASTER_VIEW,
-                // Everything Head Office holds on the University side, plus
-                // US_FUND_APPROVE — releasing a disbursement is the one step kept
-                // away from the office that prepares it.
+                // University board track (MMS27-MMS41) and fund requests end to end
+                // (MMS42-MMS47). Deliberately WITHOUT US_COMMITTEE_APPROVE, so the
+                // Committee gate is not cleared by the same office that runs the Board.
+                //
+                // US_FUND_APPROVE was granted here on 2026-08-19 by product decision:
+                // Head Office raises fund requests, so it also decides them. This is a
+                // knowing relaxation of the split that used to keep US_APPROVED_EDIT
+                // (changing a payee's bank account) apart from releasing payment into
+                // that account — both now sit with this role. If that pairing ever has
+                // to be broken again, move US_FUND_APPROVE out of HEAD_OFFICE and leave
+                // it with BOARD_SECRETARY, which is where it lived before.
                 Permission.US_REQUEST_VIEW,
                 Permission.US_REQUEST_SET_INACTIVE,
                 Permission.US_REQUEST_REOPEN,
@@ -122,6 +101,49 @@ public final class RolePermissions {
                 Permission.US_FUND_SUBMIT,
                 Permission.US_FUND_INCOMPLETE,
                 Permission.US_FUND_APPROVE,
+                // Fund request status changes from View Mode (New <-> Inactive).
+                // Withheld from District Office, which raises fund requests.
+                Permission.US_FUND_SET_INACTIVE,
+                Permission.US_FUND_REOPEN,
+                // MMS48 — hand an approved fund request to the Finance Module. Granted
+                // here on 2026-08-20 alongside ACCOUNTS, which keeps it as the actual
+                // Finance Department. Deliberately NOT added to BOARD_SECRETARY: that
+                // role mirrors Head Office on the board track, not on finance.
+                Permission.US_FINANCE_DISBURSE,
+                Permission.US_MASTER_VIEW));
+
+        // Board Secretary — the same approval track, plus delete privileges. Mirrors
+        // DELETE_RIGHTS_ROLES in the frontend's Member Registration matrix so the two
+        // modules do not disagree about who may destroy an approval list.
+        MATRIX.put(Role.BOARD_SECRETARY, EnumSet.of(
+                Permission.G5_REQUEST_VIEW,
+                Permission.G5_REQUEST_SET_INACTIVE,
+                Permission.G5_REQUEST_REOPEN,
+                Permission.G5_LIST_VIEW,
+                Permission.G5_LIST_CREATE,
+                Permission.G5_LIST_PRINT,
+                Permission.G5_LIST_PROCESS,
+                Permission.G5_LIST_DELETE,
+                Permission.G5_EXAM_MASTER_VIEW,
+                // Everything Head Office holds on the University side, including
+                // US_FUND_APPROVE.
+                Permission.US_REQUEST_VIEW,
+                Permission.US_REQUEST_SET_INACTIVE,
+                Permission.US_REQUEST_REOPEN,
+                Permission.US_LIST_VIEW,
+                Permission.US_LIST_CREATE,
+                Permission.US_LIST_PRINT,
+                Permission.US_LIST_PROCESS,
+                Permission.US_LIST_DELETE,
+                Permission.US_APPROVED_EDIT,
+                Permission.US_FUND_VIEW,
+                Permission.US_FUND_CREATE,
+                Permission.US_FUND_EDIT,
+                Permission.US_FUND_SUBMIT,
+                Permission.US_FUND_INCOMPLETE,
+                Permission.US_FUND_APPROVE,
+                Permission.US_FUND_SET_INACTIVE,
+                Permission.US_FUND_REOPEN,
                 Permission.US_MASTER_VIEW));
 
         // Scholarship Officer — not named as an actor anywhere in the SRS, but it is the
