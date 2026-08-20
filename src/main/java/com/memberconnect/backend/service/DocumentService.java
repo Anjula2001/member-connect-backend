@@ -132,7 +132,8 @@ public class DocumentService {
             uploadedDocumentRepository.delete(existingDocument);
         }
 
-        String fileKey = s3Service.uploadFile(file);
+        String fileKey = s3Service.uploadFile(file, S3Service.folder(
+                applicationType, String.valueOf(requestId), requiredDocument.getDocumentName()));
 
         UploadedDocument uploadedDocument = new UploadedDocument();
         uploadedDocument.setRequestId(String.valueOf(requestId));
@@ -317,7 +318,8 @@ public class DocumentService {
                 uploadedDocumentRepository.delete(existingDocument);
             }
 
-            String fileKey = s3Service.uploadFile(file);
+            String fileKey = s3Service.uploadFile(file, S3Service.folder(
+                    applicationType, requestNo, String.valueOf(requiredDocumentId)));
 
             UploadedDocument uploaded = new UploadedDocument();
             uploaded.setRequestNo(requestNo);

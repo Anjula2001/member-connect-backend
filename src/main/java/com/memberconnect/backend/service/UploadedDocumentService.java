@@ -29,7 +29,8 @@ public class UploadedDocumentService {
             throw new IllegalArgumentException("File is empty");
         }
 
-        String fileName = s3Service.uploadFile(file);
+        String fileName = s3Service.uploadFile(file, S3Service.folder(
+                "member-documents", requestId, String.valueOf(requiredDocumentId)));
 
         UploadedDocument ud = new UploadedDocument();
         ud.setRequestId(requestId);

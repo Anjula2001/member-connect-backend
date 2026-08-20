@@ -1530,7 +1530,8 @@ public class UniversityScholarshipService {
             String scannedReportPath = null;
             if (file != null && !file.isEmpty()) {
                 try {
-                    scannedReportPath = s3Service.uploadFile(file);
+                    scannedReportPath = s3Service.uploadFile(file, S3Service.folder(
+                            "university-scholarships", "approval-lists", approvalListId, "scanned-report"));
                 } catch (Exception e) {
                     System.err.println("S3 upload failed: " + e.getMessage());
                     scannedReportPath = "uploads/" + file.getOriginalFilename();

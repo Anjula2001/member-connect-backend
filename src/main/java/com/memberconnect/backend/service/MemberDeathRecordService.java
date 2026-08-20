@@ -412,7 +412,8 @@ public class MemberDeathRecordService {
 
         String fileKey;
         try {
-            fileKey = s3Service.uploadFile(file);
+            fileKey = s3Service.uploadFile(file, S3Service.folder(
+                    "member-deaths", record.getRecordId(), normalizedType));
         } catch (Exception ex) {
             throw new RuntimeException("Failed to upload file to storage: " + ex.getMessage(), ex);
         }

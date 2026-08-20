@@ -2,10 +2,10 @@ package com.memberconnect.backend.repository;
 
 import java.util.List;
 
+import com.memberconnect.backend.model.Audit;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
-
-import com.memberconnect.backend.model.Audit;
 
 /**
  * Queries over the audit trail.
@@ -34,4 +34,13 @@ public interface AuditRepository extends JpaRepository<Audit, Long> {
      */
     List<Audit> findByModuleNameInAndReferenceIdInOrderByActionAtAsc(
             List<String> moduleNames, List<Long> referenceIds);
+
+    /**
+     * Newest entries across every module, for the dashboard's Recent Activity card.
+     *
+     * Unlike the two lookups above this is not scoped to one record, so it is paged
+     * rather than returning an unbounded list — the audit table grows with every
+     * action taken in the system.
+     */
+    List<Audit> findAllByOrderByActionAtDesc(Pageable pageable);
 }
