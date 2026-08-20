@@ -1,8 +1,11 @@
 package com.memberconnect.backend.controller;
 
+import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.ProgramOptionDto;
+import com.memberconnect.backend.enums.Permission;
 import com.memberconnect.backend.dto.UniversityScholarshipFundRequestDto;
 import com.memberconnect.backend.dto.UniversityScholarshipRequestDto;
+import com.memberconnect.backend.enums.UniversityScholarshipFundRequestStatus;
 import com.memberconnect.backend.enums.UniversityScholarshipRequestStatus;
 import com.memberconnect.backend.model.University;
 import com.memberconnect.backend.model.UniversityScholarshipRequest;
@@ -27,9 +30,56 @@ public class UniversityScholarshipController {
     private UniversityScholarshipRequestRepository universityScholarshipRepository;
 
     private final UniversityScholarshipService service;
+    private final CurrentUserService currentUserService;
 
-    public UniversityScholarshipController(UniversityScholarshipService service) {
+    public UniversityScholarshipController(UniversityScholarshipService service,
+                                           CurrentUserService currentUserService) {
         this.service = service;
+        this.currentUserService = currentUserService;
+    }
+
+    /**
+     * MMS25 — change a request's status from View Mode.
+     *
+     * The right required depends on the target status, not on the endpoint, so this
+     * cannot be a single @PreAuthorize. The check runs BEFORE the try/catch below:
+     * inside it, AccessDeniedException is a RuntimeException and would be reported as
+     * 400 instead of reaching the handler that turns it into 403.
+     */
+    @PutMapping("/university-scholarships/{requestId}/status")
+    public ResponseEntity<?> changeRequestStatus(
+            @PathVariable String requestId,
+            @RequestBody Map<String, String> body
+    ) {
+        currentUserService.require(requiredPermissionForStatusChange(body.get("status")));
+
+        try {
+            return ResponseEntity.ok(service.changeRequestStatus(requestId, body.get("status")));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
+     * Maps a status change to the right needed to perform it.
+     *
+     * Deliberately stricter than the Grade 5 equivalent, which lets INCOMPLETE -> NEW
+     * and SUBMITTED -> NEW ride on ordinary G5_REQUEST_EDIT. Doing that here would
+     * invert the intended actors: HEAD_OFFICE does not hold US_REQUEST_EDIT while
+     * DISTRICT_OFFICE does, so the office meant to own this screen would be locked out
+     * of it and the office meant to be excluded would get in. Every move back to NEW
+     * therefore requires US_REQUEST_REOPEN, which sits with Super Admin, Head Office
+     * and Board Secretary.
+     *
+     * An unrecognised status falls through to US_REQUEST_SET_INACTIVE — the narrower of
+     * the two rights — and is then rejected by the service's own validation, so a bad
+     * payload can never pick the weaker check.
+     */
+    private Permission requiredPermissionForStatusChange(String requestedStatus) {
+        if (UniversityScholarshipRequestStatus.NEW.name().equalsIgnoreCase(requestedStatus)) {
+            return Permission.US_REQUEST_REOPEN;
+        }
+        return Permission.US_REQUEST_SET_INACTIVE;
     }
 
     // Endpoint to validate examination number
@@ -247,6 +297,62 @@ public class UniversityScholarshipController {
             ));
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    /**
+     * MMS45 — change a fund request's status from View Mode (New / Inactive).
+     *
+     * PUT here, while PATCH on the same path carries the MMS47 approve/reject decision.
+     * They are separate endpoints because they need different rights, and the right
+     * this one needs depends on the target status — so, as with the scholarship request
+     * equivalent, the check runs before the try/catch rather than as a @PreAuthorize.
+     */
+    @PutMapping("/university-scholarships/{requestId}/fund-requests/{fundRequestId}/status")
+    public ResponseEntity<?> changeFundRequestStatus(
+            @PathVariable String requestId,
+            @PathVariable String fundRequestId,
+            @RequestBody Map<String, String> body
+    ) {
+        currentUserService.require(requiredPermissionForFundStatusChange(body.get("status")));
+
+        try {
+            return ResponseEntity.ok(
+                    service.changeFundRequestStatus(requestId, fundRequestId, body.get("status")));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
+     * Maps a fund request status change to the right it needs. An unrecognised status
+     * falls through to US_FUND_SET_INACTIVE and is then rejected by the service's own
+     * validation, so a bad payload cannot pick a weaker check.
+     */
+    private Permission requiredPermissionForFundStatusChange(String requestedStatus) {
+        if (UniversityScholarshipFundRequestStatus.NEW.name().equalsIgnoreCase(requestedStatus)) {
+            return Permission.US_FUND_REOPEN;
+        }
+        return Permission.US_FUND_SET_INACTIVE;
+    }
+
+    /**
+     * MMS48 — hand an approved fund request to the Finance Module.
+     *
+     * A single @PreAuthorize is enough here: unlike the status endpoints, the right
+     * does not vary with the payload. There is no payload.
+     */
+    @PreAuthorize("hasAuthority('US_FINANCE_DISBURSE')")
+    @PostMapping("/university-scholarships/{requestId}/fund-requests/{fundRequestId}/finance-integration")
+    public ResponseEntity<?> integrateFundRequestWithFinance(
+            @PathVariable String requestId,
+            @PathVariable String fundRequestId
+    ) {
+        try {
+            return ResponseEntity.ok(
+                    service.integrateFundRequestWithFinance(requestId, fundRequestId));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
 
