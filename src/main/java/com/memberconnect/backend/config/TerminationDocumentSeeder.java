@@ -78,7 +78,15 @@ public class TerminationDocumentSeeder implements CommandLineRunner {
         documents.add(create(TERMINATION, "Membership Documents Handover Acknowledgement", true));
         documents.add(create(TERMINATION, "Other Supporting Documents", false));
 
-        documents.add(create(TERMINATION_MINOR, "Minor Savings Account Disbursement Instruction", true));
+        // Optional by product decision, not by the SRS. MMT01 describes the minor
+        // savings paperwork as mandatory, and the equivalent row in
+        // MemberDeathDocumentSeeder is still created mandatory. It was made optional
+        // here because the requirement appears the instant a member has any minor
+        // savings account, which blocked termination requests that were otherwise
+        // complete. The disbursement bank details on the request itself are still
+        // required - TerminationService validates those independently of this row -
+        // so the instruction remains a document to collect, just not a submit gate.
+        documents.add(create(TERMINATION_MINOR, "Minor Savings Account Disbursement Instruction", false));
         documents.add(create(TERMINATION_MINOR, "Minor Bank Account Confirmation", false));
 
         documents.add(create(TERMINATION_APPROVAL_REPORT, "Signed Termination Approval List", false));

@@ -87,9 +87,15 @@ public class DormantDemoCandidateSeeder implements CommandLineRunner {
                 .minusMonths(config.getDormantPeriodMonths())
                 .minusMonths(2);
 
+        // Taken from the END of the demo range, highest id first. Ascending order
+        // put the low-numbered members first, and those are the ones the other
+        // module demos are built around - MEM-DEMO-008 carries the minor savings
+        // accounts and bank details the death-record walkthrough uses. Flagging
+        // one of those as dormant takes it out of ACTIVE and breaks the other
+        // demo, so dormancy claims the filler records at the tail instead.
         List<Member> candidates = memberRepository.findByStatus(MemberStatus.ACTIVE).stream()
                 .filter(m -> m.getMemberId() != null && m.getMemberId().startsWith(DEMO_PREFIX))
-                .sorted((a, b) -> a.getMemberId().compareTo(b.getMemberId()))
+                .sorted((a, b) -> b.getMemberId().compareTo(a.getMemberId()))
                 .limit(Math.max(1, candidateCount))
                 .toList();
 

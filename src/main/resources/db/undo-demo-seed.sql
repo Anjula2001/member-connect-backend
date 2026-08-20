@@ -27,10 +27,22 @@ WHERE (module_name = 'MEMBER'
    OR (module_name = 'MEMBER_APPLICATION'
        AND reference_id IN (SELECT id FROM member_application WHERE applicationid LIKE 'APP-DEMO-%'));
 
--- 3. The members themselves (releases the FK on member_application)
+-- 3. Minor savings accounts created by MinorSavingsDemoSeeder.
+--
+-- Keyed on the account number rather than on member_id LIKE 'MEM-DEMO-%',
+-- deliberately: that seeder writes against every ACTIVE member, real ones
+-- included, and a member-prefix filter would leave those rows behind. Every row
+-- it creates is MSA-DEMO-, and nothing else uses that prefix, so this removes
+-- exactly the seeded rows and never a genuine minor savings account.
+--
+-- Must run before the member delete below - minor_savings_account references
+-- the member.
+DELETE FROM minor_savings_account WHERE minor_account_no LIKE 'MSA-DEMO-%';
+
+-- 4. The members themselves (releases the FK on member_application)
 DELETE FROM member WHERE member_id LIKE 'MEM-DEMO-%';
 
--- 4. The applications behind them
+-- 5. The applications behind them
 DELETE FROM member_application WHERE applicationid LIKE 'APP-DEMO-%';
 
 COMMIT;

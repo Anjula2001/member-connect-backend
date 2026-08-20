@@ -922,6 +922,19 @@ public class DeathDonationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Deceased Date is required");
         }
 
+        // The death must precede the claim raised for it. Same day is allowed - a
+        // request opened on the day of the death is ordinary, so this is isAfter
+        // rather than a strict comparison.
+        //
+        // Checked here and not only in the browser: the form's own validator says it
+        // mirrors this method, and a rule that lives only on the client is one POST
+        // away from being skipped.
+        LocalDate deceasedDate = LocalDate.parse(dto.getDeceasedDate());
+        if (deceasedDate.isAfter(requestedDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Deceased Date cannot be after the Requested Date");
+        }
+
         if (dto.getDeathCertificateNumber() == null || dto.getDeathCertificateNumber().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Death Certificate Number is required");
