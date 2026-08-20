@@ -16,6 +16,13 @@ public interface Grade5ScholarshipRepository
             String requestNo
     );
 
+    boolean existsByBirthCertificateNumber(String birthCertificateNumber);
+
+    boolean existsByBirthCertificateNumberAndRequestNoNot(
+            String birthCertificateNumber,
+            String requestNo
+    );
+
     Optional<Grade5ScholarshipRequest>
         findTopByRequestNoStartingWithOrderByRequestNoDesc(String prefix);
 

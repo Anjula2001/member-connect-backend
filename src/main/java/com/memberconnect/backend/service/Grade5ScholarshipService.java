@@ -53,9 +53,26 @@ public class Grade5ScholarshipService {
     @Value("${grade5.minor.account.required.remittance.amount:250.0}")
     private double defaultMinMinorRemittanceAmount;
 
+    // SRS 2.3.x: the base amount, the number of remitted months that earns the higher
+    // amount, and the multiplier applied to it are all configurable.
+    @Value("${grade5.scholarship.base.amount:5000}")
+    private int defaultBaseScholarshipAmount;
+
+    @Value("${grade5.scholarship.double.eligible.months:36}")
+    private int defaultDoubleEligibleMonths;
+
+    @Value("${grade5.scholarship.amount.multiplier:2}")
+    private int defaultAmountMultiplier;
+
     // Check exam number exists
     public boolean isExamNumberExists(String examNo) {
         return repository.existsByExaminationNumber(examNo);
+    }
+
+    // Check birth certificate number exists. One birth certificate identifies one
+    // student, so a second request carrying it is a duplicate of an existing one.
+    public boolean isBirthCertificateNumberExists(String birthCertificateNo) {
+        return repository.existsByBirthCertificateNumber(birthCertificateNo);
     }
 
     public List<MinorSavingsAccount> getMinorAccounts(String birthCertificateNo) {
@@ -155,6 +172,38 @@ public class Grade5ScholarshipService {
         }
     }
 
+    private int configValue(String primaryKey, String fallbackKey, int fallbackValue) {
+        return scholarshipConfigRepository.findByConfigKey(primaryKey)
+                .or(() -> scholarshipConfigRepository.findByConfigKey(fallbackKey))
+                .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue)
+                .filter(value -> value != null && value > 0)
+                .orElse(fallbackValue);
+    }
+
+    /**
+     * The total the student is entitled to. Rs. 5,000 normally; doubled once the minor
+     * account has been remitted with the required amount for the configured number of
+     * months (36 by default, and the months need not be consecutive).
+     */
+    private int expectedTotalAmount(int eligibleMonths) {
+        int baseAmount = configValue(
+                "grade5.scholarship.base.amount",
+                "scholarship.base.amount",
+                defaultBaseScholarshipAmount > 0 ? defaultBaseScholarshipAmount : 5000);
+
+        int doubleAfterMonths = configValue(
+                "grade5.scholarship.double.eligible.months",
+                "scholarship.double.eligible.months",
+                defaultDoubleEligibleMonths > 0 ? defaultDoubleEligibleMonths : 36);
+
+        int multiplier = configValue(
+                "grade5.scholarship.amount.multiplier",
+                "scholarship.amount.multiplier",
+                defaultAmountMultiplier > 0 ? defaultAmountMultiplier : 2);
+
+        return eligibleMonths >= doubleAfterMonths ? baseAmount * multiplier : baseAmount;
+    }
+
     private void validateFundDisbursement(Grade5StudentDTO dto) {
         if (dto.getEligibleMonths() != null && dto.getEligibleMonths() < 0) {
             throw new RuntimeException("Eligible months cannot be negative.");
@@ -175,13 +224,49 @@ public class Grade5ScholarshipService {
             throw new RuntimeException("Minor account number is required.");
         }
 
-        if ("MINOR_ONLY".equalsIgnoreCase(option) && (dto.getMinorAccountNumber() == null || dto.getMinorAccountNumber().trim().isEmpty())) {
+        if ("MINOR_ONLY".equalsIgnoreCase(option)
+                && (dto.getMinorAccountNumber() == null || dto.getMinorAccountNumber().trim().isEmpty())) {
             throw new RuntimeException("Minor account number is required for Minor Account Only option.");
         }
 
         if ((dto.getMemberAmount() != null && dto.getMemberAmount() < 0)
                 || (dto.getMinorAmount() != null && dto.getMinorAmount() < 0)) {
             throw new RuntimeException("Disbursement amounts cannot be negative.");
+        }
+
+        int eligibleMonths = dto.getEligibleMonths() != null ? dto.getEligibleMonths() : 0;
+
+        // The eligible months are counted from minor account remittances, so there is no
+        // way to have earned any without an account to remit into.
+        if (!hasMinorAccount && eligibleMonths > 0) {
+            throw new RuntimeException(
+                    "Eligible months cannot be greater than zero without a minor account.");
+        }
+
+        int expectedTotal = expectedTotalAmount(eligibleMonths);
+        Integer memberAmount = dto.getMemberAmount();
+        Integer minorAmount = dto.getMinorAmount();
+
+        // No minor account: the whole scholarship is paid to the member.
+        if (!hasMinorAccount) {
+            if (minorAmount != null && minorAmount != 0) {
+                throw new RuntimeException(
+                        "Without a minor account the minor account amount must be zero.");
+            }
+
+            if (memberAmount != null && memberAmount != expectedTotal) {
+                throw new RuntimeException(
+                        "Without a minor account the full scholarship amount of Rs. "
+                                + expectedTotal + " must be paid to the member.");
+            }
+        }
+
+        // Whatever the split, the two halves must still add up to what the student earned.
+        if (memberAmount != null && minorAmount != null
+                && memberAmount + minorAmount != expectedTotal) {
+            throw new RuntimeException(
+                    "Member and minor account amounts must add up to the total scholarship amount of Rs. "
+                            + expectedTotal + ".");
         }
     }
 
@@ -242,6 +327,10 @@ public class Grade5ScholarshipService {
             throw new RuntimeException("Examination number already exists");
         }
 
+        if (repository.existsByBirthCertificateNumber(dto.getBirthCertificateNumber())) {
+            throw new RuntimeException("Birth certificate number already exists");
+        }
+
         Grade5ScholarshipRequest entity = new Grade5ScholarshipRequest();
         LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
 
@@ -260,8 +349,7 @@ public class Grade5ScholarshipService {
         Map<String, Object> calc = calculateDisbursement(
                 dto.getEligibleMonths(),
                 dto.getDisbursementOption(),
-                dto.getMinorAccountExists()
-        );
+                dto.getMinorAccountExists());
 
         entity.setMinorAccountExists(dto.getMinorAccountExists());
         entity.setMinorAccountNumber(dto.getMinorAccountNumber());
@@ -272,11 +360,18 @@ public class Grade5ScholarshipService {
         entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
         entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
 
-        // Location comes from the member's administering District Office, not from the
-        // logged-in user — a member may apply at any office (SRS 2.3.1) but the request
-        // belongs to the branch that holds their membership.
-        entity.setSubmissionLocation(member.getSubmissionLocation());
         User currentUser = currentUserService.current();
+
+        // The request is booked to the district of the office that raised it. Accounts
+        // with no district of their own (Super Admin, Scholarship Officer) fall back to
+        // the member's administering office, so the column is never left null — the
+        // location filter on the search screen matches on it.
+        String raisingDistrict = currentUser != null ? currentUser.getAssignedDistrict() : null;
+        entity.setSubmissionLocation(
+                (raisingDistrict != null && !raisingDistrict.isBlank())
+                        ? raisingDistrict.trim()
+                        : member.getSubmissionLocation());
+
         entity.setCreatedBy(currentUser != null ? currentUser.getUsername() : null);
         entity.setCreatedAt(java.time.LocalDateTime.now());
 
@@ -325,7 +420,12 @@ public class Grade5ScholarshipService {
             result.put("minorAccountNo", null);
             result.put("totalMonths", 0);
             result.put("eligibleMonths", 0);
-            result.put("doubleAmount", false);
+
+            // No minor account means no remitted months and so no doubling, but the
+            // student is still entitled to the base scholarship — all of it paid to the
+            // member. This branch used to return before the breakdown was calculated,
+            // which showed the screen a total of 0.
+            result.putAll(calculateDisbursement(0, "MEMBER_ONLY", false));
             return result;
         }
 
@@ -382,13 +482,12 @@ public class Grade5ScholarshipService {
     // Calculate fund disbursement breakdown
     public Map<String, Object> calculateDisbursement(Integer months, String option, Boolean hasMinorAccount) {
         int eligibleMonths = (months != null && months >= 0) ? months : 0;
-        boolean isDouble = eligibleMonths >= 36;
-        int normalAmount = 5000;
-        int doubleAmount = 10000;
-        int totalAmount = isDouble ? doubleAmount : normalAmount;
+        int totalAmount = expectedTotalAmount(eligibleMonths);
+        boolean isDouble = totalAmount > expectedTotalAmount(0);
 
         boolean minorExists = Boolean.TRUE.equals(hasMinorAccount);
-        String resolvedOption = minorExists ? (option != null && !option.trim().isEmpty() ? option : "MEMBER_AND_MINOR") : "MEMBER_ONLY";
+        String resolvedOption = minorExists ? (option != null && !option.trim().isEmpty() ? option : "MEMBER_AND_MINOR")
+                : "MEMBER_ONLY";
 
         int memberAmount = 0;
         int minorAmount = 0;
@@ -397,8 +496,9 @@ public class Grade5ScholarshipService {
             memberAmount = totalAmount;
             minorAmount = 0;
         } else if ("MEMBER_AND_MINOR".equalsIgnoreCase(resolvedOption)) {
-            memberAmount = totalAmount / 2;
+            // An odd configured total would otherwise lose a rupee to integer division.
             minorAmount = totalAmount / 2;
+            memberAmount = totalAmount - minorAmount;
         } else if ("MINOR_ONLY".equalsIgnoreCase(resolvedOption)) {
             memberAmount = 0;
             minorAmount = totalAmount;
@@ -682,6 +782,12 @@ public class Grade5ScholarshipService {
             throw new RuntimeException("Examination number already exists");
         }
 
+        if (repository.existsByBirthCertificateNumberAndRequestNoNot(
+                dto.getBirthCertificateNumber(),
+                requestNo)) {
+            throw new RuntimeException("Birth certificate number already exists");
+        }
+
         LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
 
         entity.setRequestedDate(requestedDate);
@@ -697,8 +803,7 @@ public class Grade5ScholarshipService {
         Map<String, Object> calc = calculateDisbursement(
                 dto.getEligibleMonths(),
                 dto.getDisbursementOption(),
-                dto.getMinorAccountExists()
-        );
+                dto.getMinorAccountExists());
 
         entity.setMinorAccountExists(dto.getMinorAccountExists());
         entity.setMinorAccountNumber(dto.getMinorAccountNumber());

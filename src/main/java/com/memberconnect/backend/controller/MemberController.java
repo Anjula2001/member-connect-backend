@@ -128,7 +128,9 @@ public class MemberController {
         return retirementService.getMemberSummary(memberId);
     }
 
-    // Validate a member for retirement
+    // Validate a member for retirement. The sibling termination and member-death
+    // validations below stay ungated — those modules are not access-controlled yet.
+    @PreAuthorize("hasAuthority('RET_REQUEST_VIEW')")
     @GetMapping("/{memberId}/retirement-validation")
     public MemberRetirementValidationDTO validateMemberForRetirement(
             @PathVariable String memberId) {

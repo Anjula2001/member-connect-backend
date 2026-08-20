@@ -59,6 +59,20 @@ public class Grade5ScholarshipController {
         return response;
     }
 
+    // Validate birth certificate number
+    @PreAuthorize("hasAuthority('G5_REQUEST_CREATE') or hasAuthority('G5_REQUEST_EDIT')")
+    @GetMapping("/exists-birth-certificate")
+    public Map<String, Boolean> checkBirthCertificateNumber(
+            @RequestParam String birthCertificateNo
+    ) {
+        boolean exists = service.isBirthCertificateNumberExists(birthCertificateNo);
+
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("exists", exists);
+
+        return response;
+    }
+
     // Save full request
     @PreAuthorize("hasAuthority('G5_REQUEST_CREATE')")
     @PostMapping("/save")

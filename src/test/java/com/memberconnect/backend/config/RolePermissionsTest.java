@@ -9,7 +9,7 @@ import com.memberconnect.backend.enums.Permission;
 import com.memberconnect.backend.enums.Role;
 
 /**
- * Locks in the Grade 5 role/permission matrix.
+ * Locks in the Grade 5 and Member Retirement role/permission matrix.
  *
  * These are not exhaustive coverage of the map — they pin the handful of grants where
  * getting it wrong is a control failure rather than an inconvenience, so that a future
@@ -60,6 +60,57 @@ class RolePermissionsTest {
     }
 
     @Test
+    void districtOfficeRaisesRetirementRequestsButCannotApproveThem() {
+        assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_CREATE));
+        assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_EDIT));
+        assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_SUBMIT));
+        assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_INCOMPLETE));
+
+        // MMT16's actor table says "District Office System User", but 3.1.1 says
+        // "the Authorized User". Resolved in favour of Head Office: the clerk who raises
+        // a retirement request must not be able to approve it, pull it back out of
+        // approval, or deactivate it.
+        assertFalse(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_APPROVE));
+        assertFalse(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_RETURN_TO_NEW));
+        assertFalse(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_SET_INACTIVE));
+    }
+
+    @Test
+    void headOfficeApprovesRetirementRequestsButDoesNotRaiseThem() {
+        assertTrue(RolePermissions.has(Role.HEAD_OFFICE, Permission.RET_REQUEST_APPROVE));
+        assertTrue(RolePermissions.has(Role.HEAD_OFFICE, Permission.RET_REQUEST_SET_INACTIVE));
+        assertTrue(RolePermissions.has(Role.HEAD_OFFICE, Permission.RET_REQUEST_RETURN_TO_NEW));
+
+        // The other half of the maker/checker split.
+        assertFalse(RolePermissions.has(Role.HEAD_OFFICE, Permission.RET_REQUEST_CREATE));
+        assertFalse(RolePermissions.has(Role.HEAD_OFFICE, Permission.RET_REQUEST_SUBMIT));
+    }
+
+    @Test
+    void boardSecretaryHousekeepsRetirementRequestsButCannotApproveThem() {
+        assertTrue(RolePermissions.has(Role.BOARD_SECRETARY, Permission.RET_REQUEST_SET_INACTIVE));
+        assertTrue(RolePermissions.has(Role.BOARD_SECRETARY, Permission.RET_REQUEST_RETURN_TO_NEW));
+
+        // MMT16 runs no Board Meeting, so retirement approval stays with Head Office
+        // alone — unlike the Grade 5 track, where Board Secretary does process lists.
+        assertFalse(RolePermissions.has(Role.BOARD_SECRETARY, Permission.RET_REQUEST_APPROVE));
+        assertFalse(RolePermissions.has(Role.BOARD_SECRETARY, Permission.RET_REQUEST_CREATE));
+    }
+
+    @Test
+    void scholarshipOfficerHoldsNoRetirementRightsAtAll() {
+        // Not an actor anywhere in MMT12-MMT17. It holds Grade 5 request rights, so this
+        // pins that those do not leak sideways into retirement.
+        for (Permission permission : Permission.values()) {
+            if (permission.name().startsWith("RET_")) {
+                assertFalse(
+                        RolePermissions.has(Role.SCHOLARSHIP_OFFICER, permission),
+                        "SCHOLARSHIP_OFFICER should not hold " + permission);
+            }
+        }
+    }
+
+    @Test
     void deathDonationOfficerHoldsNoGrade5RightsAtAll() {
         // Previously this role reached the whole module by falling through a catch-all
         // branch in the sidebar. Absence from the matrix must mean no access, not
@@ -78,6 +129,13 @@ class RolePermissionsTest {
 
         assertFalse(RolePermissions.has(Role.ACCOUNTS, Permission.G5_REQUEST_CREATE));
         assertFalse(RolePermissions.has(Role.ACCOUNTS, Permission.G5_LIST_PROCESS));
+
+        // Retirement is read-only for Accounts too. MMT17 hands approved retirements to
+        // the Finance Module over an API that does not exist yet, so there is no
+        // finance-side retirement right to hold.
+        assertTrue(RolePermissions.has(Role.ACCOUNTS, Permission.RET_REQUEST_VIEW));
+        assertFalse(RolePermissions.has(Role.ACCOUNTS, Permission.RET_REQUEST_CREATE));
+        assertFalse(RolePermissions.has(Role.ACCOUNTS, Permission.RET_REQUEST_APPROVE));
     }
 
     @Test
