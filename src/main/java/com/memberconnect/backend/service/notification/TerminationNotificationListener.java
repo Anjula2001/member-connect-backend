@@ -6,11 +6,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import com.memberconnect.backend.event.TerminationCompletedEvent;
 import com.memberconnect.backend.event.TerminationMarkedIncompleteEvent;
+import com.memberconnect.backend.event.TerminationRejectedEvent;
 import com.memberconnect.backend.service.NotificationService;
 
 /**
- * Turns a committed "termination request marked INCOMPLETE" into member notifications.
+ * Turns committed termination status changes into member notifications: marked
+ * INCOMPLETE (MMT01), rejected by the board (MMT09), and terminated once Finance
+ * has closed the accounts (MMT11).
  *
  * AFTER_COMMIT is the whole point of this class. TerminationService is annotated
  * @Transactional at class level, so markIncomplete() runs inside a transaction; firing
@@ -46,6 +50,39 @@ public class TerminationNotificationListener {
             // confusing failure on an operation that has already succeeded.
             log.error(
                     "Termination incomplete notification failed unexpectedly. memberId={}, requestNo={}, cause={}",
+                    event.memberId(), event.requestNo(), e.toString(), e
+            );
+        }
+    }
+
+    /** MMT09 - the board rejected the request and the member is Active again. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onTerminationRejected(TerminationRejectedEvent event) {
+        try {
+            notificationService.notifyTerminationRejected(
+                    event.memberId(),
+                    event.requestNo(),
+                    event.reason()
+            );
+        } catch (Exception e) {
+            log.error(
+                    "Termination rejected notification failed unexpectedly. memberId={}, requestNo={}, cause={}",
+                    event.memberId(), event.requestNo(), e.toString(), e
+            );
+        }
+    }
+
+    /** MMT11 - Finance has closed the accounts and the membership is now over. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onTerminationCompleted(TerminationCompletedEvent event) {
+        try {
+            notificationService.notifyMembershipTerminated(
+                    event.memberId(),
+                    event.requestNo()
+            );
+        } catch (Exception e) {
+            log.error(
+                    "Membership terminated notification failed unexpectedly. memberId={}, requestNo={}, cause={}",
                     event.memberId(), event.requestNo(), e.toString(), e
             );
         }

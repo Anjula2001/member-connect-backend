@@ -31,9 +31,12 @@ import java.util.List;
 @Entity
 @Table(
     name = "member_death_record",
-    indexes = @Index(name = "idx_member_death_record_status_date", columnList = "status, informed_date")
+    indexes = {
+        @Index(name = "idx_member_death_record_status_date", columnList = "status, informed_date"),
+        @Index(name = "idx_member_death_record_location", columnList = "submission_location")
+    }
 )
-public class MemberDeathRecord {
+public class MemberDeathRecord implements DonationEntitlementTarget {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -115,6 +118,95 @@ public class MemberDeathRecord {
 
     @Column(name = "reject_reason", columnDefinition = "TEXT")
     private String rejectReason;
+
+    /**
+     * District the record was raised in, stamped once at creation from the
+     * member's own submission location (falling back to the creating user's
+     * assigned district). Matched by plain equality against
+     * User.assignedDistrict to scope District Office users - the same mechanism
+     * as TerminationRequest.submissionLocation.
+     */
+    @Column(name = "submission_location")
+    private String submissionLocation;
+
+    /**
+     * Username of the District Office user who created the record. Backs the
+     * self-approval guard: the SRS separates the clerk who raises a record
+     * (MMT18) from the "Authorized User" who decides it (MMT22), and with both
+     * mapped to DISTRICT_OFFICE this is what keeps the two apart.
+     */
+    @Column(name = "created_by", length = 100)
+    private String createdBy;
+
+    // ---------- Death Donation entitlement (SRS 4.2.3) ----------
+    // Every figure below is nullable: it is only populated once the record has
+    // been saved and the entitlement has been calculated.
+
+    /** Months the Death Donation remittance was deducted. Editable by the user. */
+    @Column(name = "months_remitted")
+    private Integer monthsRemitted;
+
+    @Column(name = "months_remitted_edited")
+    private Boolean monthsRemittedEdited;
+
+    @Column(name = "maximum_donation_amount", precision = 15, scale = 2)
+    private BigDecimal maximumDonationAmount;
+
+    @Column(name = "eligible_donation_amount", precision = 15, scale = 2)
+    private BigDecimal eligibleDonationAmount;
+
+    /** Donations already paid to this member within the past 12 months. Editable. */
+    @Column(name = "received_past_12_months", precision = 15, scale = 2)
+    private BigDecimal receivedPast12Months;
+
+    @Column(name = "received_past_12_months_edited")
+    private Boolean receivedPast12MonthsEdited;
+
+    /** Null when the member has no Special Fixed Account for Funerals. */
+    @Column(name = "funeral_account_no", length = 100)
+    private String funeralAccountNo;
+
+    /** Total credited to the funeral account so far, excluding interest. */
+    @Column(name = "funeral_account_credited", precision = 15, scale = 2)
+    private BigDecimal funeralAccountCredited;
+
+    @Column(name = "funeral_account_maximum", precision = 15, scale = 2)
+    private BigDecimal funeralAccountMaximum;
+
+    /** Slice of the entitlement routed to the funeral account. Editable. */
+    @Column(name = "credited_to_special_fixed_account", precision = 15, scale = 2)
+    private BigDecimal creditedToSpecialFixedAccount;
+
+    @Column(name = "credited_to_special_fixed_edited")
+    private Boolean creditedToSpecialFixedEdited;
+
+    /** Entitlement remaining after the funeral-account allocation. */
+    @Column(name = "disburse_donation_amount", precision = 15, scale = 2)
+    private BigDecimal disburseDonationAmount;
+
+    /** The multiplier actually applied (2 when a funeral account exists, else 1). */
+    @Column(name = "donation_multiplier_applied", precision = 6, scale = 2)
+    private BigDecimal donationMultiplierApplied;
+
+    // ---------- Per-level decision trail (MMT22 / MMT23 / MMT24) ----------
+
+    @Column(name = "level1_decided_by", length = 100)
+    private String level1DecidedBy;
+
+    @Column(name = "level1_decided_at")
+    private LocalDateTime level1DecidedAt;
+
+    @Column(name = "level2_decided_by", length = 100)
+    private String level2DecidedBy;
+
+    @Column(name = "level2_decided_at")
+    private LocalDateTime level2DecidedAt;
+
+    @Column(name = "level3_decided_by", length = 100)
+    private String level3DecidedBy;
+
+    @Column(name = "level3_decided_at")
+    private LocalDateTime level3DecidedAt;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

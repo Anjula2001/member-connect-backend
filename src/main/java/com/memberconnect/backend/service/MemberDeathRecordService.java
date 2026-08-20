@@ -1,12 +1,19 @@
 package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.CauseOfDeathDTO;
+import com.memberconnect.backend.dto.FinanceMemberDeathHandoffDTO;
 import com.memberconnect.backend.dto.MemberDeathDocumentDTO;
 import com.memberconnect.backend.dto.MemberDeathMinorDisbursementDTO;
 import com.memberconnect.backend.dto.MemberDeathRecordDTO;
 import com.memberconnect.backend.dto.MemberRetirementValidationDTO;
 import com.memberconnect.backend.enums.MemberDeathRecordStatus;
 import com.memberconnect.backend.enums.MemberStatus;
+import com.memberconnect.backend.config.MemberDeathDocumentSeeder;
+import com.memberconnect.backend.enums.Role;
+import com.memberconnect.backend.event.MemberDeathApprovedEvent;
+import com.memberconnect.backend.event.MemberDeathCompletedEvent;
+import com.memberconnect.backend.event.MemberDeathMarkedIncompleteEvent;
+import com.memberconnect.backend.event.MemberDeathRejectedEvent;
 import com.memberconnect.backend.model.CauseOfDeath;
 import com.memberconnect.backend.model.Loan;
 import com.memberconnect.backend.model.LoanObligation;
@@ -15,6 +22,7 @@ import com.memberconnect.backend.model.MemberDeathDocument;
 import com.memberconnect.backend.model.MemberDeathMinorAccount;
 import com.memberconnect.backend.model.MemberDeathRecord;
 import com.memberconnect.backend.model.MinorSavingsAccount;
+import com.memberconnect.backend.model.User;
 import com.memberconnect.backend.repository.BankRepository;
 import com.memberconnect.backend.repository.BranchRepository;
 import com.memberconnect.backend.repository.CauseOfDeathRepository;
@@ -25,13 +33,14 @@ import com.memberconnect.backend.repository.MemberDeathMinorAccountRepository;
 import com.memberconnect.backend.repository.MemberDeathRecordRepository;
 import com.memberconnect.backend.repository.MemberRepository;
 import com.memberconnect.backend.repository.MinorSavingsAccountRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -50,8 +59,79 @@ import java.util.stream.Collectors;
 @SuppressWarnings("null")
 public class MemberDeathRecordService {
 
+    /**
+     * The MMT21 status matrix, transcribed verbatim. A transition absent from this
+     * map is not a permitted manual status change - the approval path moves through
+     * the dedicated forward/approve/reject actions, not through changeStatus.
+     */
+    private static final Map<MemberDeathRecordStatus, Set<MemberDeathRecordStatus>> ALLOWED_STATUS_CHANGES = Map.of(
+            MemberDeathRecordStatus.NEW, Set.of(MemberDeathRecordStatus.INACTIVE),
+            MemberDeathRecordStatus.INCOMPLETE, Set.of(MemberDeathRecordStatus.NEW, MemberDeathRecordStatus.INACTIVE),
+            MemberDeathRecordStatus.SUBMITTED_FOR_APPROVAL, Set.of(MemberDeathRecordStatus.NEW, MemberDeathRecordStatus.INACTIVE),
+            MemberDeathRecordStatus.DISTRICT_COMMITTEE, Set.of(MemberDeathRecordStatus.NEW, MemberDeathRecordStatus.INACTIVE),
+            MemberDeathRecordStatus.PD_COMMITTEE, Set.of(MemberDeathRecordStatus.NEW, MemberDeathRecordStatus.INACTIVE),
+            MemberDeathRecordStatus.REJECTED, Set.of(MemberDeathRecordStatus.NEW, MemberDeathRecordStatus.INACTIVE),
+            MemberDeathRecordStatus.INACTIVE, Set.of(MemberDeathRecordStatus.NEW)
+    );
+
+    /** Statuses after which uploaded files may no longer be added or removed (MMT18). */
+    private static final Set<MemberDeathRecordStatus> DOCUMENT_LOCK_STATUSES = Set.of(
+            MemberDeathRecordStatus.SUBMITTED_FOR_APPROVAL,
+            MemberDeathRecordStatus.DISTRICT_COMMITTEE,
+            MemberDeathRecordStatus.PD_COMMITTEE,
+            MemberDeathRecordStatus.APPROVED,
+            MemberDeathRecordStatus.REJECTED
+    );
+
+    /**
+     * The escalation ladder (MMT22 -> MMT23 -> MMT24). Forward-only by construction:
+     * there is no entry mapping a committee back to an earlier one.
+     */
+    private static final Map<MemberDeathRecordStatus, MemberDeathRecordStatus> FORWARD_TRANSITIONS = Map.of(
+            MemberDeathRecordStatus.SUBMITTED_FOR_APPROVAL, MemberDeathRecordStatus.DISTRICT_COMMITTEE,
+            MemberDeathRecordStatus.DISTRICT_COMMITTEE, MemberDeathRecordStatus.PD_COMMITTEE
+    );
+
+    /**
+     * Which role owns the decision at each level. This is the runtime backstop
+     * behind the controller annotations, and the thing that actually stops one
+     * clerk walking a record through all three levels alone.
+     */
+    private static final Map<MemberDeathRecordStatus, Role> DECISION_ROLE = Map.of(
+            MemberDeathRecordStatus.SUBMITTED_FOR_APPROVAL, Role.DISTRICT_OFFICE,
+            MemberDeathRecordStatus.DISTRICT_COMMITTEE, Role.DISTRICT_COMMITTEE,
+            MemberDeathRecordStatus.PD_COMMITTEE, Role.PD_COMMITTEE
+    );
+
+    /**
+     * Who may see a member death record at all (MMT19 / MMT20). The District Office
+     * raises them, the three decision levels read them before deciding, and Head
+     * Office oversees. Deliberately excludes ACCOUNTS, SCHOLARSHIP_OFFICER and
+     * DEATH_DONATION_OFFICER: none of them is an actor in SRS section 4.
+     *
+     * Kept in step with MemberDeathRecordController.READ_ROLES - the annotations are
+     * the outer gate, this set is what the generic document routes consult.
+     */
+    private static final Set<Role> DEATH_READ_ROLES = Set.of(
+            Role.DISTRICT_OFFICE,
+            Role.DISTRICT_COMMITTEE,
+            Role.PD_COMMITTEE,
+            Role.HEAD_OFFICE,
+            Role.BOARD_SECRETARY,
+            Role.SUPER_ADMIN
+    );
+
+    /** Who may raise or change one (MMT18 / MMT21): the District Office alone. */
+    private static final Set<Role> DEATH_ENTRY_ROLES = Set.of(
+            Role.DISTRICT_OFFICE,
+            Role.SUPER_ADMIN
+    );
+
+    /**
+     * Only consulted by the legacy fallback in validateMandatoryDocuments, for
+     * records whose files predate the move to the Supporting Documents master.
+     */
     private static final Set<String> MANDATORY_DOCUMENT_TYPES = Set.of("DEATH_CERTIFICATE");
-    private static final Set<String> ALLOWED_DOCUMENT_TYPES = Set.of("DEATH_CERTIFICATE", "OTHER");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final MemberDeathRecordRepository recordRepository;
@@ -65,6 +145,10 @@ public class MemberDeathRecordService {
     private final BankRepository bankRepository;
     private final BranchRepository branchRepository;
     private final S3Service s3Service;
+    private final ApplicationEventPublisher eventPublisher;
+    private final AuditService auditService;
+    private final DeathDonationEntitlementService entitlementService;
+    private final DocumentService documentService;
 
     public MemberDeathRecordService(
             MemberDeathRecordRepository recordRepository,
@@ -77,7 +161,11 @@ public class MemberDeathRecordService {
             LoanObligationRepository obligationRepository,
             BankRepository bankRepository,
             BranchRepository branchRepository,
-            S3Service s3Service
+            S3Service s3Service,
+            ApplicationEventPublisher eventPublisher,
+            AuditService auditService,
+            DeathDonationEntitlementService entitlementService,
+            DocumentService documentService
     ) {
         this.recordRepository = recordRepository;
         this.documentRepository = documentRepository;
@@ -90,6 +178,10 @@ public class MemberDeathRecordService {
         this.bankRepository = bankRepository;
         this.branchRepository = branchRepository;
         this.s3Service = s3Service;
+        this.eventPublisher = eventPublisher;
+        this.auditService = auditService;
+        this.entitlementService = entitlementService;
+        this.documentService = documentService;
     }
 
     public List<CauseOfDeathDTO> getCauseOfDeathOptions() {
@@ -124,13 +216,17 @@ public class MemberDeathRecordService {
             String toDate,
             String searchKey,
             String sortBy,
-            String sortOrder
+            String sortOrder,
+            List<String> locations
     ) {
+        Set<String> effectiveLocations = resolveVisibleLocations(locations);
+
         // Filtering happens on the entities first. Mapping used to run ahead of the
         // filters, which meant a search that matched nothing still paid the full
         // per-record mapping cost for every row in the table.
         List<MemberDeathRecord> matches = recordRepository.findAllWithMember()
                 .stream()
+                .filter(record -> matchesLocation(record, effectiveLocations))
                 .filter(record -> matchesStatuses(record, statuses))
                 .filter(record -> matchesInformedDateRange(record, fromDate, toDate))
                 .filter(record -> matchesSearch(record, searchKey))
@@ -251,10 +347,12 @@ public class MemberDeathRecordService {
 
     public MemberDeathRecordDTO saveRecord(String memberId, MemberDeathRecordDTO dto) {
         Member member = getMemberForSave(memberId);
+        assertCallerMayActFor(member);
         MemberDeathRecord record;
 
         if (dto.getRecordNo() != null && !dto.getRecordNo().isBlank()) {
             record = getRecordEntity(dto.getRecordNo());
+            assertCallerMayAccess(record);
             if (!record.getMember().getMemberId().equals(memberId)) {
                 throw new RuntimeException("Record does not belong to the specified member");
             }
@@ -278,6 +376,10 @@ public class MemberDeathRecordService {
                 record.setRecordId(generateRecordId());
                 record.setMember(member);
                 record.setStatus(MemberDeathRecordStatus.NEW);
+                // Stamped once, at creation. Re-deriving it later would move the
+                // record between districts whenever the member transfers.
+                record.setSubmissionLocation(resolveSubmissionLocationFor(member));
+                record.setCreatedBy(currentUsername());
             }
         }
 
@@ -285,6 +387,9 @@ public class MemberDeathRecordService {
         applyRecordFields(record, member, dto);
         replaceMinorAccounts(record, dto.getMinorDisbursements());
 
+        // MMT18: the donation figures appear once the record has been saved and
+        // retrieved back, so they are derived here rather than on the entry form.
+        entitlementService.populateFromFinance(record);
         MemberDeathRecord saved = recordRepository.save(record);
 
         if (member.getStatus() == MemberStatus.ACTIVE) {
@@ -295,8 +400,47 @@ public class MemberDeathRecordService {
         return mapToResponse(saved);
     }
 
+    /**
+     * Applies the operator overrides behind the SRS refresh button and recalculates
+     * the rest of the entitlement.
+     *
+     * Available while the record is still with an approval level, not just while it
+     * is editable: the SRS lets an authorised user adjust these amounts in View
+     * Mode, which is the only way a committee can correct a figure it disagrees
+     * with without sending the whole record back.
+     */
+    public MemberDeathRecordDTO refreshDonationEntitlement(
+            String recordNo,
+            Integer monthsRemitted,
+            BigDecimal receivedPast12Months,
+            BigDecimal creditedToSpecialFixedAccount
+    ) {
+        MemberDeathRecord record = getRecordEntity(recordNo);
+        assertCallerMayAccess(record);
+
+        if (record.getStatus() == MemberDeathRecordStatus.APPROVED
+                || record.getStatus() == MemberDeathRecordStatus.REJECTED
+                || record.getStatus() == MemberDeathRecordStatus.INACTIVE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Death donation amounts cannot be changed once the record is " + record.getStatus());
+        }
+
+        entitlementService.applyOverrides(
+                record, monthsRemitted, receivedPast12Months, creditedToSpecialFixedAccount);
+
+        MemberDeathRecord saved = recordRepository.save(record);
+
+        auditService.record(AuditService.MODULE_MEMBER_DEATH, saved.getId(),
+                "DONATION_RECALCULATED", null,
+                String.valueOf(saved.getDisburseDonationAmount()),
+                "Death donation recalculated for member " + saved.getMember().getMemberId());
+
+        return mapToResponse(saved);
+    }
+
     public MemberDeathRecordDTO submitRecord(String recordNo) {
         MemberDeathRecord record = getRecordEntity(recordNo);
+        assertCallerMayAccess(record);
 
         if (!isSubmittable(record.getStatus())) {
             throw new RuntimeException("Record cannot be submitted in its current status");
@@ -308,7 +452,7 @@ public class MemberDeathRecordService {
         }
 
         validateRecordDto(mapToResponse(record), true);
-        validateMandatoryDocuments(record.getRecordId());
+        validateMandatoryDocuments(record);
         validateMinorAccountsForSubmit(record);
 
         record.setStatus(MemberDeathRecordStatus.SUBMITTED_FOR_APPROVAL);
@@ -325,112 +469,270 @@ public class MemberDeathRecordService {
             throw new RuntimeException("Record cannot be marked incomplete in its current status");
         }
 
+        assertCallerMayAccess(record);
+
+        MemberDeathRecordStatus previousStatus = record.getStatus();
         record.setStatus(MemberDeathRecordStatus.INCOMPLETE);
         record.setIncompleteReason(reason.trim());
-        return mapToResponse(recordRepository.save(record));
+        MemberDeathRecord saved = recordRepository.save(record);
+
+        auditService.recordStatusChange(AuditService.MODULE_MEMBER_DEATH, saved.getId(),
+                "MARK_INCOMPLETE", previousStatus, MemberDeathRecordStatus.INCOMPLETE,
+                saved.getIncompleteReason());
+
+        eventPublisher.publishEvent(new MemberDeathMarkedIncompleteEvent(
+                saved.getMember().getMemberId(), saved.getRecordId(), saved.getIncompleteReason()));
+
+        return mapToResponse(saved);
     }
 
+    /**
+     * Manual status change within the MMT21 matrix. The approval ladder itself is
+     * NOT reachable from here - forwarding and deciding go through their own
+     * actions, which carry the per-level role checks.
+     */
     public MemberDeathRecordDTO changeStatus(String recordNo, String statusValue) {
         MemberDeathRecord record = getRecordEntity(recordNo);
+        assertCallerMayAccess(record);
+
+        MemberDeathRecordStatus currentStatus = record.getStatus();
         MemberDeathRecordStatus newStatus = parseStatus(statusValue);
 
+        if (currentStatus == newStatus) {
+            return mapToResponse(record);
+        }
+
+        Set<MemberDeathRecordStatus> permitted =
+                ALLOWED_STATUS_CHANGES.getOrDefault(currentStatus, Set.of());
+        if (!permitted.contains(newStatus)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Status cannot be changed from " + currentStatus + " to " + newStatus);
+        }
+
+        if (newStatus == MemberDeathRecordStatus.INACTIVE && !currentUserHasInactiveRights()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You do not have rights to make a member death record inactive");
+        }
+
         if (newStatus == MemberDeathRecordStatus.NEW) {
-            Set<MemberDeathRecordStatus> revertable = Set.of(
-                    MemberDeathRecordStatus.SUBMITTED_FOR_APPROVAL,
-                    MemberDeathRecordStatus.DISTRICT_COMMITTEE,
-                    MemberDeathRecordStatus.PD_COMMITTEE
-            );
-            if (!revertable.contains(record.getStatus())) {
-                throw new RuntimeException("Status cannot be changed to New from the current status");
-            }
             record.setIncompleteReason(null);
             record.setRejectReason(null);
         }
 
         record.setStatus(newStatus);
-        return mapToResponse(recordRepository.save(record));
-    }
-
-    public MemberDeathRecordDTO approveRecord(String recordNo) {
-        MemberDeathRecord record = getRecordEntity(recordNo);
-        if (record.getStatus() != MemberDeathRecordStatus.SUBMITTED_FOR_APPROVAL
-                && record.getStatus() != MemberDeathRecordStatus.DISTRICT_COMMITTEE
-                && record.getStatus() != MemberDeathRecordStatus.PD_COMMITTEE) {
-            throw new RuntimeException("Record cannot be approved in its current status");
-        }
-
-        record.setStatus(MemberDeathRecordStatus.APPROVED);
         MemberDeathRecord saved = recordRepository.save(record);
 
+        // Keep the member profile in step. MMT21: making the record inactive puts
+        // the member back to Active; reopening it puts them back under a recorded
+        // death, so the profile must not be left claiming they are still active.
         Member member = record.getMember();
-        member.setStatus(MemberStatus.DECEASED);
-        memberRepository.save(member);
+        MemberStatus previousMemberStatus = member.getStatus();
+        if (newStatus == MemberDeathRecordStatus.INACTIVE) {
+            member.setStatus(MemberStatus.ACTIVE);
+            memberRepository.save(member);
+        } else if (newStatus == MemberDeathRecordStatus.NEW
+                && member.getStatus() == MemberStatus.ACTIVE) {
+            member.setStatus(MemberStatus.MEMBER_DEATH_RECORDED);
+            memberRepository.save(member);
+        }
+
+        auditService.recordStatusChange(AuditService.MODULE_MEMBER_DEATH, saved.getId(),
+                "STATUS_CHANGE", currentStatus, newStatus,
+                "Manual status change for member " + member.getMemberId());
+        auditMemberStatusChange(saved, previousMemberStatus, member.getStatus(), "Record status change");
 
         return mapToResponse(saved);
     }
 
+    /**
+     * Approve at whichever level the record currently sits (MMT22 / MMT23 / MMT24).
+     *
+     * The member moves to MEMBER_DEATH_APPROVED, NOT to DECEASED: the SRS stops
+     * remittance here and leaves the final status to the Finance Module once every
+     * savings account is closed (MMT25, completeMemberDeath below).
+     */
+    public MemberDeathRecordDTO approveRecord(String recordNo) {
+        MemberDeathRecord record = getRecordEntity(recordNo);
+        MemberDeathRecordStatus decisionLevel = assertDecidableLevel(record, "approved");
+        assertCallerMayAccess(record);
+        assertMayDecideAtCurrentLevel(record);
+        assertNotSelfApproval(record);
+
+        record.setStatus(MemberDeathRecordStatus.APPROVED);
+        record.setRejectReason(null);
+        stampDecision(record, decisionLevel);
+        MemberDeathRecord saved = recordRepository.save(record);
+
+        Member member = record.getMember();
+        MemberStatus previousMemberStatus = member.getStatus();
+        member.setStatus(MemberStatus.MEMBER_DEATH_APPROVED);
+        memberRepository.save(member);
+
+        auditService.recordStatusChange(AuditService.MODULE_MEMBER_DEATH, saved.getId(),
+                "APPROVE", decisionLevel, MemberDeathRecordStatus.APPROVED,
+                "Approved at " + levelName(decisionLevel) + " for member " + member.getMemberId());
+        auditMemberStatusChange(saved, previousMemberStatus, member.getStatus(),
+                "Member death approved at " + levelName(decisionLevel));
+
+        eventPublisher.publishEvent(
+                new MemberDeathApprovedEvent(member.getMemberId(), saved.getRecordId()));
+
+        return mapToResponse(saved);
+    }
+
+    /**
+     * Reject at whichever level the record currently sits. The SRS is explicit at
+     * all three levels: the status of the Member Profile is changed back to Active.
+     */
     public MemberDeathRecordDTO rejectRecord(String recordNo, String reason) {
         if (reason == null || reason.trim().isEmpty()) {
             throw new RuntimeException("Reject reason is required");
         }
 
         MemberDeathRecord record = getRecordEntity(recordNo);
-        if (record.getStatus() != MemberDeathRecordStatus.SUBMITTED_FOR_APPROVAL
-                && record.getStatus() != MemberDeathRecordStatus.DISTRICT_COMMITTEE
-                && record.getStatus() != MemberDeathRecordStatus.PD_COMMITTEE) {
-            throw new RuntimeException("Record cannot be rejected in its current status");
-        }
+        MemberDeathRecordStatus decisionLevel = assertDecidableLevel(record, "rejected");
+        assertCallerMayAccess(record);
+        assertMayDecideAtCurrentLevel(record);
+        assertNotSelfApproval(record);
 
         record.setStatus(MemberDeathRecordStatus.REJECTED);
         record.setRejectReason(reason.trim());
-        return mapToResponse(recordRepository.save(record));
+        stampDecision(record, decisionLevel);
+        MemberDeathRecord saved = recordRepository.save(record);
+
+        Member member = record.getMember();
+        MemberStatus previousMemberStatus = member.getStatus();
+        member.setStatus(MemberStatus.ACTIVE);
+        memberRepository.save(member);
+
+        auditService.recordStatusChange(AuditService.MODULE_MEMBER_DEATH, saved.getId(),
+                "REJECT", decisionLevel, MemberDeathRecordStatus.REJECTED,
+                "Rejected at " + levelName(decisionLevel) + ": " + saved.getRejectReason());
+        auditMemberStatusChange(saved, previousMemberStatus, member.getStatus(),
+                "Member death rejected at " + levelName(decisionLevel));
+
+        eventPublisher.publishEvent(new MemberDeathRejectedEvent(
+                member.getMemberId(), saved.getRecordId(), saved.getRejectReason(),
+                levelName(decisionLevel)));
+
+        return mapToResponse(saved);
     }
 
-    public MemberDeathDocumentDTO uploadDocument(String recordNo, String documentType, MultipartFile file)
-            throws IOException {
+    /**
+     * Escalate to the next approval level (MMT22 -> MMT23 -> MMT24). Strictly
+     * forward-only: FORWARD_TRANSITIONS has no reverse entries, so a record sitting
+     * with the P&D Committee cannot be pushed back down to the District Committee.
+     */
+    public MemberDeathRecordDTO forwardToNextLevel(String recordNo, String concerns) {
+        MemberDeathRecord record = getRecordEntity(recordNo);
+        MemberDeathRecordStatus current = record.getStatus();
+        MemberDeathRecordStatus next = FORWARD_TRANSITIONS.get(current);
+
+        if (next == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A record in status " + current + " cannot be forwarded to another committee");
+        }
+
+        assertCallerMayAccess(record);
+        assertMayDecideAtCurrentLevel(record);
+        if (current == MemberDeathRecordStatus.SUBMITTED_FOR_APPROVAL) {
+            assertNotSelfApproval(record);
+        }
+
+        appendConcern(record, concerns);
+        record.setStatus(next);
+        stampDecision(record, current);
+        MemberDeathRecord saved = recordRepository.save(record);
+
+        auditService.recordStatusChange(AuditService.MODULE_MEMBER_DEATH, saved.getId(),
+                "FORWARD", current, next,
+                "Forwarded to " + levelName(next) + " for member " + saved.getMember().getMemberId());
+
+        return mapToResponse(saved);
+    }
+
+    /**
+     * Finance reports that a deceased member accounts are closed (MMT25). Moves the
+     * member from MEMBER_DEATH_APPROVED to DECEASED and notifies the nominee.
+     *
+     * Safe to retry: a repeat call for a member who is already DECEASED returns the
+     * current state without notifying a second time.
+     */
+    public MemberDeathRecordDTO completeMemberDeath(String recordNo) {
         MemberDeathRecord record = getRecordEntity(recordNo);
 
-        if (!isEditable(record.getStatus())) {
-            throw new RuntimeException("Documents cannot be uploaded after submission");
+        if (record.getStatus() != MemberDeathRecordStatus.APPROVED) {
+            throw new RuntimeException("Member death record " + recordNo
+                    + " cannot be completed from status " + record.getStatus()
+                    + ". Only approved records can be completed.");
         }
 
-        String normalizedType = normalizeDocumentType(documentType);
-        if (file == null || file.isEmpty()) {
-            throw new RuntimeException("File is required");
+        Member member = record.getMember();
+
+        if (member.getStatus() == MemberStatus.DECEASED) {
+            // Already done on an earlier call. Returning quietly keeps Finance
+            // retries harmless; re-notifying would tell the nominee twice.
+            return mapToResponse(record);
         }
 
-        List<MemberDeathDocument> existing = documentRepository.findByRecord_RecordIdAndDocumentType(
-                record.getRecordId(),
-                normalizedType
+        if (member.getStatus() != MemberStatus.MEMBER_DEATH_APPROVED) {
+            throw new RuntimeException("Member " + member.getMemberId()
+                    + " cannot be marked deceased from status " + member.getStatus()
+                    + ". Expected MEMBER_DEATH_APPROVED.");
+        }
+
+        MemberStatus previousMemberStatus = member.getStatus();
+        member.setStatus(MemberStatus.DECEASED);
+        memberRepository.save(member);
+
+        auditService.record(AuditService.MODULE_MEMBER_DEATH, record.getId(),
+                "FINANCE_COMPLETION", null, "COMPLETED",
+                "Finance Module confirmed all accounts closed for record " + record.getRecordId());
+        auditMemberStatusChange(record, previousMemberStatus, member.getStatus(), "Finance completion");
+
+        eventPublisher.publishEvent(
+                new MemberDeathCompletedEvent(member.getMemberId(), record.getRecordId()));
+
+        return mapToResponse(record);
+    }
+
+    /**
+     * Assembles the MMT25 payload for the Finance Module.
+     *
+     * Read-only and separate from approveRecord so the entity graph is walked
+     * inside a transaction on the listener thread, rather than the client holding
+     * a detached record. Mirrors TerminationService.buildFinanceHandoff.
+     */
+    @Transactional(readOnly = true)
+    public FinanceMemberDeathHandoffDTO buildFinanceHandoff(String recordNo) {
+        MemberDeathRecord record = getRecordEntity(recordNo);
+        Member member = record.getMember();
+
+        FinanceMemberDeathHandoffDTO handoff = new FinanceMemberDeathHandoffDTO();
+        handoff.setRecordNo(record.getRecordId());
+        handoff.setMemberId(member.getMemberId());
+        handoff.setMemberName(firstNonBlank(member.getNameWithInitials(), member.getFullName()));
+        handoff.setNic(member.getNic());
+        handoff.setDeceasedDate(record.getDeceasedDate());
+        handoff.setCauseOfDeath(record.getCauseOfDeath());
+
+        handoff.setNomineeFullName(record.getNomineeFullName());
+        handoff.setNomineeBank(record.getBank());
+        handoff.setNomineeBranch(record.getBankBranch());
+        handoff.setNomineeAccountNo(firstNonBlank(record.getNomineeAccountNo(), record.getAccountNumber()));
+
+        handoff.setDisburseDonationAmount(record.getDisburseDonationAmount());
+        handoff.setCreditedToSpecialFixedAccount(record.getCreditedToSpecialFixedAccount());
+        handoff.setFuneralAccountNo(record.getFuneralAccountNo());
+
+        handoff.setMinorDisbursements(
+                minorAccountRepository.findByRecord_Id(record.getId())
+                        .stream()
+                        .map(this::mapMinorAccountToDto)
+                        .collect(Collectors.toList())
         );
-        for (MemberDeathDocument existingDocument : existing) {
-            // Best-effort: do not block replacement if old S3 object cannot be deleted
-            deleteDocumentFileQuietly(existingDocument);
-            documentRepository.delete(existingDocument);
-        }
-        documentRepository.flush();
 
-        String fileKey;
-        try {
-            fileKey = s3Service.uploadFile(file);
-        } catch (Exception ex) {
-            throw new RuntimeException("Failed to upload file to storage: " + ex.getMessage(), ex);
-        }
-
-        MemberDeathDocument document = new MemberDeathDocument();
-        document.setRecord(record);
-        document.setDocumentType(normalizedType);
-        document.setFileName(file.getOriginalFilename());
-        document.setFileType(file.getContentType());
-        document.setMimeType(file.getContentType());
-        document.setFilePath(fileKey);
-        document.setMandatory(MANDATORY_DOCUMENT_TYPES.contains(normalizedType));
-        document.setUploadedAt(LocalDateTime.now());
-
-        MemberDeathDocument saved = documentRepository.save(document);
-        MemberDeathDocumentDTO dto = mapDocumentToDto(saved);
-        dto.setRecordNo(record.getRecordId());
-        return dto;
+        return handoff;
     }
 
     public List<MemberDeathDocumentDTO> getDocuments(String recordNo) {
@@ -451,12 +753,6 @@ public class MemberDeathRecordService {
 
         deleteDocumentFileQuietly(document);
         documentRepository.delete(document);
-    }
-
-    public byte[] downloadDocument(Long documentId) {
-        MemberDeathDocument document = documentRepository.findById(documentId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found"));
-        return s3Service.downloadFile(document.getFilePath());
     }
 
     public void seedCauseOfDeathIfEmpty() {
@@ -536,14 +832,95 @@ public class MemberDeathRecordService {
         }
     }
 
-    private void validateMandatoryDocuments(String recordId) {
+    /**
+     * MMT18 gates submission on the mandatory supporting documents, and the SRS
+     * takes that list from the Supporting Documents for Applications Master - it
+     * grows, for instance, when the member has minor savings accounts to close.
+     * So the master is the authority here, not a hardcoded set.
+     *
+     * The legacy per-record check is still applied as a fallback for records whose
+     * files were uploaded through the old bespoke path and never backfilled, so an
+     * older record cannot slip through with nothing attached.
+     */
+    private void validateMandatoryDocuments(MemberDeathRecord record) {
+        boolean masterSatisfied = documentService.allMandatoryDocumentsUploaded(
+                record.getRecordId(),
+                record.getMember().getMemberId(),
+                MemberDeathDocumentSeeder.MEMBER_DEATH);
+
+        if (masterSatisfied) {
+            return;
+        }
+
+        if (hasLegacyMandatoryDocuments(record.getRecordId())) {
+            return;
+        }
+
+        throw new RuntimeException("Cannot submit. Mandatory documents are missing.");
+    }
+
+    private boolean hasLegacyMandatoryDocuments(String recordId) {
         List<MemberDeathDocument> documents = documentRepository.findByRecord_RecordId(recordId);
         for (String mandatoryType : MANDATORY_DOCUMENT_TYPES) {
             boolean uploaded = documents.stream()
                     .anyMatch(doc -> mandatoryType.equalsIgnoreCase(doc.getDocumentType()));
             if (!uploaded) {
-                throw new RuntimeException("Mandatory document not uploaded: " + mandatoryType);
+                return false;
             }
+        }
+        return true;
+    }
+
+    /**
+     * Authority for the generic document routes, which carry no role annotations
+     * of their own. Mirrors TerminationService.assertDocumentsEditable.
+     *
+     * Three separate questions, all of which must pass: is the caller a role that
+     * may work a death record at all (MMT18 names the District Office System User
+     * as the sole actor), is the record in their district, and is the record still
+     * in a status where files may change.
+     */
+    public void assertDocumentsEditable(String recordNo) {
+        assertMayEnterDeathRecords();
+
+        MemberDeathRecord record = getRecordEntity(recordNo);
+        assertCallerMayAccess(record);
+
+        if (DOCUMENT_LOCK_STATUSES.contains(record.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Documents cannot be changed once the record is " + record.getStatus());
+        }
+    }
+
+    /**
+     * Read authority for the same generic document routes. Everyone who takes part
+     * in the death workflow may read the supporting files - the District Office
+     * that uploads them and each approval level that has to look at them before
+     * deciding (MMT20 / MMT22-MMT24) - and nobody else.
+     */
+    public void assertDocumentsReadable(String recordNo) {
+        assertMayReadDeathRecords();
+        assertCallerMayAccess(getRecordEntity(recordNo));
+    }
+
+    /**
+     * Role-only variant, for the routes that have no record to scope against yet
+     * (the required-documents preview shown before a record is saved).
+     */
+    public void assertMayReadDeathRecords() {
+        Role role = currentRole();
+        if (role == null || !DEATH_READ_ROLES.contains(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Your role cannot access member death records");
+        }
+    }
+
+    /** MMT18/MMT21: raising and editing a record belongs to the District Office. */
+    public void assertMayEnterDeathRecords() {
+        Role role = currentRole();
+        if (role == null || !DEATH_ENTRY_ROLES.contains(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only the District Office can change a member death record");
         }
     }
 
@@ -716,6 +1093,30 @@ public class MemberDeathRecordService {
         dto.setEditable(isEditable(record.getStatus()));
         dto.setSubmittable(isSubmittable(record.getStatus()));
 
+        dto.setMonthsRemitted(record.getMonthsRemitted());
+        dto.setMonthsRemittedEdited(Boolean.TRUE.equals(record.getMonthsRemittedEdited()));
+        dto.setMaximumDonationAmount(record.getMaximumDonationAmount());
+        dto.setEligibleDonationAmount(record.getEligibleDonationAmount());
+        dto.setReceivedPast12Months(record.getReceivedPast12Months());
+        dto.setReceivedPast12MonthsEdited(Boolean.TRUE.equals(record.getReceivedPast12MonthsEdited()));
+        dto.setFuneralAccountNo(record.getFuneralAccountNo());
+        dto.setFuneralAccountCredited(record.getFuneralAccountCredited());
+        dto.setFuneralAccountMaximum(record.getFuneralAccountMaximum());
+        dto.setCreditedToSpecialFixedAccount(record.getCreditedToSpecialFixedAccount());
+        dto.setCreditedToSpecialFixedEdited(Boolean.TRUE.equals(record.getCreditedToSpecialFixedEdited()));
+        dto.setDisburseDonationAmount(record.getDisburseDonationAmount());
+        dto.setDonationMultiplierApplied(record.getDonationMultiplierApplied());
+        dto.setEligiblePeriodWarning(entitlementService.buildEligiblePeriodWarning(record));
+
+        dto.setSubmissionLocation(record.getSubmissionLocation());
+        dto.setCreatedBy(record.getCreatedBy());
+        dto.setLevel1DecidedBy(record.getLevel1DecidedBy());
+        dto.setLevel1DecidedAt(formatTimestamp(record.getLevel1DecidedAt()));
+        dto.setLevel2DecidedBy(record.getLevel2DecidedBy());
+        dto.setLevel2DecidedAt(formatTimestamp(record.getLevel2DecidedAt()));
+        dto.setLevel3DecidedBy(record.getLevel3DecidedBy());
+        dto.setLevel3DecidedAt(formatTimestamp(record.getLevel3DecidedAt()));
+
         dto.setNomineeBankName(firstNonBlank(
                 record.getBank(),
                 resolveName(record.getNomineeBankId(), lookups.bankNames())));
@@ -865,17 +1266,6 @@ public class MemberDeathRecordService {
         return (type + " " + number).trim();
     }
 
-    private String normalizeDocumentType(String documentType) {
-        if (documentType == null || documentType.isBlank()) {
-            throw new RuntimeException("Document type is required");
-        }
-        String normalizedType = documentType.trim().toUpperCase();
-        if (!ALLOWED_DOCUMENT_TYPES.contains(normalizedType)) {
-            throw new RuntimeException("Unsupported document type: " + documentType);
-        }
-        return normalizedType;
-    }
-
     private boolean matchesStatuses(MemberDeathRecord record, List<String> statuses) {
         if (statuses == null || statuses.isEmpty()) {
             return true;
@@ -964,6 +1354,239 @@ public class MemberDeathRecordService {
                             + ex.getMessage()
             );
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Caller identity, district scoping and per-level authority.
+    //
+    // The authenticated principal is the User entity itself (see JwtFilter), so
+    // it is read straight from the security context rather than passed in: who
+    // is acting is a fact about the request, not an argument a caller may pick.
+    // Same approach as TerminationService.
+    // ------------------------------------------------------------------
+
+    private User currentUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof User user) {
+            return user;
+        }
+        return null;
+    }
+
+    private String currentUsername() {
+        User user = currentUser();
+        return user != null ? user.getUsername() : null;
+    }
+
+    private Role currentRole() {
+        User user = currentUser();
+        return user != null ? user.getRole() : null;
+    }
+
+    /**
+     * The set of districts the caller may see, or null for no restriction.
+     *
+     * A District Office user is pinned to their own district and their requested
+     * locations are ignored. A District Office user with no assigned district gets
+     * an empty set - scoped to nothing, never to everything.
+     */
+    private Set<String> resolveVisibleLocations(List<String> requestedLocations) {
+        User user = currentUser();
+
+        if (user != null && user.getRole() == Role.DISTRICT_OFFICE) {
+            String assigned = user.getAssignedDistrict();
+            if (assigned == null || assigned.isBlank()) {
+                return Set.of();
+            }
+            return Set.of(assigned);
+        }
+
+        if (requestedLocations == null || requestedLocations.isEmpty()) {
+            return null;
+        }
+
+        Set<String> cleaned = requestedLocations.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(location -> !location.isEmpty() && !"All".equalsIgnoreCase(location))
+                .collect(Collectors.toSet());
+
+        return cleaned.isEmpty() ? null : cleaned;
+    }
+
+    private boolean matchesLocation(MemberDeathRecord record, Set<String> effectiveLocations) {
+        if (effectiveLocations == null) {
+            return true;
+        }
+        return record.getSubmissionLocation() != null
+                && effectiveLocations.contains(record.getSubmissionLocation());
+    }
+
+    /** The caller district, or null when they are not scoped to one. */
+    private String callerAssignedDistrict() {
+        User user = currentUser();
+        if (user != null && user.getRole() == Role.DISTRICT_OFFICE) {
+            return user.getAssignedDistrict();
+        }
+        return null;
+    }
+
+    private String resolveSubmissionLocationFor(Member member) {
+        if (member.getSubmissionLocation() != null && !member.getSubmissionLocation().isBlank()) {
+            return member.getSubmissionLocation();
+        }
+        return callerAssignedDistrict();
+    }
+
+    /** Blocks a District Office user from touching another district records. */
+    private void assertCallerMayAccess(MemberDeathRecord record) {
+        String district = callerAssignedDistrict();
+        if (district == null) {
+            return;
+        }
+        if (!district.equals(record.getSubmissionLocation())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "This member death record belongs to another district");
+        }
+    }
+
+    /** Same check for creation, before a record exists to check against. */
+    private void assertCallerMayActFor(Member member) {
+        String district = callerAssignedDistrict();
+        if (district == null) {
+            return;
+        }
+        if (!district.equals(member.getSubmissionLocation())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "This member belongs to another district");
+        }
+    }
+
+    private boolean currentUserHasInactiveRights() {
+        Role role = currentRole();
+        return role == Role.HEAD_OFFICE || role == Role.BOARD_SECRETARY || role == Role.SUPER_ADMIN;
+    }
+
+    /**
+     * The record must be sitting at one of the three decision levels.
+     *
+     * @return the level it is sitting at, for stamping and auditing
+     */
+    private MemberDeathRecordStatus assertDecidableLevel(MemberDeathRecord record, String action) {
+        MemberDeathRecordStatus status = record.getStatus();
+        if (!DECISION_ROLE.containsKey(status)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Record cannot be " + action + " in status " + status);
+        }
+        return status;
+    }
+
+    /**
+     * A decision belongs to the role that owns the level the record is sitting at.
+     * SUPER_ADMIN always passes, so the flow stays exercisable before the committee
+     * accounts exist.
+     */
+    private void assertMayDecideAtCurrentLevel(MemberDeathRecord record) {
+        Role role = currentRole();
+        if (role == Role.SUPER_ADMIN) {
+            return;
+        }
+
+        Role required = DECISION_ROLE.get(record.getStatus());
+        if (required == null || role != required) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "This record is awaiting a decision from " + levelName(record.getStatus()));
+        }
+    }
+
+    /**
+     * The SRS separates the District Office clerk who raises a record (MMT18) from
+     * the Authorized User who decides it (MMT22). Both map to DISTRICT_OFFICE here,
+     * so segregation of duty is enforced by refusing to let the author decide their
+     * own record rather than by a per-user rights flag.
+     */
+    private void assertNotSelfApproval(MemberDeathRecord record) {
+        if (currentRole() == Role.SUPER_ADMIN) {
+            return;
+        }
+        String caller = currentUsername();
+        if (caller != null && caller.equals(record.getCreatedBy())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You raised this record, so it must be decided by another authorized user");
+        }
+    }
+
+    /** Records who decided at which level, so the trail survives the status change. */
+    private void stampDecision(MemberDeathRecord record, MemberDeathRecordStatus level) {
+        String actor = currentUsername();
+        LocalDateTime now = LocalDateTime.now();
+
+        switch (level) {
+            case SUBMITTED_FOR_APPROVAL -> {
+                record.setLevel1DecidedBy(actor);
+                record.setLevel1DecidedAt(now);
+            }
+            case DISTRICT_COMMITTEE -> {
+                record.setLevel2DecidedBy(actor);
+                record.setLevel2DecidedAt(now);
+            }
+            case PD_COMMITTEE -> {
+                record.setLevel3DecidedBy(actor);
+                record.setLevel3DecidedAt(now);
+            }
+            default -> {
+                // Not a decision level; nothing to stamp.
+            }
+        }
+    }
+
+    private String levelName(MemberDeathRecordStatus status) {
+        if (status == null) {
+            return "Unknown";
+        }
+        return switch (status) {
+            case SUBMITTED_FOR_APPROVAL -> "District Office";
+            case DISTRICT_COMMITTEE -> "District Committee";
+            case PD_COMMITTEE -> "P&D Committee";
+            default -> status.name();
+        };
+    }
+
+    /**
+     * Concerns accumulate, they do not replace one another: MMT20 says the entered
+     * information stays visible for everyone who later retrieves the record, so each
+     * level appends its own attributed note.
+     */
+    private void appendConcern(MemberDeathRecord record, String concerns) {
+        String trimmed = trimToNull(concerns);
+        if (trimmed == null) {
+            return;
+        }
+
+        String attribution = " - " + defaultString(currentUsername())
+                + " @ " + LocalDateTime.now().format(DATE_TIME_FORMATTER);
+        String entry = trimmed + attribution;
+        String existing = trimToNull(record.getConcernsIdentified());
+
+        record.setConcernsIdentified(existing == null ? entry : existing + "\n" + entry);
+    }
+
+    /** Skips no-op transitions, so the audit trail only carries real changes. */
+    private void auditMemberStatusChange(
+            MemberDeathRecord record,
+            MemberStatus oldStatus,
+            MemberStatus newStatus,
+            String remarks
+    ) {
+        if (oldStatus == newStatus) {
+            return;
+        }
+        auditService.recordStatusChange(AuditService.MODULE_MEMBER_DEATH, record.getId(),
+                "MEMBER_STATUS_CHANGE", oldStatus, newStatus, remarks);
+    }
+
+    private String formatTimestamp(LocalDateTime value) {
+        return value != null ? value.format(DATE_TIME_FORMATTER) : null;
     }
 
     private String trimToNull(String value) {

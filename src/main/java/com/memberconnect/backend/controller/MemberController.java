@@ -43,25 +43,29 @@ public class MemberController {
         return memberService.saveMember(memberDTO);
     }
 
-    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
+            + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/getMembers")
     public List<MemberDTO> getAllMembers() {
         return memberService.getAllMembers();
     }
 
-    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
+            + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/getMemberById/{id}")
     public ResponseEntity<MemberDTO> getMemberById(@PathVariable Long id) {
         return ResponseEntity.ok(memberService.getMemberById(id));
     }
 
-    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
+            + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/by-member-id/{memberId}")
     public ResponseEntity<MemberDTO> getMemberByMemberId(@PathVariable String memberId) {
         return ResponseEntity.ok(memberService.getMemberByMemberId(memberId));
     }
 
-    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
+            + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/getMemberByNic/{nic}")
     public ResponseEntity<MemberDTO> getMemberByNic(@PathVariable String nic) {
         return ResponseEntity.ok(memberService.getMemberByNic(nic));
@@ -73,7 +77,8 @@ public class MemberController {
      * GET
      * /api/members/search?query=&statuses=ACTIVE,INACTIVE&locations=Colombo&workingLocationType=school&educationalZone=colombo-zone
      */
-    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
+            + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/search")
     public List<MemberDTO> searchMembers(
             @RequestParam(required = false) String query,
@@ -136,7 +141,11 @@ public class MemberController {
         return terminationService.validateMemberForTermination(memberId);
     }
 
-    // Validate a member for member death record
+    // Validate a member for member death record (SRS 4.2.1). Restricted to the
+    // roles that take part in the death workflow - it reports the member's loan
+    // and indirect-obligation position, which is not general-purpose data.
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
+            + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/{memberId}/member-death-validation")
     public MemberRetirementValidationDTO validateMemberForDeathRecord(
             @PathVariable String memberId) {

@@ -26,7 +26,8 @@ import jakarta.persistence.Table;
     name = "termination_request",
     indexes = {
         @Index(name = "idx_termination_request_status_date", columnList = "status, requested_date"),
-        @Index(name = "idx_termination_request_member_id", columnList = "member_id")
+        @Index(name = "idx_termination_request_member_id", columnList = "member_id"),
+        @Index(name = "idx_termination_request_location", columnList = "submission_location")
     }
 )
 public class TerminationRequest {
@@ -40,6 +41,35 @@ public class TerminationRequest {
 
     @Column(name = "member_id", nullable = false)
     private String memberId;
+
+    /**
+     * The District Office branch that raised this request, copied from
+     * Member.submissionLocation when the request is created (MMT02 location
+     * filter).
+     *
+     * Copied rather than joined so the request keeps the office that actually
+     * handled it even if the member is later administered elsewhere - a board
+     * list must still show where each request came from.
+     *
+     * Nullable: rows created before this column existed have no value, and are
+     * treated as visible to Head Office only until they are backfilled.
+     */
+    @Column(name = "submission_location")
+    private String submissionLocation;
+
+    /**
+     * The status this request held immediately before it was added to a
+     * Termination Approval List.
+     *
+     * MMT07 requires that deleting a list rolls its requests back "to the
+     * Submitted for Approval status or Rejected status depend on what status it
+     * was originally" - which cannot be derived after the fact, because both
+     * arrive at ADDED_TO_APPROVAL_LIST. Recording it on the way in is the only
+     * way to put it back correctly.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "previous_status")
+    private TerminationRequestStatus previousStatus;
 
     // Legacy Phase 1 columns. Both are still written on every save and are the
     // only reason data requests created before the Termination Reasons Master
@@ -95,6 +125,22 @@ public class TerminationRequest {
 
     public void setMemberId(String memberId) {
         this.memberId = memberId;
+    }
+
+    public String getSubmissionLocation() {
+        return submissionLocation;
+    }
+
+    public void setSubmissionLocation(String submissionLocation) {
+        this.submissionLocation = submissionLocation;
+    }
+
+    public TerminationRequestStatus getPreviousStatus() {
+        return previousStatus;
+    }
+
+    public void setPreviousStatus(TerminationRequestStatus previousStatus) {
+        this.previousStatus = previousStatus;
     }
 
     public String getTerminationReasonId() {

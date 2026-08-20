@@ -26,4 +26,19 @@ public class DormantApprovalListDTO {
     private String rejectReason;
     private String boardRemarks;
     private LocalDateTime inactivatedAt;
+
+    /**
+     * MMD17: one decision per listed member, sent on the process call. Every
+     * member on the list must appear exactly once, and every rejection must
+     * carry a reason - both checked before anything is written.
+     */
+    private List<DormantMemberDecisionDTO> memberDecisions = new ArrayList<>();
+
+    /** The scanned, board-signed Inactivation Approval List. */
+    private String approvedListDocument;
+
+    // Populated on the process response so the caller can confirm what the
+    // server actually applied, rather than trusting its own tally.
+    private Integer approvedCount;
+    private Integer rejectedCount;
 }

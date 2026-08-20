@@ -230,4 +230,74 @@ class NotificationServiceTest {
         verify(emailSender, times(1)).send(anyString(), anyString(), anyString());
         verify(smsSender, times(1)).send(anyString(), anyString());
     }
+
+    // ------------------------------------------------- MMT09 board rejection
+
+    @Test
+    void rejectionTellsTheMemberTheirMembershipContinues() {
+        givenMemberExists();
+
+        notificationService.notifyTerminationRejected(MEMBER_ID, REQUEST_NO, "Loan not settled");
+
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        verify(emailSender).send(eq(EMAIL), anyString(), body.capture());
+        assertThat(body.getValue()).contains("Loan not settled");
+        // The member's profile has gone back to Active, so the message must not
+        // read as though their membership ended.
+        assertThat(body.getValue()).contains("Your membership remains active");
+
+        ArgumentCaptor<String> sms = ArgumentCaptor.forClass(String.class);
+        verify(smsSender).send(eq(MOBILE), sms.capture());
+        assertThat(sms.getValue()).contains(REQUEST_NO);
+    }
+
+    @Test
+    void rejectionIsAbandonedQuietlyWhenTheMemberIsNotFound() {
+        when(memberRepository.findByMemberId(MEMBER_ID)).thenReturn(Optional.empty());
+
+        assertThatCode(() -> notificationService.notifyTerminationRejected(MEMBER_ID, REQUEST_NO, "x"))
+                .doesNotThrowAnyException();
+
+        verify(emailSender, never()).send(anyString(), anyString(), anyString());
+        verify(smsSender, never()).send(anyString(), anyString());
+    }
+
+    @Test
+    void rejectionKeepsChannelsIsolatedWhenEmailFails() {
+        givenMemberExists();
+        doThrow(new RuntimeException("SMTP unavailable"))
+                .when(emailSender).send(anyString(), anyString(), anyString());
+
+        assertThatCode(() -> notificationService.notifyTerminationRejected(MEMBER_ID, REQUEST_NO, "x"))
+                .doesNotThrowAnyException();
+
+        verify(smsSender, times(1)).send(anyString(), anyString());
+    }
+
+    // ------------------------------------------------ MMT11 final termination
+
+    @Test
+    void terminationCompletionTellsTheMemberTheirAccountsAreClosed() {
+        givenMemberExists();
+
+        notificationService.notifyMembershipTerminated(MEMBER_ID, REQUEST_NO);
+
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        verify(emailSender).send(eq(EMAIL), anyString(), body.capture());
+        assertThat(body.getValue()).contains(MEMBER_ID);
+        assertThat(body.getValue()).contains(REQUEST_NO);
+
+        verify(smsSender).send(eq(MOBILE), anyString());
+    }
+
+    @Test
+    void terminationCompletionIsAbandonedQuietlyWhenTheMemberIsNotFound() {
+        when(memberRepository.findByMemberId(MEMBER_ID)).thenReturn(Optional.empty());
+
+        assertThatCode(() -> notificationService.notifyMembershipTerminated(MEMBER_ID, REQUEST_NO))
+                .doesNotThrowAnyException();
+
+        verify(emailSender, never()).send(anyString(), anyString(), anyString());
+        verify(smsSender, never()).send(anyString(), anyString());
+    }
 }
