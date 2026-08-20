@@ -53,6 +53,12 @@ public class MemberService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private AuditService auditService;
+
+    @Autowired
+    private MemberFinancialsService memberFinancialsService;
+
     public MemberDTO saveMember(MemberDTO memberDTO) {
         if (memberRepository.findByNic(memberDTO.getNic()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "NIC already exists");
@@ -71,6 +77,13 @@ public class MemberService {
         }
 
         Member saved = memberRepository.save(member);
+        auditService.record(AuditService.MODULE_MEMBER, saved.getId(),
+                "Member Record Created", null, saved.getMemberId(),
+                "Created from approved application");
+        // Carry the application's remittance amounts onto the member. Without this
+        // the amounts collected at registration are lost on approval, since Member
+        // has no remittance columns of its own.
+        memberFinancialsService.seedFromApplication(saved, saved.getApplication());
         return convertToDTO(saved);
     }
 
@@ -116,7 +129,9 @@ public class MemberService {
     }
 
     public List<MemberDTO> searchMembers(String query, List<MemberStatus> statuses, List<String> locations,
-                                          String workingLocationType, String educationalZone) {
+                                          String workingLocationType, String educationalZone,
+                                          String educationalDistrict,
+                                          LocalDate membershipStartFrom, LocalDate membershipStartTo) {
 
         // Normalise sentinel values from the UI
         final String q = (query == null || query.isBlank()) ? null : query.toLowerCase().trim();
@@ -126,6 +141,8 @@ public class MemberService {
                 || "all-types".equalsIgnoreCase(workingLocationType)) ? null : workingLocationType.toLowerCase();
         final String ez = (educationalZone == null || educationalZone.isBlank()
                 || "all-zones".equalsIgnoreCase(educationalZone)) ? null : educationalZone.toLowerCase();
+        final String ed = (educationalDistrict == null || educationalDistrict.isBlank()
+                || "all-districts".equalsIgnoreCase(educationalDistrict)) ? null : educationalDistrict.toLowerCase();
 
         return memberRepository.findAll().stream()
                 .filter(m -> {
@@ -154,6 +171,18 @@ public class MemberService {
                     if (ez != null &&
                             (m.getEducationalZone() == null || !ez.equalsIgnoreCase(m.getEducationalZone())))
                         return false;
+                    // educational district filter — the member's WORKING district, distinct
+                    // from the Location filter above (the District Office they registered at).
+                    if (ed != null &&
+                            (m.getEducationalDistrict() == null || !ed.equalsIgnoreCase(m.getEducationalDistrict())))
+                        return false;
+                    // Membership Start Date period
+                    if (membershipStartFrom != null &&
+                            (m.getMembershipStartDate() == null || m.getMembershipStartDate().isBefore(membershipStartFrom)))
+                        return false;
+                    if (membershipStartTo != null &&
+                            (m.getMembershipStartDate() == null || m.getMembershipStartDate().isAfter(membershipStartTo)))
+                        return false;
                     return true;
                 })
                 .map(this::convertToDTO)
@@ -170,6 +199,7 @@ public class MemberService {
         // activity, and routed through MemberActivityService so the dormant flag
         // is cleared by the same rule everywhere.
         memberActivityService.recordActivity(updated, "MEMBER_PROFILE_UPDATE");
+        auditService.record(AuditService.MODULE_MEMBER, updated.getId(), "Profile Updated");
 
         return convertToDTO(updated);
     }
@@ -274,9 +304,13 @@ public class MemberService {
         }
 
         boolean isActivating = status == MemberStatus.ACTIVE && member.getStatus() != MemberStatus.ACTIVE;
+        MemberStatus before = member.getStatus();
 
         member.setStatus(status);
         Member saved = memberRepository.save(member);
+        auditService.record(AuditService.MODULE_MEMBER, saved.getId(), "Status Changed",
+                before == null ? null : before.name(),
+                status == null ? null : status.name(), null);
 
         // MR12 — notify the member once their membership becomes active. Best-effort:
         // NotificationService swallows delivery failures so activation still succeeds.

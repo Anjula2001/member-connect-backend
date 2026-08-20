@@ -59,6 +59,21 @@ public class MemberTransferService {
 
         applyDtoToEntity(dto, request);
 
+        // Snapshot the member's current values at time of request creation
+        if (request.getMember() != null) {
+            com.memberconnect.backend.model.Member m = request.getMember();
+            request.setCurrentDesignation(m.getDesignation());
+            request.setCurrentNatureOfOccupation(
+                    m.getNatureOfOccupation() != null ? m.getNatureOfOccupation().name() : null);
+            request.setCurrentWorkingLocationType(m.getWorkingLocationType());
+            request.setCurrentEducationalDistrict(m.getEducationalDistrict());
+            request.setCurrentEducationalZone(m.getEducationalZone());
+            request.setCurrentWorkingLocation(m.getWorkingLocation());
+            request.setCurrentWorkingLocationAddress(m.getWorkingLocationAddress());
+            request.setCurrentComputerNoInPayslip(m.getComputerNoInPayslip());
+            request.setCurrentSalaryPayingOffice(m.getSalaryPayingOffice());
+        }
+
         request.setRequestId(generateMemberTransferRequestId());
         request.setStatus(MemberTransferStatus.SUBMITTEDFORAPPROVAL);
 

@@ -24,6 +24,9 @@ import com.memberconnect.backend.repository.Grade5ExamMasterRepository;
 import com.memberconnect.backend.repository.Grade5ScholarshipRepository;
 import com.memberconnect.backend.repository.MemberRepository;
 import com.memberconnect.backend.repository.MinorSavingsAccountRepository;
+import com.memberconnect.backend.repository.ScholarshipConfigRepository;
+import com.memberconnect.backend.repository.ScholarshipRemittanceRepository;
+import com.memberconnect.backend.config.CurrentUserService;
 
 @ExtendWith(MockitoExtension.class)
 class Grade5ScholarshipServiceTest {
@@ -42,6 +45,20 @@ class Grade5ScholarshipServiceTest {
 
     @Mock
     private MemberRepository memberRepository;
+
+    // Collaborators the service reads during saveRequest but that no test stubs.
+    // Left unmocked they are simply null and every save-path test dies on an NPE
+    // before reaching its assertion. Mockito's defaults are enough here: the config
+    // lookups fall back to Optional.empty() (so the service uses its @Value defaults)
+    // and there is no authenticated user, which is correct for a unit test.
+    @Mock
+    private ScholarshipConfigRepository scholarshipConfigRepository;
+
+    @Mock
+    private ScholarshipRemittanceRepository remittanceRepository;
+
+    @Mock
+    private CurrentUserService currentUserService;
 
     @Test
     void saveRequestShouldRejectWhenMemberWasNotActiveDuringSelectedExam() {
@@ -106,6 +123,10 @@ class Grade5ScholarshipServiceTest {
         when(memberRepository.findByMemberId("M-002")).thenReturn(Optional.of(member));
         when(examMasterRepository.findById(2024)).thenReturn(Optional.of(examMaster));
         when(repository.existsByExaminationNumber("EXAM654321")).thenReturn(false);
+        // Scholarship account remitted for every month checked, so the save gets past
+        // the remittance gate and the assertion below is actually about deviation.
+        when(remittanceRepository.existsByMember_IdAndRemittanceMonthAndRemittedTrue(any(), any()))
+                .thenReturn(true);
         when(repository.save(any(com.memberconnect.backend.model.Grade5ScholarshipRequest.class))).thenAnswer(invocation -> {
             com.memberconnect.backend.model.Grade5ScholarshipRequest request = invocation.getArgument(0);
             savedRequest.set(request);
