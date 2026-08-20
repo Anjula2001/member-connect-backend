@@ -129,6 +129,8 @@ public class MemberFinancialsService {
         dto.setAccounts(accountDtos);
         dto.setAwaitingFinanceIntegration(
                 accounts.stream().noneMatch(a -> a.getSource() == AccountDataSource.FINANCE));
+        dto.setIsRemittance(member.isRemittance());
+        dto.setIsSettlement(member.isSettlement());
         return dto;
     }
 
@@ -206,6 +208,22 @@ public class MemberFinancialsService {
                 row.setUpdatedAt(now);
                 accountRepository.save(row);
             }
+        }
+
+        // Temporary Scholarship finance eligibility. Null means "not sent", so a caller
+        // that only edits remittances cannot silently clear a member's eligibility.
+        if (request.getIsRemittance() != null || request.getIsSettlement() != null) {
+            if (request.getIsRemittance() != null) {
+                member.setRemittance(request.getIsRemittance());
+            }
+            if (request.getIsSettlement() != null) {
+                member.setSettlement(request.getIsSettlement());
+            }
+            memberRepository.save(member);
+
+            auditService.record(AuditService.MODULE_MEMBER, memberId,
+                    "Scholarship Finance Eligibility Updated", null, null,
+                    "Remittance=" + member.isRemittance() + ", Settlement=" + member.isSettlement());
         }
 
         auditService.record(AuditService.MODULE_MEMBER, memberId,
