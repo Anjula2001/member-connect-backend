@@ -14,7 +14,6 @@ public class UniversityScholarshipFundRequestDto {
     private String status;
     private String incompleteReason;
     private String decisionReason;
-    /** MMS48 — non-null once handed to the Finance Module. */
     private java.time.LocalDateTime financeIntegratedAt;
     private String financeIntegratedBy;
 

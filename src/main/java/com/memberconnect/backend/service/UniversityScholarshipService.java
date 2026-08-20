@@ -79,7 +79,6 @@ public class UniversityScholarshipService {
     @Value("${scholarship.lookback.years}")
     private int lookbackYears;
 
-    /** "member" (temporary flags) or "finance" (real Remittance/Settlement tables). */
     @Value("${scholarship.finance.validation.source:member}")
     private String financeValidationSource;
 
@@ -244,21 +243,8 @@ public class UniversityScholarshipService {
             currentMonth = currentMonth.plusMonths(1);
         }
     }
-
-    /**
-     * Temporary stand-in for the two checks above, used while the Finance Module is
-     * undelivered. Reads the answer off the Member instead of recomputing it from
-     * Remittance/Settlement rows that nobody can realistically maintain by hand.
-     *
-     * Sequential on purpose: remittance is decided first and throws immediately, so a
-     * member failing both is only ever told about remittance. Settlement is not even
-     * looked at until remittance has passed, which mirrors how the real checks run as
-     * two separate calls.
-     *
-     * The messages are byte-identical to the Finance-based versions, so switching
-     * scholarship.finance.validation.source changes where the answer comes from and
-     * nothing the user sees.
-     */
+    
+    //temporary check
     private void validateMemberFinanceEligibility(Member member) {
 
         if (!member.isRemittance()) {
@@ -274,11 +260,6 @@ public class UniversityScholarshipService {
         }
     }
 
-    /**
-     * Runs whichever finance eligibility check is configured. Both paths stay compiled
-     * and both sets of repositories stay wired, so restoring the real checks is a
-     * property change rather than a code change.
-     */
     private void validateFinanceEligibility(UniversityScholarshipRequestDto dto, Member member) {
         if ("finance".equalsIgnoreCase(financeValidationSource)) {
             validateScholarshipRemittanceMonths(dto);
@@ -320,20 +301,10 @@ public class UniversityScholarshipService {
     }
 
     // Get all scholarship requests with member and university details
-    /**
-     * Every University Scholarship the caller is allowed to see.
-     *
-     * The MMS22 filters (status, date period, search key, sort) are still applied in
-     * the browser, but Location is enforced here. It has to be: a District Office user
-     * must not receive another branch's records at all, and a filter the client applies
-     * to data it already holds is a display preference, not a control.
-     */
     public List<UniversityScholarshipListDto> getAllScholarshipRequests() {
         CurrentUserService.LocationScope locationScope =
                 currentUserService.resolveLocationScope(null);
 
-        // Restricted, but no district on the account: return nothing rather than
-        // falling back to "everything".
         if (locationScope.showsNothing()) {
             return List.of();
         }
@@ -352,8 +323,6 @@ public class UniversityScholarshipService {
                 .findByUniversityScholarshipRequestID(requestId)
                 .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
 
-        // Scoping the list but not the by-ID lookup would leave the whole dataset
-        // reachable by iterating request IDs.
         CurrentUserService.LocationScope locationScope =
                 currentUserService.resolveLocationScope(null);
         if (locationScope.showsNothing()
@@ -412,9 +381,6 @@ public class UniversityScholarshipService {
         dto.setAvailablePeriod(calculateAvailablePeriod(request, null));
         dto.setFundRequests(fundRequests.stream().map(this::toFundRequestDto).toList());
         dto.setTotalUniversityScholarships(countApprovedUniversityScholarships(request));
-        // The District Office that owns the request. The MMS22 Location filter reads
-        // this; it previously had nothing to read and fell back to the student's
-        // free-text address, which could never match a district name.
         dto.setSubmissionLocation(request.getSubmissionLocation());
         return dto;
     }
@@ -578,17 +544,7 @@ public class UniversityScholarshipService {
         return dto;
     }
     
-    /**
-     * MMS48 — hand an approved fund request to the Finance Module.
-     *
-     * Only APPROVED requests qualify: the hand-over releases money, so it must sit
-     * behind the approval gate rather than beside it. Re-running it is rejected rather
-     * than ignored, so a double click or a stale tab cannot queue a second payment.
-     *
-     * There is no Finance Module to call yet, so this records the hand-over and
-     * nothing more. When a real integration lands it goes here, and the timestamp
-     * becomes the thing that proves it already ran.
-     */
+    //hand an approved fund request to the Finance Module.
     public UniversityScholarshipFundRequestDto integrateFundRequestWithFinance(
             String scholarshipRequestId,
             String fundRequestId
@@ -750,18 +706,7 @@ public class UniversityScholarshipService {
         return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
 
-    /**
-     * MMS45 — change a fund request's status from View Mode.
-     *
-     * Separate from {@link #updateFundRequestStatus} on purpose: that one carries the
-     * MMS47 approve/reject decision and is gated on US_FUND_APPROVE, whereas this is
-     * the administrative New/Inactive move and is gated on US_FUND_REOPEN /
-     * US_FUND_SET_INACTIVE. Folding them together would let one right serve both.
-     *
-     * INCOMPLETE is absent from the table as a source status because the specification
-     * for this screen does not list it; an incomplete fund request is resubmitted
-     * through the ordinary Submit path. APPROVED is terminal — money has been released.
-     */
+    //change a fund request's status from View Mode.
     public UniversityScholarshipFundRequestDto changeFundRequestStatus(
             String scholarshipRequestId,
             String fundRequestId,
@@ -794,8 +739,6 @@ public class UniversityScholarshipService {
 
         fundRequest.setStatus(newStatus);
 
-        // Back to New means the request is being reworked, so the note that explains
-        // why it stopped no longer applies.
         if (newStatus == UniversityScholarshipFundRequestStatus.NEW) {
             fundRequest.setIncompleteReason(null);
             fundRequest.setDecisionReason(null);
@@ -804,7 +747,6 @@ public class UniversityScholarshipService {
         return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
 
-    /** The closed transition table behind {@link #changeFundRequestStatus}. */
     private boolean isFundStatusTransitionAllowed(
             UniversityScholarshipFundRequestStatus current,
             UniversityScholarshipFundRequestStatus next) {
@@ -1032,15 +974,12 @@ public class UniversityScholarshipService {
         request.setBank(bank);
         request.setBranch(branch);
 
-        // followDeviationProcess flag (optional, future UI/backend control)
         boolean followDeviation = Boolean.TRUE.equals(dto.getFollowDeviationProcess());
 
-        // Determine eligibility period from ScholarshipConfig
         int eligibilityMonths = scholarshipConfigRepository.findByConfigKey("scholarship.eligibility.period.months")
                 .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue)
                 .orElse(6);
 
-        // If request date is provided and exam info is available, check eligibility window
         try {
                 UniversityScholarshipExamMaster examMaster = examMasterRepository
                         .findByExamYear(dto.getExamYear())
@@ -1048,33 +987,28 @@ public class UniversityScholarshipService {
 
                 if (dto.getRequestDate() != null && examMaster != null) {
                         LocalDate examLastDate = examMaster.getExamLastDate();
-                        // Eligible window: from examLastDate to examLastDate + eligibilityMonths (default 12 = 1 year)
+                       
                         LocalDate latestAllowed = examLastDate.plusMonths(eligibilityMonths);
 
                         LocalDate reqDate = dto.getRequestDate();
-                        // Deviation if request date is before exam last date OR after the 1-year window
+                        
                         if (reqDate.isBefore(examLastDate) || reqDate.isAfter(latestAllowed)) {
                                 followDeviation = true;
                         }
                 }
         } catch (Exception ignored) {
-        // If any config or exam master lookup fails, do not block save; leave followDeviation as provided
+
         }
 
         request.setFollowDeviationProcess(followDeviation);
 
-        // Location comes from the member's administering District Office, not from the
-        // logged-in user — a member may apply at any office (MMS21) but the request
-        // belongs to the branch that holds their membership.
         request.setSubmissionLocation(member.getSubmissionLocation());
         com.memberconnect.backend.model.User currentUser = currentUserService.current();
         request.setCreatedBy(currentUser != null ? currentUser.getUsername() : null);
         request.setCreatedAt(LocalDateTime.now());
 
-        // Set status NEW
         request.setStatus(UniversityScholarshipRequestStatus.NEW);
         
-        // Check minor account if hasMinorAccount is not provided
         if (dto.getHasMinorAccount() == null) {
             Map<String, Object> minorData = checkMinorAccount(dto.getBcNo());
 
@@ -1300,15 +1234,6 @@ public class UniversityScholarshipService {
         return scholarshipRequestRepository.save(request);
     }
 
-    /**
-     * MMS26 — the University Scholarship Committee clears a request for the Board.
-     *
-     * Previously this method also handled ADDED_TO_*_LIST -> APPROVED, which meant one
-     * endpoint served two different authority levels and gave a single caller a route
-     * from committee straight to final approval, skipping the Board Meeting entirely —
-     * no actual meeting date, no scanned report, no summary confirmation. That branch
-     * is gone: final approval now happens only through processApprovalDecisions.
-     */
     public UniversityScholarshipRequest committeeApproveRequest(String requestId) {
         UniversityScholarshipRequest request = scholarshipRequestRepository
                 .findByUniversityScholarshipRequestID(requestId)
@@ -1319,9 +1244,6 @@ public class UniversityScholarshipService {
                     "Only requests submitted for Committee Approval can be approved by the Committee");
         }
 
-        // The Board track is decided here rather than at save time, per 3.2.1: the
-        // deviation check runs "once the approval is given by the University
-        // Scholarship Committee".
         if (Boolean.TRUE.equals(request.getFollowDeviationProcess())) {
             request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL);
         } else {
@@ -1333,7 +1255,6 @@ public class UniversityScholarshipService {
         return scholarshipRequestRepository.save(request);
     }
 
-    /** MMS26 — the Committee rejects a request outright. */
     public UniversityScholarshipRequest committeeRejectRequest(String requestId, String reason) {
         if (!StringUtils.hasText(reason)) {
             throw new RuntimeException("A reason is required to reject a scholarship request");
@@ -1342,9 +1263,7 @@ public class UniversityScholarshipService {
         UniversityScholarshipRequest request = scholarshipRequestRepository
                 .findByUniversityScholarshipRequestID(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
-
-        // Previously this ran straight off the controller with no status check at all,
-        // so an already-Approved award could be flipped to Rejected.
+                
         if (request.getStatus() != UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
             throw new RuntimeException(
                     "Only requests submitted for Committee Approval can be rejected by the Committee");
@@ -1453,10 +1372,7 @@ public class UniversityScholarshipService {
         return String.format("%s%03d", prefix, maxVal + 1);
     }
 
-    /**
-     * Deletes a Normal Approval List by rolling back all attached requests to
-     * SUBMITTED_FOR_NORMAL_BOARD_APPROVAL and detaching them from the board meeting.
-     */
+    // Deletes a Normal Approval List by rolling back all attached requests to
     @Transactional
     public void deleteApprovalList(String approvalListId) {
         List<UniversityScholarshipRequest> requests =
@@ -1476,10 +1392,8 @@ public class UniversityScholarshipService {
         }
     }
 
-    /**
-     * Deletes a Deviation Approval List by rolling back all attached requests to
-     * SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL and detaching them from the board meeting.
-     */
+    
+    //Deletes a Deviation Approval List by rolling back all attached requests to
     @Transactional
     public void deleteDeviationApprovalList(String approvalListId) {
         List<UniversityScholarshipRequest> requests =
@@ -1498,18 +1412,13 @@ public class UniversityScholarshipService {
             }
         }
     }
-
-    /**
-     * Processes normal board approvals with file upload.
-     */
+    // Processes normal board approvals with file upload.
     @Transactional
     public void processApprovals(String dataJson, MultipartFile file) {
         processApprovalDecisions(dataJson, file, UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST);
     }
 
-    /**
-     * Processes deviation board approvals with file upload.
-     */
+    // Processes deviation board approvals with file upload.
     @Transactional
     public void processDeviationApprovals(String dataJson, MultipartFile file) {
         processApprovalDecisions(dataJson, file, UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST);
@@ -1551,10 +1460,6 @@ public class UniversityScholarshipService {
                         .findByUniversityScholarshipRequestID(requestId)
                         .orElseThrow(() -> new RuntimeException("Request not found: " + requestId));
 
-                // The expectedStatus argument used to be accepted and never read, so the
-                // normal and deviation endpoints behaved identically and neither checked
-                // that the request was actually on a list. A crafted payload could take a
-                // NEW request straight to APPROVED, skipping Committee and Board both.
                 if (request.getStatus() != expectedStatus) {
                     throw new RuntimeException("Request " + requestId + " is not awaiting this approval list"
                             + " (expected " + expectedStatus + ", found " + request.getStatus() + ")");
@@ -1566,7 +1471,7 @@ public class UniversityScholarshipService {
                 }
 
                 if ("reject".equalsIgnoreCase(action)) {
-                    // MMS32/MMS39 make the rejection reason mandatory.
+                    
                     if (!StringUtils.hasText(reason)) {
                         throw new RuntimeException("A rejection reason is required for request " + requestId);
                     }
@@ -1580,9 +1485,6 @@ public class UniversityScholarshipService {
                     System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request approved.");
                 }
 
-                // MMS33/MMS40 require the processing user's name to be displayed on the
-                // list afterwards. This was hardcoded to the literal "user1", which made
-                // every board decision in the system unattributable.
                 request.setProcessedBy(processedBy);
                 request.setProcessedAt(now);
                 if (scannedReportPath != null) {
@@ -1613,16 +1515,7 @@ public class UniversityScholarshipService {
         }
     }
 
-    /**
-     * MMS25 — change a request's status from View Mode.
-     *
-     * Mirrors Grade5ScholarshipService.changeRequestStatus. The permitted moves are a
-     * closed table rather than "anything the caller asks for": every route out of a
-     * submitted or decided state goes back to NEW or to INACTIVE, and APPROVED is
-     * terminal — an awarded scholarship must not be walked backwards once the Board
-     * has granted it, and the ADDED_TO_*_LIST states belong to an in-flight Board
-     * Meeting, which is released by deleting the list, not by editing the request.
-     */
+    //change a request's status from View Mode.
     public UniversityScholarshipRequest changeRequestStatus(String requestId, String newStatusStr) {
         UniversityScholarshipRequest request = scholarshipRequestRepository
                 .findByUniversityScholarshipRequestID(requestId)
@@ -1649,9 +1542,6 @@ public class UniversityScholarshipService {
                     "Cannot change status from " + currentStatus + " to " + newStatus);
         }
 
-        // A request already picked up onto a Board approval list cannot be pulled back
-        // to New by editing it — Head Office may be mid-way through a Board Meeting
-        // with it on the printed list. Deleting the list is the supported release.
         if (newStatus == UniversityScholarshipRequestStatus.NEW
                 && request.getApprovalListId() != null
                 && !request.getApprovalListId().isBlank()) {
@@ -1662,8 +1552,6 @@ public class UniversityScholarshipService {
 
         request.setStatus(newStatus);
 
-        // Returning to New clears the decision trail that put it where it was, so the
-        // request reads as genuinely fresh rather than carrying a stale rejection note.
         if (newStatus == UniversityScholarshipRequestStatus.NEW) {
             request.setIncompleteReason(null);
             request.setRejectReason(null);
@@ -1672,7 +1560,6 @@ public class UniversityScholarshipService {
         return scholarshipRequestRepository.save(request);
     }
 
-    /** The closed transition table behind {@link #changeRequestStatus}. */
     private boolean isUniversityStatusTransitionAllowed(
             UniversityScholarshipRequestStatus current,
             UniversityScholarshipRequestStatus next) {
