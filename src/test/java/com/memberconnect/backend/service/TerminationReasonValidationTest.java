@@ -65,6 +65,9 @@ class TerminationReasonValidationTest {
     @Mock private BranchRepository branchRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
 
+    @Mock private AuditService auditService;
+
+
     @InjectMocks
     private TerminationService terminationService;
 

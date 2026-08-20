@@ -22,6 +22,7 @@ import com.memberconnect.backend.dto.UploadDocumentRequestDTO;
 import com.memberconnect.backend.dto.UploadDocumentResponseDTO;
 import com.memberconnect.backend.model.UploadedDocument;
 import com.memberconnect.backend.service.DocumentService;
+import com.memberconnect.backend.service.MemberDeathRecordService;
 import com.memberconnect.backend.service.TerminationService;
 
 @RestController
@@ -30,19 +31,23 @@ import com.memberconnect.backend.service.TerminationService;
 public class DocumentController {
 
     private static final String TERMINATION_REQUEST_TYPE = "termination-requests";
+    private static final String MEMBER_DEATH_REQUEST_TYPE = "member-death-records";
 
     private final DocumentService documentService;
     private final com.memberconnect.backend.service.S3Service s3Service;
     private final TerminationService terminationService;
+    private final MemberDeathRecordService memberDeathRecordService;
 
     public DocumentController(
             DocumentService documentService,
             com.memberconnect.backend.service.S3Service s3Service,
-            TerminationService terminationService
+            TerminationService terminationService,
+            MemberDeathRecordService memberDeathRecordService
     ) {
         this.documentService = documentService;
         this.s3Service = s3Service;
         this.terminationService = terminationService;
+        this.memberDeathRecordService = memberDeathRecordService;
     }
 
     // --- Member application document endpoints ---
@@ -76,6 +81,11 @@ public class DocumentController {
             @RequestParam String memberId
     ) {
         String applicationType = mapRequestTypeToApplicationType(requestType);
+
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertDocumentsReadable(requestNo);
+        }
+
         return documentService.getRequiredDocuments(requestNo, memberId, applicationType);
     }
 
@@ -86,6 +96,13 @@ public class DocumentController {
             @RequestParam String memberId
     ) {
         String applicationType = mapRequestTypeToApplicationType(requestType);
+
+        // No record exists yet, so there is nothing to district-scope against -
+        // only the caller's role can be checked here.
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertMayReadDeathRecords();
+        }
+
         return documentService.getRequiredDocuments("0", memberId, applicationType);
     }
 
@@ -103,6 +120,12 @@ public class DocumentController {
             terminationService.assertDocumentsEditable(requestNo);
         }
 
+        // This controller carries no role annotations, so each module injects its
+        // own authority here - same reason termination does above.
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertDocumentsEditable(requestNo);
+        }
+
         return documentService.uploadDocument(
                 requestNo,
                 requiredDocumentId,
@@ -117,6 +140,10 @@ public class DocumentController {
             @PathVariable String requestType,
             @PathVariable String requestNo
     ) {
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertDocumentsReadable(requestNo);
+        }
+
         return documentService.getUploadedDocuments(requestNo);
     }
 
@@ -142,6 +169,10 @@ public class DocumentController {
             @PathVariable String requestNo,
             @PathVariable Long requiredDocumentId
     ) {
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertDocumentsReadable(requestNo);
+        }
+
         return documentService.getUploadedDocumentsByRequiredDocument(
                 requestNo,
                 requiredDocumentId
@@ -158,6 +189,11 @@ public class DocumentController {
             terminationService.assertDocumentsEditable(document.getRequestNo());
         }
 
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            UploadedDocument document = documentService.getUploadedDocumentById(uploadedDocumentId);
+            memberDeathRecordService.assertDocumentsEditable(document.getRequestNo());
+        }
+
         documentService.deleteUploadedDocument(uploadedDocumentId);
     }
 
@@ -169,6 +205,10 @@ public class DocumentController {
     ) throws IOException {
         UploadedDocument document =
                 documentService.getUploadedDocumentById(uploadedDocumentId);
+
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertDocumentsReadable(document.getRequestNo());
+        }
 
         byte[] fileBytes = s3Service.downloadFile(document.getFilePath());
 
@@ -186,6 +226,13 @@ public class DocumentController {
             case "retirement-requests" -> "RETIREMENT";
             case "grade5-requests" -> "GRADE5";
             case "termination-requests" -> "TERMINATION";
+            // The scanned, board-signed "Termination Request List for Board
+            // Approval" sheet (MMT09). Its document types were already seeded by
+            // TerminationDocumentSeeder but were unreachable without this case.
+            case "termination-approval-lists" -> "TERMINATION_APPROVAL_REPORT";
+            // Record Member Death (MMT18). Its document types are seeded by
+            // MemberDeathDocumentSeeder and would be unreachable without this case.
+            case "member-death-records" -> "MEMBER_DEATH";
             default -> throw new RuntimeException(
                     "Invalid request type: " + requestType
             );

@@ -278,6 +278,17 @@ public class DocumentService {
             }
         }
 
+        // MMT18: "The mandatory supporting documents might increase if there are
+        // Minor Savings Accounts for the Member that needs to be closed."
+        if ("MEMBER_DEATH".equals(applicationType)) {
+            boolean hasMinorSavings =
+                    !minorSavingsAccountRepository.findByMemberId(memberId).isEmpty();
+
+            if (hasMinorSavings) {
+                types.add("MEMBER_DEATH_MINOR");
+            }
+        }
+
         List<RequiredDocument> requiredDocs = requiredDocumentRepository.findByApplicationTypeIn(types);
 
         return requiredDocs.stream()

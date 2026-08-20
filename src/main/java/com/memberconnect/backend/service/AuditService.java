@@ -30,7 +30,17 @@ import com.memberconnect.backend.repository.MemberRepository;
  *    (spec 4.2 and 4.8), which record plain string values and read them back oldest
  *    first as AuditDTOs;
  *  - the profile change requests (Requirement 02, sections 2.1.1 / 3.1.1 / 4.1.1 /
- *    5.1.1), which record before/after field maps serialised to JSON.
+ *    5.1.1), which record before/after field maps serialised to JSON;
+ *  - Member Terminations, Record Member Death, Death Donations and Dormant
+ *    Membership, which record status transitions against the request's own id.
+ *
+ * Every write joins the caller's transaction rather than starting its own. An audit row
+ * is only true if the action it describes actually committed, so the two must succeed
+ * or fail together - a REQUIRES_NEW audit would leave a record of an approval that was
+ * subsequently rolled back, which is worse than no record at all.
+ *
+ * The actor is read from the security context, never from a parameter: who did
+ * something is a fact about the request, not an argument a caller may choose.
  *
  * Recording history must never break the action being recorded, so every write is
  * best-effort: a failure is logged, never thrown. An audit row describes a change that
@@ -45,6 +55,14 @@ public class AuditService {
     /** Module names used as the audit's discriminator. */
     public static final String MODULE_APPLICATION = "MEMBER_APPLICATION";
     public static final String MODULE_MEMBER = "MEMBER";
+
+    /** Requirement 04/05 modules: the request's own id is the reference, not the member's. */
+    public static final String MODULE_TERMINATION = "MEMBER_TERMINATION";
+    public static final String MODULE_TERMINATION_APPROVAL_LIST = "TERMINATION_APPROVAL_LIST";
+    public static final String MODULE_MEMBER_DEATH = "MEMBER_DEATH";
+    public static final String MODULE_DEATH_DONATION = "DEATH_DONATION";
+    public static final String MODULE_DORMANT = "DORMANT_MEMBERSHIP";
+    public static final String MODULE_DORMANT_APPROVAL_LIST = "DORMANT_APPROVAL_LIST";
 
     /** One per profile-change type, so the trail can be filtered later. */
     public static final String MODULE_BASIC_PROFILE_CHANGE = "PROFILE_CHANGE_BASIC";
@@ -159,6 +177,30 @@ public class AuditService {
                 from == null ? null : from.name(),
                 to == null ? null : to.name(),
                 describe(requestNo, to)
+        );
+    }
+
+    /**
+     * Convenience overload for a status transition on a record referenced by its own
+     * primary key - the shape the termination, member death, death donation and
+     * dormant actions take. Distinct from the overload above, which resolves a
+     * membership number to the Member row a profile change request hangs off.
+     */
+    public void recordStatusChange(
+            String moduleName,
+            Long referenceId,
+            String actionName,
+            Object oldStatus,
+            Object newStatus,
+            String remarks
+    ) {
+        record(
+                moduleName,
+                referenceId,
+                actionName,
+                oldStatus != null ? String.valueOf(oldStatus) : null,
+                newStatus != null ? String.valueOf(newStatus) : null,
+                remarks
         );
     }
 

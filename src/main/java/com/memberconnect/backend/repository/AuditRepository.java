@@ -29,6 +29,12 @@ public interface AuditRepository extends JpaRepository<Audit, Long> {
     List<Audit> findByModuleNameAndReferenceIdOrderByActionAtAsc(String moduleName, Long referenceId);
 
     /**
+     * Every audit row for one module, newest first — the module-wide counterpart of
+     * the lookups above, which are all scoped to a single record.
+     */
+    List<Audit> findByModuleNameOrderByActionAtDesc(String moduleName);
+
+    /**
      * A member's history spans two records: the member itself and the application it
      * grew from. The spec requires both on the one Progress tab.
      */

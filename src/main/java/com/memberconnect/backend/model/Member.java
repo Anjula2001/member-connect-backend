@@ -184,10 +184,16 @@ public class Member {
     //
     // Primitive boolean with a NOT NULL DEFAULT false column: an unassessed member is
     // not eligible, and there is no third "unknown" state to reason about.
-    @Column(name = "is_remittance", nullable = false)
+    // columnDefinition carries the DEFAULT into the generated DDL. Without it,
+    // ddl-auto=update emits a bare "add column ... not null", which Postgres refuses on
+    // a table that already has rows - Hibernate logs that failure as a warning and
+    // carries on, leaving the column absent and every Member select broken.
+    @Column(name = "is_remittance", nullable = false,
+            columnDefinition = "boolean not null default false")
     private boolean isRemittance;
 
-    @Column(name = "is_settlement", nullable = false)
+    @Column(name = "is_settlement", nullable = false,
+            columnDefinition = "boolean not null default false")
     private boolean isSettlement;
 
 }

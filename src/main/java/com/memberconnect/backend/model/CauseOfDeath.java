@@ -9,6 +9,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 @Getter
 @Setter
 @Entity
@@ -27,4 +29,15 @@ public class CauseOfDeath {
 
     @Column(name = "active", nullable = false)
     private boolean active = true;
+
+    /**
+     * Per-cause override of the general Death Donation maximum (SRS 4.2.3):
+     * "if the selected 'Cause of Death' has a maximum death donation amount
+     * configured in the Cause of Death Master, that value will be selected
+     * ignoring the general death donation value configured in the system."
+     *
+     * Nullable - when null the DeathDonationConfig DEFAULT_MAX_DONATION applies.
+     */
+    @Column(name = "max_death_donation_amount", precision = 15, scale = 2)
+    private BigDecimal maxDeathDonationAmount;
 }

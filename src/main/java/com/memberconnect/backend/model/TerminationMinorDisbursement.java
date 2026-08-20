@@ -30,8 +30,23 @@ public class TerminationMinorDisbursement {
     @Column(name = "disbursement_bank")
     private String disbursementBank;
 
+    /**
+     * The Bank Master id behind disbursementBank.
+     *
+     * The name alone is not enough to reload the form: two branches can share a
+     * name, so matching by name picked an arbitrary one. The name stays because
+     * it is what reports and the Finance handoff print; the id is what the
+     * editor selects by.
+     */
+    @Column(name = "disbursement_bank_id")
+    private Long disbursementBankId;
+
     @Column(name = "branch")
     private String branch;
+
+    /** The Branch Master id behind branch - see disbursementBankId. */
+    @Column(name = "disbursement_branch_id")
+    private Long disbursementBranchId;
 
     @Column(name = "disbursement_account_number")
     private String disbursementAccountNumber;
@@ -66,6 +81,22 @@ public class TerminationMinorDisbursement {
 
     public String getDisbursementBank() {
         return disbursementBank;
+    }
+
+    public Long getDisbursementBankId() {
+        return disbursementBankId;
+    }
+
+    public void setDisbursementBankId(Long disbursementBankId) {
+        this.disbursementBankId = disbursementBankId;
+    }
+
+    public Long getDisbursementBranchId() {
+        return disbursementBranchId;
+    }
+
+    public void setDisbursementBranchId(Long disbursementBranchId) {
+        this.disbursementBranchId = disbursementBranchId;
     }
 
     public void setDisbursementBank(String disbursementBank) {

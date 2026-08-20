@@ -1,5 +1,7 @@
 package com.memberconnect.backend.model;
 
+import java.time.LocalDate;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -41,4 +43,20 @@ public class DormantConfig {
     // When false the scheduled run is skipped (manual run still works).
     @Column(name = "enabled", nullable = false)
     private Boolean enabled = true;
+
+    /**
+     * The date the identification process last completed. This is what lets the
+     * scheduler tell a run it missed from one it has already done: the old
+     * version compared the clock to the configured day/hour/minute and fired
+     * only on an exact match, so if the application was down for that one minute
+     * the month's run simply never happened.
+     */
+    @Column(name = "last_run_on")
+    private LocalDate lastRunOn;
+
+    @Column(name = "last_run_selected_count")
+    private Integer lastRunSelectedCount;
+
+    @Column(name = "last_run_cleared_count")
+    private Integer lastRunClearedCount;
 }

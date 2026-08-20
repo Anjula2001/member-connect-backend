@@ -76,6 +76,13 @@ public class SecurityConfig {
                 .requestMatchers("/api/documents/**").permitAll()
                 .requestMatchers("/api/uploaded-documents/**").permitAll()
                 .requestMatchers("/api/required-document-types/**").permitAll()
+                // Stand-in Finance Module (com.memberconnect.backend.mock). The
+                // production FinanceDeathDonationClient calls this over plain
+                // HTTP with no bearer token, so it cannot sit behind the filter.
+                // Safe because MockFinanceController is @ConditionalOnProperty:
+                // with finance.mock.enabled unset the bean does not exist and
+                // this path answers 404 rather than serving anything.
+                .requestMatchers("/mock-finance/**").permitAll()
                 // Everything else requires authentication
                 .anyRequest().authenticated()
             )

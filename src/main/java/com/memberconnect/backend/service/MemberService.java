@@ -23,8 +23,26 @@ import java.util.List;
 @Transactional
 @SuppressWarnings("null")
 public class MemberService {
+
+    /**
+     * Member statuses owned by the termination workflow. See updateStatus() for why
+     * they are refused on the generic status endpoint.
+     */
+    private static final java.util.Set<MemberStatus> TERMINATION_WORKFLOW_STATUSES =
+            java.util.Set.of(
+                    MemberStatus.TERMINATION_REQUESTED,
+                    MemberStatus.TERMINATION_APPROVED,
+                    MemberStatus.TERMINATED
+            );
+
     @Autowired
     private MemberRepository memberRepository;
+
+    // MMD10: a profile edit is one of the in-app proxies for account activity.
+    // See MemberActivityService for why these are proxies and what the real
+    // signal is.
+    @Autowired
+    private MemberActivityService memberActivityService;
 
     @Autowired
     private MemberApplicationRepository memberApplicationRepository;
@@ -176,7 +194,13 @@ public class MemberService {
                 .orElseThrow(() -> new RuntimeException("Member not found"));
         applyNonNullFields(existing, dto);
         Member updated = memberRepository.save(existing);
+
+        // MMD10. Recorded after the save so a failed update does not count as
+        // activity, and routed through MemberActivityService so the dormant flag
+        // is cleared by the same rule everywhere.
+        memberActivityService.recordActivity(updated, "MEMBER_PROFILE_UPDATE");
         auditService.record(AuditService.MODULE_MEMBER, updated.getId(), "Profile Updated");
+
         return convertToDTO(updated);
     }
 
@@ -193,7 +217,18 @@ public class MemberService {
 
     private void applyNonNullFields(Member existing, MemberDTO dto) {
         if (dto.getMemberType() != null) existing.setMemberType(dto.getMemberType());
-        if (dto.getStatus() != null) existing.setStatus(dto.getStatus());
+        // Status is deliberately NOT copied from the DTO.
+        //
+        // A member's status is owned by the workflow that moves it - termination by
+        // TerminationService, retirement by RetirementService, death by
+        // MemberDeathRecordService - each of which enforces its own preconditions.
+        // This is an ordinary profile edit open to District Office, so honouring a
+        // status here let any District user PUT {"status":"TERMINATED"} and close a
+        // membership outright, skipping the request, the board and Finance. It also
+        // bypassed the Super-Admin-only ACTIVE guard in updateStatus() below.
+        //
+        // Callers that genuinely need a status change must go through updateStatus()
+        // or the owning workflow.
         if (dto.getMembershipStartDate() != null) existing.setMembershipStartDate(dto.getMembershipStartDate());
         if (dto.getTitle() != null) existing.setTitle(dto.getTitle());
         if (dto.getFullName() != null) existing.setFullName(dto.getFullName());
@@ -232,6 +267,29 @@ public class MemberService {
         Member member = memberRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Member not found"));
+
+        // Statuses that belong to the termination workflow and may only be reached
+        // through it (SRS MMT01-MMT11).
+        //
+        // TERMINATED in particular asserts that the Board approved the termination AND
+        // that the Finance Module has closed every savings account, so the only
+        // legitimate writer is TerminationService.completeTermination(), reached from
+        // the Finance callback. Allowing it here let Head Office jump a member straight
+        // to TERMINATED from the directory screen, skipping the approval list and
+        // leaving Finance nothing to complete.
+        //
+        // Note the retirement and death statuses are NOT covered yet: RETIRED,
+        // RETIREMENT_APPROVED and DECEASED have exactly the same problem and want the
+        // same treatment, but changing them would move those modules' behaviour, which
+        // is not this change's call to make.
+        if (TERMINATION_WORKFLOW_STATUSES.contains(status)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Member status " + status + " is set by the termination workflow, not directly. "
+                            + "Raise a termination request and let the Board and the Finance Module "
+                            + "move the member."
+            );
+        }
 
         // Real activation is supposed to come from the Finance Module once the member's
         // accounts are created there (out of scope for this build). Until that
