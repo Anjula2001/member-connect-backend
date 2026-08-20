@@ -38,14 +38,7 @@ public class UniversityScholarshipController {
         this.currentUserService = currentUserService;
     }
 
-    /**
-     * MMS25 — change a request's status from View Mode.
-     *
-     * The right required depends on the target status, not on the endpoint, so this
-     * cannot be a single @PreAuthorize. The check runs BEFORE the try/catch below:
-     * inside it, AccessDeniedException is a RuntimeException and would be reported as
-     * 400 instead of reaching the handler that turns it into 403.
-     */
+    //change a request's status from View Mode.
     @PutMapping("/university-scholarships/{requestId}/status")
     public ResponseEntity<?> changeRequestStatus(
             @PathVariable String requestId,
@@ -60,21 +53,6 @@ public class UniversityScholarshipController {
         }
     }
 
-    /**
-     * Maps a status change to the right needed to perform it.
-     *
-     * Deliberately stricter than the Grade 5 equivalent, which lets INCOMPLETE -> NEW
-     * and SUBMITTED -> NEW ride on ordinary G5_REQUEST_EDIT. Doing that here would
-     * invert the intended actors: HEAD_OFFICE does not hold US_REQUEST_EDIT while
-     * DISTRICT_OFFICE does, so the office meant to own this screen would be locked out
-     * of it and the office meant to be excluded would get in. Every move back to NEW
-     * therefore requires US_REQUEST_REOPEN, which sits with Super Admin, Head Office
-     * and Board Secretary.
-     *
-     * An unrecognised status falls through to US_REQUEST_SET_INACTIVE — the narrower of
-     * the two rights — and is then rejected by the service's own validation, so a bad
-     * payload can never pick the weaker check.
-     */
     private Permission requiredPermissionForStatusChange(String requestedStatus) {
         if (UniversityScholarshipRequestStatus.NEW.name().equalsIgnoreCase(requestedStatus)) {
             return Permission.US_REQUEST_REOPEN;
@@ -209,14 +187,6 @@ public class UniversityScholarshipController {
     }
 
     // Endpoint to approve a scholarship request by request ID
-    /**
-     * MMS26 — Committee approval.
-     *
-     * Split out from the old /approve endpoint, which also performed final Board
-     * approval. Those are two different authority levels held by two different roles,
-     * so a single @PreAuthorize could not express them; keeping them on one endpoint
-     * also left a route that skipped the Board Meeting altogether.
-     */
     @PreAuthorize("hasAuthority('US_COMMITTEE_APPROVE')")
     @PostMapping("/university-scholarships/committee-approve/{requestId}")
     public ResponseEntity<?> committeeApproveRequest(@PathVariable String requestId) {
@@ -300,14 +270,7 @@ public class UniversityScholarshipController {
         }
     }
 
-    /**
-     * MMS45 — change a fund request's status from View Mode (New / Inactive).
-     *
-     * PUT here, while PATCH on the same path carries the MMS47 approve/reject decision.
-     * They are separate endpoints because they need different rights, and the right
-     * this one needs depends on the target status — so, as with the scholarship request
-     * equivalent, the check runs before the try/catch rather than as a @PreAuthorize.
-     */
+    // change a fund request's status from View Mode (New / Inactive).
     @PutMapping("/university-scholarships/{requestId}/fund-requests/{fundRequestId}/status")
     public ResponseEntity<?> changeFundRequestStatus(
             @PathVariable String requestId,
@@ -324,11 +287,6 @@ public class UniversityScholarshipController {
         }
     }
 
-    /**
-     * Maps a fund request status change to the right it needs. An unrecognised status
-     * falls through to US_FUND_SET_INACTIVE and is then rejected by the service's own
-     * validation, so a bad payload cannot pick a weaker check.
-     */
     private Permission requiredPermissionForFundStatusChange(String requestedStatus) {
         if (UniversityScholarshipFundRequestStatus.NEW.name().equalsIgnoreCase(requestedStatus)) {
             return Permission.US_FUND_REOPEN;
@@ -336,12 +294,7 @@ public class UniversityScholarshipController {
         return Permission.US_FUND_SET_INACTIVE;
     }
 
-    /**
-     * MMS48 — hand an approved fund request to the Finance Module.
-     *
-     * A single @PreAuthorize is enough here: unlike the status endpoints, the right
-     * does not vary with the payload. There is no payload.
-     */
+    //hand an approved fund request to the Finance Module.
     @PreAuthorize("hasAuthority('US_FINANCE_DISBURSE')")
     @PostMapping("/university-scholarships/{requestId}/fund-requests/{fundRequestId}/finance-integration")
     public ResponseEntity<?> integrateFundRequestWithFinance(
@@ -377,13 +330,6 @@ public class UniversityScholarshipController {
     }
 
     // Endpoint to reject a scholarship request by request ID with a reason
-    /**
-     * MMS26 — Committee rejection.
-     *
-     * The logic moved into the service: this used to write to the repository directly
-     * from the controller with no status check, so any request in any state — including
-     * one already Approved — could be flipped to Rejected.
-     */
     @PreAuthorize("hasAuthority('US_COMMITTEE_APPROVE')")
     @PostMapping("/university-scholarships/committee-reject/{requestId}")
     public ResponseEntity<?> committeeRejectScholarship(
@@ -447,6 +393,7 @@ public class UniversityScholarshipController {
         }
     }
 
+    //Endpoint to process normal approvals for a board meeting
     @PreAuthorize("hasAuthority('US_LIST_PROCESS')")
     @PostMapping(value = "/university-scholarships/process-approvals", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> processApprovals(
@@ -461,6 +408,7 @@ public class UniversityScholarshipController {
         }
     }
 
+    //Endpoint to process deviation approvals for a board meeting
     @PreAuthorize("hasAuthority('US_LIST_PROCESS')")
     @PostMapping(value = "/university-scholarships/process-deviation-approvals", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> processDeviationApprovals(
@@ -474,7 +422,8 @@ public class UniversityScholarshipController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
-
+ 
+    //Endpoint to download approval reports
     @PreAuthorize("hasAuthority('US_LIST_VIEW')")
     @GetMapping("/university-scholarships/download-report/{approvalListId}")
     public ResponseEntity<byte[]> downloadReport(@PathVariable String approvalListId) {

@@ -15,17 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.memberconnect.backend.dto.UniversityMasterDto;
 import com.memberconnect.backend.service.UniversityMasterService;
 
-/**
- * University Scholarship master data maintenance.
- *
- * Super Admin only, matching UserAdminController. The existing US_MASTER_MANAGE
- * permission would also have fitted, but it is held by SCHOLARSHIP_OFFICER as well and
- * this screen was specified as Super Admin only. The read endpoints the Scholarship
- * form uses (/api/universities, /api/programs/{id}, /api/duration) are untouched and
- * still open to US_MASTER_VIEW, so restricting this screen does not affect them.
- *
- * No delete endpoint: these rows are referenced by existing scholarship requests.
- */
 @RestController
 @RequestMapping("/api/admin/university-master")
 @CrossOrigin(origins = "http://localhost:3000")

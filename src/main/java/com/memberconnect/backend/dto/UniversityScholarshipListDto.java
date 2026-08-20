@@ -16,7 +16,6 @@ public class UniversityScholarshipListDto {
     private String birthCertificateNumber;
     private String address;
 
-    /** District Office that owns the request — the field the Location filter reads. */
     private String submissionLocation;
     private String mobile;
     private String applicantType;
