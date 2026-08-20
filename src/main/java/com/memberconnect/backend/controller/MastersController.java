@@ -6,12 +6,17 @@ import com.memberconnect.backend.model.EducationalDistrict;
 import com.memberconnect.backend.model.EducationalZone;
 import com.memberconnect.backend.model.Designation;
 import com.memberconnect.backend.model.NatureOfOccupation;
+import com.memberconnect.backend.model.NomineeRelationship;
+import com.memberconnect.backend.model.Title;
 import com.memberconnect.backend.model.WorkingLocation;
 import com.memberconnect.backend.model.WorkingLocationType;
+import com.memberconnect.backend.enums.Identification;
 import com.memberconnect.backend.repository.EducationalDistrictRepository;
 import com.memberconnect.backend.repository.EducationalZoneRepository;
 import com.memberconnect.backend.repository.DesignationRepository;
 import com.memberconnect.backend.repository.NatureOfOccupationRepository;
+import com.memberconnect.backend.repository.NomineeRelationshipRepository;
+import com.memberconnect.backend.repository.TitleRepository;
 import com.memberconnect.backend.repository.WorkingLocationRepository;
 import com.memberconnect.backend.repository.WorkingLocationTypeRepository;
 import com.memberconnect.backend.service.MemberDeathRecordService;
@@ -31,6 +36,8 @@ public class MastersController {
     private final DesignationRepository designationRepository;
     private final NatureOfOccupationRepository natureOfOccupationRepository;
     private final WorkingLocationRepository workingLocationRepository;
+    private final TitleRepository titleRepository;
+    private final NomineeRelationshipRepository nomineeRelationshipRepository;
     private final MemberDeathRecordService memberDeathRecordService;
     private final TerminationService terminationService;
 
@@ -41,6 +48,8 @@ public class MastersController {
             DesignationRepository designationRepository,
             NatureOfOccupationRepository natureOfOccupationRepository,
             WorkingLocationRepository workingLocationRepository,
+            TitleRepository titleRepository,
+            NomineeRelationshipRepository nomineeRelationshipRepository,
             MemberDeathRecordService memberDeathRecordService,
             TerminationService terminationService
     ) {
@@ -50,6 +59,8 @@ public class MastersController {
         this.designationRepository = designationRepository;
         this.natureOfOccupationRepository = natureOfOccupationRepository;
         this.workingLocationRepository = workingLocationRepository;
+        this.titleRepository = titleRepository;
+        this.nomineeRelationshipRepository = nomineeRelationshipRepository;
         this.memberDeathRecordService = memberDeathRecordService;
         this.terminationService = terminationService;
     }
@@ -76,6 +87,29 @@ public class MastersController {
     @GetMapping("/nature-of-occupations")
     public List<NatureOfOccupation> getNatureOfOccupations() {
         return natureOfOccupationRepository.findAll();
+    }
+
+    /** Title Master - the Title field on a Name Change Request (MMC05). */
+    @GetMapping("/titles")
+    public List<Title> getTitles() {
+        return titleRepository.findByActiveTrueOrderByDisplayOrderAsc();
+    }
+
+    /** Nominee Relationship Master - the Relationship field on a Nominee Change Request (MMC18). */
+    @GetMapping("/nominee-relationships")
+    public List<NomineeRelationship> getNomineeRelationships() {
+        return nomineeRelationshipRepository.findByActiveTrueOrderByDisplayOrderAsc();
+    }
+
+    /**
+     * Nominee Identification Type Master (MMC18). Served straight off the existing
+     * Identification enum rather than a table: Member already stores its identification
+     * type from this same enum, so a separate master would be a second list to keep in
+     * step with it for no gain.
+     */
+    @GetMapping("/nominee-identification-types")
+    public Identification[] getNomineeIdentificationTypes() {
+        return Identification.values();
     }
 
     // Endpoint to get cause of death options

@@ -34,6 +34,12 @@ public class BoardApprovalList {
     )
     private java.util.List<Member_Application> applications = new java.util.ArrayList<>();
 
+    @Column(name = "NameChangeRequestIds", columnDefinition = "TEXT")
+    private String nameChangeRequestIdsCsv;
+
+    @Column(name = "NomineeChangeRequestIds", columnDefinition = "TEXT")
+    private String nomineeChangeRequestIdsCsv;
+
     @Column(name = "Status")
     private String status;
 
