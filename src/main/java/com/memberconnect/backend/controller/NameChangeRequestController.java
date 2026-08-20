@@ -5,6 +5,7 @@ import com.memberconnect.backend.enums.ApplicationStatus;
 import com.memberconnect.backend.service.NameChangeRequstServices;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,9 +19,22 @@ import java.util.List;
  * The approval-list side of the flow (MMC08-MMC13) lives with the board approval
  * lists, not here.
  */
+/**
+ * Authorization (MMC05-MMC07). The class-level rule keeps the three specialist roles -
+ * Accounts, Scholarship Officer, Death Donation Officer - out of the module; the
+ * methods narrow it further.
+ *
+ * Stage 2 of a name change lives in BoardApprovalListController, which already carries
+ * its own rules: Head Office builds and prints the list, Board Secretary records the
+ * decision (MMC12) and deletes the list (MMC10).
+ *
+ * These annotations are the enforcement. The role checks on the screens decide what is
+ * shown and are bypassed by calling the API directly.
+ */
 @RestController
 @RequestMapping("/api5/namechange")
 @CrossOrigin(origins = "http://localhost:3000")
+@PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','BOARD_SECRETARY','DISTRICT_OFFICE')")
 public class NameChangeRequestController {
 
     @Autowired
@@ -41,6 +55,8 @@ public class NameChangeRequestController {
     }
 
     /** @Valid was missing everywhere, so none of the DTO's constraints ever ran. */
+    /** MMC05: raised by District Office. Board Secretary decides but never opens one. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','DISTRICT_OFFICE')")
     @PostMapping("/savenamechange")
     public NameChangeRequestDTO saveNameChangeRequest(@Valid @RequestBody NameChangeRequestDTO dto) {
         return nameChangeRequstServices.addNameChangeRequestService(dto);
@@ -53,6 +69,7 @@ public class NameChangeRequestController {
      * The JSON travels as a "request" part rather than as form fields, which keeps the
      * DTO's validation working on a multipart submit.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','DISTRICT_OFFICE')")
     @PostMapping(value = "/savenamechangeWithDocument", consumes = {"multipart/form-data"})
     public NameChangeRequestDTO saveNameChangeWithDocument(
             @Valid @RequestPart("request") NameChangeRequestDTO dto,
@@ -61,6 +78,12 @@ public class NameChangeRequestController {
     }
 
     /** Update, optionally replacing the supporting document. */
+    /**
+     * MMC05 forbids editing a submitted record; in-place editing is enabled at the
+     * client's direction and restricted to the roles that can decide the request. A
+     * District Office user cannot revise what it has already sent to the board.
+     */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','BOARD_SECRETARY')")
     @PutMapping(value = "/updatenamechangeWithDocument/{id}", consumes = {"multipart/form-data"})
     public NameChangeRequestDTO updateNameChangeWithDocument(
             @PathVariable Integer id,
@@ -69,6 +92,7 @@ public class NameChangeRequestController {
         return nameChangeRequstServices.updateWithDocument(id, dto, file);
     }
 
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','BOARD_SECRETARY')")
     @PutMapping("/updatenamechange/{id}")
     public NameChangeRequestDTO updateNameChangeRequest(
             @PathVariable Integer id,
@@ -82,6 +106,7 @@ public class NameChangeRequestController {
      * rules differ: the fields are locked, and the only permitted target is Inactive
      * for a user holding Inactive rights.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','BOARD_SECRETARY')")
     @PutMapping("/updatestatus/{id}")
     public NameChangeRequestDTO updateStatus(
             @PathVariable Integer id,

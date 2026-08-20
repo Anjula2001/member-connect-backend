@@ -52,6 +52,11 @@ public class BoardApprovalListController {
 		return boardApprovalListService.getNomineeChangeRequestsByListId(listId);
 	}
 
+	// MMC12 / MMC25: recording what the board decided is Board Secretary work. Head
+	// Office builds the list, prints it for the meeting and retrieves it afterwards -
+	// it inherits the class-level rule for all of that - but the approve/reject
+	// decision on a request routed through the board is not its to make.
+	@PreAuthorize("hasAnyRole('BOARD_SECRETARY','SUPER_ADMIN')")
 	@PatchMapping("/processBoardApprovalList/{listId}")
 	public BoardApprovalListDTO processBoardApprovalList(
 			@PathVariable String listId,

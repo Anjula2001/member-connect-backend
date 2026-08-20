@@ -68,6 +68,12 @@ public class BoardApprovalListService {
 	@Autowired
 	private NotificationService notificationService;
 
+	@Autowired
+	private NameChangeRequstServices nameChangeRequstServices;
+
+	@Autowired
+	private NommineChangeRequestServices nommineChangeRequestServices;
+
 	// ── CSV helpers ──────────────────────────────────────────────────────
 
 	private List<String> parseCsv(String csv) {
@@ -462,19 +468,22 @@ public class BoardApprovalListService {
 			return Collections.emptyList();
 		}
 
+		// Delegates to the type's own service so the DTO arrives complete: request
+		// number, member id, the member's name and NIC, and the "Current Value"
+		// snapshot alongside the requested one.
+		//
+		// This method used to hand-build a DTO carrying only the four new names and a
+		// status. The board report is unusable on that: MMC11's report has to say whose
+		// name is changing and what it currently says, and neither was being returned.
 		return ids.stream()
-				.map(id -> nameChangeRequestRepo.findById(id)
-						.map(ncr -> {
-							NameChangeRequestDTO dto = new NameChangeRequestDTO();
-							dto.setNameChangeRequestID(ncr.getNameChangeRequestID());
-							dto.setNewTitle(ncr.getNewTitle());
-							dto.setNewFullName(ncr.getNewFullName());
-							dto.setNewNameAsInPayroll(ncr.getNewNameAsInPayroll());
-							dto.setNewNameWithInitials(ncr.getNewNameWithInitials());
-							dto.setStatus(ncr.getStatus());
-							return dto;
-						})
-						.orElseThrow(() -> new RuntimeException("Name change request not found: " + id)))
+				.map(id -> {
+					NameChangeRequestDTO dto = nameChangeRequstServices.getRequestById(id);
+					if (dto == null) {
+						throw new ResponseStatusException(
+								HttpStatus.NOT_FOUND, "Name change request not found: " + id);
+					}
+					return dto;
+				})
 				.collect(Collectors.toList());
 	}
 
@@ -489,17 +498,9 @@ public class BoardApprovalListService {
 
 		return ids.stream()
 				.map(id -> nomineeChangeRequestRepo.findById(id)
-						.map(ncr -> {
-							NommineChangeRequestDTO dto = new NommineChangeRequestDTO();
-							dto.setId(ncr.getId());
-							dto.setNewnommineName(ncr.getNewnommineName());
-							dto.setRelationship(ncr.getRelationship());
-							dto.setNic(ncr.getNic());
-							dto.setAddress(ncr.getAddress());
-							dto.setStatus(ncr.getStatus());
-							return dto;
-						})
-						.orElseThrow(() -> new RuntimeException("Nominee change request not found: " + id)))
+						.map(ncr -> nommineChangeRequestServices.getNommineChangeRequestById(ncr.getId()))
+						.orElseThrow(() -> new ResponseStatusException(
+								HttpStatus.NOT_FOUND, "Nominee change request not found: " + id)))
 				.collect(Collectors.toList());
 	}
 

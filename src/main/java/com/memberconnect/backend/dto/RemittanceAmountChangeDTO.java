@@ -30,6 +30,21 @@ public class RemittanceAmountChangeDTO {
 
     private String submissionLocation;
 
+    /** Who decided the request, and when (MMC17). Set by the server on approve/reject. */
+    private String processedBy;
+    private java.time.LocalDateTime processedAt;
+
+    // --- Member Details block (MMC14): resolved from the member, not stored. ---
+    private String memberFullName;
+    private String memberNameWithInitials;
+    private String memberNic;
+
+    /**
+     * One row per editable account, each with the amount that stood when the request
+     * was raised and the amount being asked for.
+     */
+    private java.util.List<RemittanceChangeLineDTO> lines = new java.util.ArrayList<>();
+
     /** @deprecated flattened total; replaced by per-account line items. */
     @Deprecated
     private String newRemittanceAmount;

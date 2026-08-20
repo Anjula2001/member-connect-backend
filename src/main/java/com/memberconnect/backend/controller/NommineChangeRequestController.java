@@ -5,6 +5,7 @@ import com.memberconnect.backend.enums.ApplicationStatus;
 import com.memberconnect.backend.service.NommineChangeRequestServices;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,9 +21,22 @@ import java.util.List;
  *
  * The approval-list side of the flow (MMC21-MMC26) lives with the board approval lists.
  */
+/**
+ * Authorization (MMC18-MMC20). The class-level rule keeps the three specialist roles -
+ * Accounts, Scholarship Officer, Death Donation Officer - out of the module; the
+ * methods narrow it further.
+ *
+ * Stage 2 of a nominee change lives in BoardApprovalListController, which already
+ * carries its own rules: Head Office builds and prints the list, Board Secretary
+ * records the decision (MMC25) and deletes the list (MMC23).
+ *
+ * These annotations are the enforcement. The role checks on the screens decide what is
+ * shown and are bypassed by calling the API directly.
+ */
 @RestController
 @RequestMapping("/api/v3")
 @CrossOrigin(origins = "http://localhost:3000")
+@PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','BOARD_SECRETARY','DISTRICT_OFFICE')")
 public class NommineChangeRequestController {
 
     @Autowired
@@ -42,6 +56,8 @@ public class NommineChangeRequestController {
         return dto;
     }
 
+    /** MMC18: raised by District Office. Board Secretary decides but never opens one. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','DISTRICT_OFFICE')")
     @PostMapping("/saveNommine")
     public NommineChangeRequestDTO saveNommineChangeRequest(@Valid @RequestBody NommineChangeRequestDTO dto) {
         return nommineChangeRequestServices.NommineChangeRequestaddService(dto);
@@ -54,6 +70,7 @@ public class NommineChangeRequestController {
      * The JSON travels as a "request" part rather than as form fields, which keeps the
      * DTO's validation working on a multipart submit.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','DISTRICT_OFFICE')")
     @PostMapping(value = "/saveNommineWithDocument", consumes = {"multipart/form-data"})
     public NommineChangeRequestDTO saveNommineWithDocument(
             @Valid @RequestPart("request") NommineChangeRequestDTO dto,
@@ -62,6 +79,12 @@ public class NommineChangeRequestController {
     }
 
     /** Update, optionally replacing the supporting document. */
+    /**
+     * MMC18 forbids editing a submitted record; in-place editing is enabled at the
+     * client's direction and restricted to the roles that can decide the request. A
+     * District Office user cannot revise what it has already sent to the board.
+     */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','BOARD_SECRETARY')")
     @PutMapping(value = "/updateNommineWithDocument/{id}", consumes = {"multipart/form-data"})
     public NommineChangeRequestDTO updateNommineWithDocument(
             @PathVariable Integer id,
@@ -74,6 +97,7 @@ public class NommineChangeRequestController {
      * The entry screen used to post its edits to /saveNommine with an id in the body,
      * leaving this endpoint unused. It is the update path.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','BOARD_SECRETARY')")
     @PutMapping("/updateNommine/{id}")
     public NommineChangeRequestDTO updateNommineChangeRequest(
             @PathVariable Integer id,
@@ -83,6 +107,7 @@ public class NommineChangeRequestController {
     }
 
     /** MMC20 View Mode status change — Inactive only, with Inactive rights. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HEAD_OFFICE','BOARD_SECRETARY')")
     @PutMapping("/updatestatus/{id}")
     public NommineChangeRequestDTO updateStatus(
             @PathVariable Integer id,

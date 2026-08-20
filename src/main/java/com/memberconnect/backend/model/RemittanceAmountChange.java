@@ -1,5 +1,8 @@
 package com.memberconnect.backend.model;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import jakarta.persistence.*;
 
 /**
@@ -25,6 +28,31 @@ public class RemittanceAmountChange extends ProfileChangeRequest {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
+
+    /**
+     * One row per editable account (MMC14). Replaces the single flattened amount below,
+     * which could not express "an amount per account" at all.
+     */
+    @OneToMany(mappedBy = "request", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OrderBy("accountCode ASC")
+    private List<RemittanceChangeRequestLine> lines = new ArrayList<>();
+
+    public List<RemittanceChangeRequestLine> getLines() {
+        return lines;
+    }
+
+    public void setLines(List<RemittanceChangeRequestLine> lines) {
+        this.lines.clear();
+        if (lines != null) {
+            lines.forEach(this::addLine);
+        }
+    }
+
+    /** Keeps both sides of the relationship in step, which orphanRemoval relies on. */
+    public void addLine(RemittanceChangeRequestLine line) {
+        line.setRequest(this);
+        this.lines.add(line);
+    }
 
     /** @deprecated flattened total; replaced by per-account line items. */
     @Deprecated

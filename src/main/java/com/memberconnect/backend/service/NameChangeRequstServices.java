@@ -96,6 +96,12 @@ public class NameChangeRequstServices {
         snapshotCurrentValues(entity);
 
         NameChangeRequest saved = nameChangeRequestRepo.save(entity);
+        auditService.recordRequestCreated(
+                AuditService.MODULE_NAME_CHANGE,
+                saved.getMemberId(),
+                saved.getRequestNo(),
+                saved.getStatus()
+        );
         return toDtoWithMemberDetails(saved);
     }
 
@@ -121,7 +127,14 @@ public class NameChangeRequstServices {
         snapshotCurrentValues(entity);
         handleFileUpload(entity, file);
 
-        return toDtoWithMemberDetails(nameChangeRequestRepo.save(entity));
+        NameChangeRequest saved = nameChangeRequestRepo.save(entity);
+        auditService.recordRequestCreated(
+                AuditService.MODULE_NAME_CHANGE,
+                saved.getMemberId(),
+                saved.getRequestNo(),
+                saved.getStatus()
+        );
+        return toDtoWithMemberDetails(saved);
     }
 
     /**

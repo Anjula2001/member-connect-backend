@@ -51,6 +51,29 @@ public class AuditService {
     public static final String MODULE_NOMINEE_CHANGE = "PROFILE_CHANGE_NOMINEE";
     public static final String MODULE_REMITTANCE_CHANGE = "PROFILE_CHANGE_REMITTANCE";
 
+    /** The four profile-change modules, as one list for history queries. */
+    public static final List<String> PROFILE_CHANGE_MODULES = List.of(
+            MODULE_BASIC_PROFILE_CHANGE,
+            MODULE_NAME_CHANGE,
+            MODULE_NOMINEE_CHANGE,
+            MODULE_REMITTANCE_CHANGE
+    );
+
+    /** Human label per module, used in the Progress timeline's entry titles. */
+    public static String labelFor(String moduleName) {
+        if (moduleName == null) {
+            return "Record";
+        }
+        return switch (moduleName) {
+            case MODULE_BASIC_PROFILE_CHANGE -> "Basic Profile Change Request";
+            case MODULE_NAME_CHANGE -> "Name Change Request";
+            case MODULE_NOMINEE_CHANGE -> "Nominee Change Request";
+            case MODULE_REMITTANCE_CHANGE -> "Remittance Change Request";
+            case MODULE_APPLICATION -> "Application";
+            default -> "Member";
+        };
+    }
+
     private final AuditRepository auditRepository;
     private final MemberRepository memberRepository;
     private final ObjectMapper objectMapper;
@@ -91,7 +114,7 @@ public class AuditService {
             Audit audit = new Audit();
             audit.setModuleName(moduleName);
             audit.setReferenceId(referenceId);
-            audit.setActionName(actionName);
+            audit.setActionName(decorateAction(moduleName, actionName));
             audit.setOldValue(oldValue);
             audit.setNewValue(newValue);
             audit.setRemarks(remarks);
@@ -125,14 +148,51 @@ public class AuditService {
     ) {
         Long memberDbId = resolveMemberDbId(memberId);
 
-        recordValues(
+        // Plain status names, not a serialised map: the Progress timeline renders
+        // oldValue and newValue directly as "FROM -> TO", so a JSON blob would show up
+        // verbatim in the UI.
+        record(
                 moduleName,
                 memberDbId,
-                "STATUS_CHANGED",
-                Map.of("status", from == null ? "" : from.name()),
-                Map.of("status", to == null ? "" : to.name()),
-                "Request " + (requestNo == null ? "(no request number)" : requestNo)
+                labelFor(moduleName) + (to == null ? " Deleted" : " " + humanStatus(to)),
+                from == null ? null : from.name(),
+                to == null ? null : to.name(),
+                describe(requestNo, to)
         );
+    }
+
+    /**
+     * Records a request being raised, so the Progress timeline shows when it was
+     * created and by whom - not only what happened to it afterwards.
+     */
+    public void recordRequestCreated(
+            String moduleName,
+            String memberId,
+            String requestNo,
+            ApplicationStatus status
+    ) {
+        record(
+                moduleName,
+                resolveMemberDbId(memberId),
+                labelFor(moduleName) + " Created",
+                null,
+                status == null ? null : status.name(),
+                describe(requestNo, status)
+        );
+    }
+
+    /** "NCR-2026-004 · Submitted for approval" - the request id and its status. */
+    private String describe(String requestNo, ApplicationStatus status) {
+        String id = requestNo == null || requestNo.isBlank() ? "(no request number)" : requestNo;
+        return status == null ? id : id + " · " + humanStatus(status);
+    }
+
+    private String humanStatus(ApplicationStatus status) {
+        if (status == null) {
+            return "";
+        }
+        String words = status.name().toLowerCase().replace('_', ' ');
+        return Character.toUpperCase(words.charAt(0)) + words.substring(1);
     }
 
     /**
@@ -153,7 +213,51 @@ public class AuditService {
             Map<String, Object> newValues,
             String remarks
     ) {
-        record(moduleName, memberDbId, actionName, toJson(oldValues), toJson(newValues), remarks);
+        // Readable pairs, not JSON: the Progress timeline prints oldValue and newValue
+        // verbatim, so a serialised map surfaced as {"fullName":"..."} on screen.
+        record(moduleName, memberDbId, actionName, humanValues(oldValues), humanValues(newValues), remarks);
+    }
+
+    /** {fullName=A, title=B} becomes "Full Name: A, Title: B". */
+    private String humanValues(Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        StringBuilder out = new StringBuilder();
+        values.forEach((key, value) -> {
+            if (out.length() > 0) {
+                out.append(", ");
+            }
+            out.append(humanFieldName(key))
+               .append(": ")
+               .append(value == null || String.valueOf(value).isBlank() ? "(empty)" : value);
+        });
+        return out.toString();
+    }
+
+    /** camelCase field names as the screens show them: "nameAsInPayroll" -> "Name As In Payroll". */
+    private String humanFieldName(String field) {
+        if (field == null || field.isBlank()) {
+            return "";
+        }
+        String spaced = field.replaceAll("([a-z])([A-Z])", "$1 $2").replace('_', ' ');
+        return Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
+    }
+
+    /**
+     * Titles a profile-change entry with the request type, so "APPROVED" reads as
+     * "Name Change Request Approved" on a timeline that mixes several record types.
+     * Entries that already carry a phrase, and the member/application modules, are
+     * left as their callers wrote them.
+     */
+    private String decorateAction(String moduleName, String actionName) {
+        if (actionName == null || actionName.isBlank()
+                || actionName.contains(" ")
+                || !PROFILE_CHANGE_MODULES.contains(moduleName)) {
+            return actionName;
+        }
+        String word = actionName.toLowerCase().replace('_', ' ');
+        return labelFor(moduleName) + " " + Character.toUpperCase(word.charAt(0)) + word.substring(1);
     }
 
     /**
@@ -185,7 +289,14 @@ public class AuditService {
      * spec requires the application's creation and updates to appear here too.
      */
     public List<AuditDTO> getMemberHistory(Long memberId, Long applicationId) {
-        List<String> modules = new ArrayList<>(List.of(MODULE_MEMBER));
+        // The profile-change modules record against the member's own id, so they belong
+        // on this timeline. They were being written but never shown: the module filter
+        // listed only MEMBER and MEMBER_APPLICATION, so every Basic Profile, Name,
+        // Nominee and Remittance entry was dropped on the way out.
+        List<String> memberScoped = new ArrayList<>(List.of(MODULE_MEMBER));
+        memberScoped.addAll(PROFILE_CHANGE_MODULES);
+
+        List<String> modules = new ArrayList<>(memberScoped);
         List<Long> refs = new ArrayList<>(List.of(memberId));
         if (applicationId != null) {
             modules.add(MODULE_APPLICATION);
@@ -194,7 +305,7 @@ public class AuditService {
         // Both lists are matched independently, so filter out cross-matches
         // (an application id that happens to equal a member id).
         return auditRepository.findByModuleNameInAndReferenceIdInOrderByActionAtAsc(modules, refs).stream()
-                .filter(a -> (MODULE_MEMBER.equals(a.getModuleName()) && a.getReferenceId().equals(memberId))
+                .filter(a -> (memberScoped.contains(a.getModuleName()) && a.getReferenceId().equals(memberId))
                         || (MODULE_APPLICATION.equals(a.getModuleName())
                             && applicationId != null && a.getReferenceId().equals(applicationId)))
                 .map(this::toDto)

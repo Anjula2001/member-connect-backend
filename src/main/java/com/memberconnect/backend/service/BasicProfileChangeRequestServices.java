@@ -89,7 +89,13 @@ public class BasicProfileChangeRequestServices {
     public String saveBasicProfileChangeRequest(BasicProfileChangeRequestDTO basicProfileChangeRequestDTO){
         BasicProfileChangeRequest entity = modelMapper.map(basicProfileChangeRequestDTO, BasicProfileChangeRequest.class);
         stampOnSubmit(entity);
-        basicProfileChangeRequestRepo.save(entity);
+        BasicProfileChangeRequest saved = basicProfileChangeRequestRepo.save(entity);
+        auditService.recordRequestCreated(
+                AuditService.MODULE_BASIC_PROFILE_CHANGE,
+                saved.getMemberId(),
+                saved.getRequestNo(),
+                saved.getStatus()
+        );
         return "success";
     }
 
@@ -97,7 +103,13 @@ public class BasicProfileChangeRequestServices {
         BasicProfileChangeRequest entity = modelMapper.map(dto, BasicProfileChangeRequest.class);
         stampOnSubmit(entity);
         handleFileUpload(entity, file);
-        basicProfileChangeRequestRepo.save(entity);
+        BasicProfileChangeRequest saved = basicProfileChangeRequestRepo.save(entity);
+        auditService.recordRequestCreated(
+                AuditService.MODULE_BASIC_PROFILE_CHANGE,
+                saved.getMemberId(),
+                saved.getRequestNo(),
+                saved.getStatus()
+        );
         return "success";
     }
 

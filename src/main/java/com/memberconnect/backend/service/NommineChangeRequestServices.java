@@ -95,6 +95,12 @@ public class NommineChangeRequestServices {
         snapshotCurrentValues(entity);
 
         NommineChangeRequests saved = nominneChangeRequestRepo.save(entity);
+        auditService.recordRequestCreated(
+                AuditService.MODULE_NOMINEE_CHANGE,
+                saved.getMemberId(),
+                saved.getRequestNo(),
+                saved.getStatus()
+        );
         return toDtoWithMemberDetails(saved);
     }
 
@@ -121,7 +127,14 @@ public class NommineChangeRequestServices {
         snapshotCurrentValues(entity);
         handleFileUpload(entity, file);
 
-        return toDtoWithMemberDetails(nominneChangeRequestRepo.save(entity));
+        NommineChangeRequests saved = nominneChangeRequestRepo.save(entity);
+        auditService.recordRequestCreated(
+                AuditService.MODULE_NOMINEE_CHANGE,
+                saved.getMemberId(),
+                saved.getRequestNo(),
+                saved.getStatus()
+        );
+        return toDtoWithMemberDetails(saved);
     }
 
     /**
