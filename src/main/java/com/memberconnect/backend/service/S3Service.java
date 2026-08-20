@@ -17,7 +17,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Year;
+import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Service
 public class S3Service {
@@ -32,8 +35,77 @@ public class S3Service {
 
     private static final String FALLBACK_DIR = "uploads";
 
+    /** Anything outside this set is replaced with '-' when building a key segment. */
+    private static final Pattern UNSAFE = Pattern.compile("[^a-z0-9.]+");
+
+    /**
+     * Builds a bucket folder path from the caller's context, e.g.
+     * {@code folder("death-donations", requestNo, documentType)} produces
+     * {@code death-donations/2026/ddr-2026-007/death-certificate}.
+     *
+     * The year is inserted after the module so that no single prefix grows without
+     * bound and whole years can be archived or lifecycle-ruled as a unit. Null and
+     * blank segments are dropped rather than producing empty path components.
+     */
+    public static String folder(String module, String... segments) {
+        StringBuilder path = new StringBuilder(slug(module));
+        path.append('/').append(Year.now().getValue());
+        for (String segment : segments) {
+            String cleaned = slug(segment);
+            if (!cleaned.isEmpty()) {
+                path.append('/').append(cleaned);
+            }
+        }
+        return path.toString();
+    }
+
+    /** Lowercases and strips anything that would be awkward or unsafe in a key. */
+    private static String slug(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String cleaned = UNSAFE.matcher(value.toLowerCase(Locale.ROOT)).replaceAll("-");
+        // A run of dots must never survive: "..' would climb a directory level.
+        cleaned = cleaned.replaceAll("\\.{2,}", ".");
+        cleaned = cleaned.replaceAll("-{2,}", "-").replaceAll("^[-.]+|[-.]+$", "");
+        return cleaned;
+    }
+
+    /**
+     * Strips any directory part a client may have sent. Browsers normally send a bare
+     * name, but the multipart filename is attacker-controlled and previously went into
+     * the key unescaped, so a name like "../../secret.pdf" would have shifted the
+     * object outside its intended prefix.
+     */
+    private static String safeFileName(String originalFilename) {
+        if (originalFilename == null || originalFilename.isBlank()) {
+            return "file";
+        }
+        String base = originalFilename.replace('\\', '/');
+        base = base.substring(base.lastIndexOf('/') + 1);
+        String cleaned = slug(base);
+        return cleaned.isEmpty() ? "file" : cleaned;
+    }
+
+    /**
+     * Uploads with no context. Kept so that any caller not yet passing a folder still
+     * compiles and still works — those objects land under {@code misc/<year>/} rather
+     * than at the bucket root.
+     */
     public String uploadFile(MultipartFile file) throws IOException {
-        String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+        return uploadFile(file, folder("misc"));
+    }
+
+    /**
+     * Uploads into a folder, returning the full S3 key to store on the owning record.
+     *
+     * Keys created before this existed are flat ({@code <uuid>_<name>}) and are left
+     * alone: download and delete pass the stored key through verbatim, so old and new
+     * layouts coexist without a migration.
+     */
+    public String uploadFile(MultipartFile file, String prefix) throws IOException {
+        String cleanPrefix = (prefix == null || prefix.isBlank()) ? folder("misc") : prefix;
+        String fileName = cleanPrefix + "/" + UUID.randomUUID() + "_" + safeFileName(file.getOriginalFilename());
 
         try {
             if (s3Client != null) {
@@ -56,11 +128,10 @@ public class S3Service {
 
         // Fallback: Save file locally if S3 is unavailable or credentials missing
         try {
-            Path uploadPath = Paths.get(FALLBACK_DIR);
-            if (!Files.exists(uploadPath)) {
-                Files.createDirectories(uploadPath);
-            }
-            Path filePath = uploadPath.resolve(fileName);
+            // fileName now contains '/' separators, so create the parent chain rather
+            // than just the root upload directory.
+            Path filePath = Paths.get(FALLBACK_DIR).resolve(fileName);
+            Files.createDirectories(filePath.getParent());
             Files.write(filePath, file.getBytes());
             logger.info("Saved file locally as fallback: {}", filePath);
         } catch (Exception ex) {

@@ -1,6 +1,7 @@
 package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.AuditDTO;
+import org.springframework.data.domain.PageRequest;
 import com.memberconnect.backend.model.Audit;
 import com.memberconnect.backend.model.User;
 import com.memberconnect.backend.repository.AuditRepository;
@@ -59,6 +60,23 @@ public class AuditService {
         } catch (Exception error) {
             System.err.println("[audit] failed to record " + actionName + ": " + error.getMessage());
         }
+    }
+
+    /**
+     * The most recent audit entries system-wide, newest first.
+     *
+     * Backs the dashboard's Recent Activity card, which previously listed the newest
+     * member applications and called them "actions across the system". The audit table
+     * is the only place that actually records actions from every module.
+     *
+     * @param limit how many entries to return; clamped to 1..50 so a caller cannot ask
+     *              for the whole table.
+     */
+    public List<AuditDTO> getRecentActivity(int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 50));
+        return auditRepository
+                .findAllByOrderByActionAtDesc(PageRequest.of(0, safeLimit))
+                .stream().map(this::toDto).toList();
     }
 
     /** History for an application on its own (the Application Progress tab). */

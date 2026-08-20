@@ -253,7 +253,8 @@ public class DeathDonationService {
             documentRepository.delete(existingDocument);
         }
 
-        String fileKey = s3Service.uploadFile(file);
+        String fileKey = s3Service.uploadFile(file, S3Service.folder(
+                "death-donations", request.getRequestNo(), normalizedDocumentType));
 
         DeathDonationDocument document = new DeathDonationDocument();
         document.setRequest(request);
