@@ -46,13 +46,16 @@ public class AuditController {
 
     /**
      * A member's history includes the application it was created from, so the
-     * originating application id is resolved here rather than by the caller.
+     * originating application id is resolved here rather than by the caller. The
+     * membership number goes along with it because termination, member death and
+     * death donation entries are filed against their own request ids, which the
+     * service resolves from that number.
      */
     @GetMapping("/member/{memberId}")
     public List<AuditDTO> getMemberHistory(@PathVariable Long memberId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
         Long applicationId = member.getApplication() == null ? null : member.getApplication().getId();
-        return auditService.getMemberHistory(memberId, applicationId);
+        return auditService.getMemberHistory(memberId, member.getMemberId(), applicationId);
     }
 }
