@@ -249,15 +249,8 @@ public class TerminationService {
 
         LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
         LocalDate effectiveDate = LocalDate.parse(dto.getEffectiveDate());
-        LocalDate today = LocalDate.now();
 
-        if (requestedDate.isAfter(today)) {
-            throw new RuntimeException("Requested Date cannot be a future date");
-        }
-
-        if (effectiveDate.isAfter(today)) {
-            throw new RuntimeException("Effective Date cannot be a future date");
-        }
+        validateRequestDates(requestedDate, effectiveDate);
 
         TerminationRequest existingRequest = requestRepository
                 .findByMemberId(memberId)
@@ -382,15 +375,8 @@ public class TerminationService {
 
         LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
         LocalDate effectiveDate = LocalDate.parse(dto.getEffectiveDate());
-        LocalDate today = LocalDate.now();
 
-        if (requestedDate.isAfter(today)) {
-            throw new RuntimeException("Requested Date cannot be a future date");
-        }
-
-        if (effectiveDate.isAfter(today)) {
-            throw new RuntimeException("Effective Date cannot be a future date");
-        }
+        validateRequestDates(requestedDate, effectiveDate);
 
         String beforeSnapshot = describeRequest(request);
 
@@ -1185,6 +1171,38 @@ public class TerminationService {
 
         if (dto.getEffectiveDate() == null || dto.getEffectiveDate().isBlank()) {
             throw new RuntimeException("Effective Date is required");
+        }
+    }
+
+    /**
+     * The date rules MMT01 puts on a termination request, in one place because
+     * saveRequest and updateRequest both apply them and had drifted into two
+     * identical copies.
+     *
+     * Effective Date is bounded on both sides: it cannot precede the request that
+     * raised it, and it cannot run ahead of today. The lower bound is checked
+     * against the Requested Date rather than a constant, so a back-dated request
+     * still gets a window it can legitimately take effect in.
+     *
+     * The two Effective Date failures carry different messages rather than one
+     * combined "invalid date": the user has crossed one bound or the other, and
+     * being told which is the difference between correcting it and guessing.
+     */
+    private void validateRequestDates(LocalDate requestedDate, LocalDate effectiveDate) {
+        LocalDate today = LocalDate.now();
+
+        if (requestedDate.isAfter(today)) {
+            throw new RuntimeException("Requested Date cannot be a future date");
+        }
+
+        // Future bound first: a user who gets both wrong is told about the
+        // future date, which is the more obvious of the two to correct.
+        if (effectiveDate.isAfter(today)) {
+            throw new RuntimeException("Effective Date cannot be a future date");
+        }
+
+        if (effectiveDate.isBefore(requestedDate)) {
+            throw new RuntimeException("Effective Date cannot be before the Requested Date");
         }
     }
 
