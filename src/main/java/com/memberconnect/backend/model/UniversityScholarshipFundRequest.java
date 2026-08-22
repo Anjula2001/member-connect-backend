@@ -4,6 +4,7 @@ import com.memberconnect.backend.enums.UniversityScholarshipFundRequestStatus;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "University_Scholarship_Fund_Request")
@@ -42,6 +43,20 @@ public class UniversityScholarshipFundRequest {
 
     @Column(name = "DecisionReason")
     private String decisionReason;
+
+    /**
+     * MMS48 — when this approved fund request was handed to the Finance Module.
+     *
+     * Null means not yet handed over. Stored rather than kept in the browser so the
+     * hand-over survives a reload and cannot be repeated: a disbursement must not be
+     * sent to Finance twice because someone refreshed the page.
+     */
+    @Column(name = "FinanceIntegratedAt")
+    private LocalDateTime financeIntegratedAt;
+
+    /** Username that performed the hand-over, for the audit trail. */
+    @Column(name = "FinanceIntegratedBy")
+    private String financeIntegratedBy;
 
     public Long getId() {
         return id;
@@ -125,5 +140,21 @@ public class UniversityScholarshipFundRequest {
 
     public void setDecisionReason(String decisionReason) {
         this.decisionReason = decisionReason;
+    }
+
+    public LocalDateTime getFinanceIntegratedAt() {
+        return financeIntegratedAt;
+    }
+
+    public void setFinanceIntegratedAt(LocalDateTime financeIntegratedAt) {
+        this.financeIntegratedAt = financeIntegratedAt;
+    }
+
+    public String getFinanceIntegratedBy() {
+        return financeIntegratedBy;
+    }
+
+    public void setFinanceIntegratedBy(String financeIntegratedBy) {
+        this.financeIntegratedBy = financeIntegratedBy;
     }
 }

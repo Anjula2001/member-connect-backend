@@ -1,10 +1,13 @@
 package com.memberconnect.backend.exception;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -39,6 +42,32 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(ex.getStatusCode())
                 .body(Map.of("message", message));
+    }
+
+    /**
+     * Bean validation on an @Valid @RequestBody failed.
+     *
+     * MethodArgumentNotValidException is a checked Exception, so without this handler it
+     * fell through to the catch-all below and came back as 500 Internal Server Error
+     * carrying Spring's raw binding dump — which reads to the client as "the server is
+     * broken" rather than "this field is wrong", and put no usable message on the field.
+     * Return 400 with the first message per field instead.
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        for (FieldError error : ex.getBindingResult().getFieldErrors()) {
+            // First message wins: a field with several failed constraints should not
+            // overwrite the most specific message with a later, vaguer one.
+            fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage());
+        }
+
+        return ResponseEntity
+                .badRequest()
+                .body(Map.of(
+                        "message", "Please correct the highlighted fields.",
+                        "errors", fieldErrors
+                ));
     }
 
     @ExceptionHandler(RuntimeException.class)

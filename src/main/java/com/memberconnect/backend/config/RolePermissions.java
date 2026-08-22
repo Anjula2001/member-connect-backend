@@ -10,24 +10,25 @@ import com.memberconnect.backend.enums.Permission;
 import com.memberconnect.backend.enums.Role;
 
 /**
- * The Grade 5 Scholarship and Member Retirement role/permission matrix — the single
- * place that decides which role holds which right.
+ * The Grade 5 Scholarship role/permission matrix — the single place that decides
+ * which role holds which right.
  *
  * Segregation of duties is the point: District Office raises requests, Head Office
- * approves them. The SRS actor tables for MMS06/MMS13 name "District Office System
- * User" as the approver, but every child function underneath them (MMS07-MMS12,
- * MMS14-MMS19) and the 2.2.1 process narrative put approval at Head Office. That
- * conflict was resolved in favour of Head Office: letting the office that creates a
- * request also approve it defeats the Board Meeting control the SRS is built around.
+ * approves them. Both SRS sections name "District Office System User" as the approver
+ * in their parent Approve/Reject function (MMS06/MMS13, MMS27/MMS34), but every child
+ * function underneath them and both process narratives put approval at Head Office.
+ * Those actor cells are copy-paste artefacts and were resolved in favour of Head
+ * Office: an office that approves its own requests defeats the Board Meeting control
+ * both modules are built around.
  *
- * Retirement carries the identical conflict — its MMT16 actor table names "District
- * Office System User" while 3.1.1 says "the Authorized User from the District Office"
- * — but is resolved the other way: both readings put the approver at the District
- * Office, so DISTRICT_OFFICE holds RET_REQUEST_APPROVE. HEAD_OFFICE keeps it as well,
- * so a retirement request can still be approved centrally.
+ * University Scholarships adds a second separation the Grade 5 flow does not have.
+ * MMS26 puts a Committee between submission and the Board. The SRS seats that
+ * Committee at Head Office, but Head Office also runs the Board step — so holding
+ * both would collapse two gates into one signature. US_COMMITTEE_APPROVE is therefore
+ * given to SCHOLARSHIP_OFFICER and withheld from the Board roles.
  *
- * Roles absent from this map (DEATH_DONATION_OFFICER) hold no rights at all, rather
- * than falling through to a permissive default.
+ * Roles absent from this map (DEATH_DONATION_OFFICER) hold no Grade 5 rights at all,
+ * rather than falling through to a permissive default.
  */
 public final class RolePermissions {
 
@@ -54,7 +55,7 @@ public final class RolePermissions {
                 Permission.G5_REQUEST_SUBMIT,
                 Permission.G5_REQUEST_INCOMPLETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-
+                // Retirement (MMT12-MMT16): raised, maintained and approved here.
                 Permission.RET_REQUEST_VIEW,
                 Permission.RET_REQUEST_CREATE,
                 Permission.RET_REQUEST_EDIT,
@@ -62,7 +63,14 @@ public final class RolePermissions {
                 Permission.RET_REQUEST_INCOMPLETE,
                 Permission.RET_REQUEST_APPROVE,
                 Permission.RET_REQUEST_RETURN_TO_NEW,
-                Permission.RET_REQUEST_SET_INACTIVE));
+                Permission.RET_REQUEST_SET_INACTIVE,
+                // University (MMS21-MMS25): raises and maintains requests only.
+                Permission.US_REQUEST_VIEW,
+                Permission.US_REQUEST_CREATE,
+                Permission.US_REQUEST_EDIT,
+                Permission.US_REQUEST_SUBMIT,
+                Permission.US_REQUEST_INCOMPLETE,
+                Permission.US_MASTER_VIEW));
 
         // Head Office — MMS06-MMS19 and MMT16. Owns both approval tracks end to end.
         // Deliberately holds no RET_REQUEST_CREATE: retirement requests are raised at the
@@ -78,11 +86,31 @@ public final class RolePermissions {
                 Permission.G5_LIST_PROCESS,
                 Permission.G5_LIST_DELETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-
+                // Retirement: approves, but never creates (see above).
                 Permission.RET_REQUEST_VIEW,
                 Permission.RET_REQUEST_APPROVE,
                 Permission.RET_REQUEST_SET_INACTIVE,
-                Permission.RET_REQUEST_RETURN_TO_NEW));
+                Permission.RET_REQUEST_RETURN_TO_NEW,
+                // University: the Board half plus fund requests (MMS27-MMS48).
+                Permission.US_REQUEST_VIEW,
+                Permission.US_REQUEST_SET_INACTIVE,
+                Permission.US_REQUEST_REOPEN,
+                Permission.US_LIST_VIEW,
+                Permission.US_LIST_CREATE,
+                Permission.US_LIST_PRINT,
+                Permission.US_LIST_PROCESS,
+                Permission.US_LIST_DELETE,
+                Permission.US_APPROVED_EDIT,
+                Permission.US_FUND_VIEW,
+                Permission.US_FUND_CREATE,
+                Permission.US_FUND_EDIT,
+                Permission.US_FUND_SUBMIT,
+                Permission.US_FUND_INCOMPLETE,
+                Permission.US_FUND_APPROVE,
+                Permission.US_FUND_SET_INACTIVE,
+                Permission.US_FUND_REOPEN,
+                Permission.US_FINANCE_DISBURSE,
+                Permission.US_MASTER_VIEW));
 
         // Board Secretary — the same Grade 5 approval track, plus delete privileges.
         // Mirrors DELETE_RIGHTS_ROLES in the frontend's Member Registration matrix so the
@@ -102,14 +130,40 @@ public final class RolePermissions {
                 Permission.G5_LIST_PROCESS,
                 Permission.G5_LIST_DELETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-
+                // Retirement: housekeeping only, no RET_REQUEST_APPROVE (see above).
                 Permission.RET_REQUEST_VIEW,
                 Permission.RET_REQUEST_SET_INACTIVE,
-                Permission.RET_REQUEST_RETURN_TO_NEW));
+                Permission.RET_REQUEST_RETURN_TO_NEW,
+                // University: same Board track, minus US_FINANCE_DISBURSE.
+                Permission.US_REQUEST_VIEW,
+                Permission.US_REQUEST_SET_INACTIVE,
+                Permission.US_REQUEST_REOPEN,
+                Permission.US_LIST_VIEW,
+                Permission.US_LIST_CREATE,
+                Permission.US_LIST_PRINT,
+                Permission.US_LIST_PROCESS,
+                Permission.US_LIST_DELETE,
+                Permission.US_APPROVED_EDIT,
+                Permission.US_FUND_VIEW,
+                Permission.US_FUND_CREATE,
+                Permission.US_FUND_EDIT,
+                Permission.US_FUND_SUBMIT,
+                Permission.US_FUND_INCOMPLETE,
+                Permission.US_FUND_APPROVE,
+                Permission.US_FUND_SET_INACTIVE,
+                Permission.US_FUND_REOPEN,
+                Permission.US_MASTER_VIEW));
 
         // Scholarship Officer — not named as an actor anywhere in the SRS, but it is the
         // only role whose name fits ownership of the Exam Master (exam dates and district
-        // cut-off marks). Given request-entry rights too so the role is usable on its own.
+        // cut-off marks), and it is the seat chosen for the University Scholarship
+        // Committee (MMS26).
+        //
+        // Note the asymmetry between the two modules, which is deliberate. On Grade 5
+        // this role may raise requests, because Grade 5 has no committee step for it to
+        // then approve. On University it may NOT raise, edit or submit requests: holding
+        // both US_REQUEST_CREATE and US_COMMITTEE_APPROVE would let one person create a
+        // request and then clear the very gate that exists to scrutinise it.
         MATRIX.put(Role.SCHOLARSHIP_OFFICER, EnumSet.of(
                 Permission.G5_REQUEST_VIEW,
                 Permission.G5_REQUEST_CREATE,
@@ -118,7 +172,14 @@ public final class RolePermissions {
                 Permission.G5_REQUEST_INCOMPLETE,
                 Permission.G5_LIST_VIEW,
                 Permission.G5_EXAM_MASTER_VIEW,
-                Permission.G5_EXAM_MASTER_MANAGE));
+                Permission.G5_EXAM_MASTER_MANAGE,
+                // University: Committee only, plus the masters it owns.
+                Permission.US_REQUEST_VIEW,
+                Permission.US_COMMITTEE_APPROVE,
+                Permission.US_LIST_VIEW,
+                Permission.US_FUND_VIEW,
+                Permission.US_MASTER_VIEW,
+                Permission.US_MASTER_MANAGE));
 
         // Accounts — "Head Office - Finance Department" in 2.2.1 and in the retirement
         // 3.1.1 narrative. Read-only on the scholarship side; owns disbursement once
@@ -129,8 +190,11 @@ public final class RolePermissions {
                 Permission.G5_REQUEST_VIEW,
                 Permission.G5_LIST_VIEW,
                 Permission.G5_FINANCE_DISBURSE,
-
-                Permission.RET_REQUEST_VIEW));
+                Permission.RET_REQUEST_VIEW,
+                Permission.US_REQUEST_VIEW,
+                Permission.US_LIST_VIEW,
+                Permission.US_FUND_VIEW,
+                Permission.US_FINANCE_DISBURSE));
 
         // SCHOLARSHIP_OFFICER holds no retirement rights — it is not an actor in MMT12-MMT17.
         // DEATH_DONATION_OFFICER is intentionally absent — no Grade 5 or retirement rights.

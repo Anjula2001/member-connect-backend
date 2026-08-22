@@ -1,7 +1,11 @@
 package com.memberconnect.backend.model;
 
 import jakarta.persistence.Column;
+import com.memberconnect.backend.enums.TerminationApprovalListStatus;
+
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -45,8 +49,9 @@ public class TerminationApprovalList {
     )
     private List<TerminationRequest> requests = new ArrayList<>();
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status")
-    private String status;
+    private TerminationApprovalListStatus status;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -68,4 +73,11 @@ public class TerminationApprovalList {
 
     @Column(name = "board_remarks", length = 2000)
     private String boardRemarks;
+
+    /**
+     * URL of the scanned, board-signed "Termination Request List for Board
+     * Approval" sheet, attached when the list is processed (MMT09).
+     */
+    @Column(name = "approved_list_document", length = 1000)
+    private String approvedListDocument;
 }

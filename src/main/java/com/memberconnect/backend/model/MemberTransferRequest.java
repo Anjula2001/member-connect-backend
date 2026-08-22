@@ -64,6 +64,34 @@ public class MemberTransferRequest {
     @JoinColumn(name = "nature_of_occupation_id")
     private NatureOfOccupation newNatureOfOccupation;
 
+    // Snapshot of member's current values at the time of request creation
+    @Column(name = "current_designation")
+    private String currentDesignation;
+
+    @Column(name = "current_nature_of_occupation")
+    private String currentNatureOfOccupation;
+
+    @Column(name = "current_working_location_type")
+    private String currentWorkingLocationType;
+
+    @Column(name = "current_educational_district")
+    private String currentEducationalDistrict;
+
+    @Column(name = "current_educational_zone")
+    private String currentEducationalZone;
+
+    @Column(name = "current_working_location")
+    private String currentWorkingLocation;
+
+    @Column(name = "current_working_location_address")
+    private String currentWorkingLocationAddress;
+
+    @Column(name = "current_computer_no_in_payslip")
+    private String currentComputerNoInPayslip;
+
+    @Column(name = "current_salary_paying_office")
+    private String currentSalaryPayingOffice;
+
     @Column(name = "decision_reason")
     private String decisionReason;
 

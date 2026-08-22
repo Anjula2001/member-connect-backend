@@ -1,5 +1,6 @@
 package com.memberconnect.backend.service;
 
+import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.ProgramOptionDto;
 import com.memberconnect.backend.dto.UniversityScholarshipFundRequestDto;
 import com.memberconnect.backend.dto.UniversityScholarshipRequestDto;
@@ -25,6 +26,7 @@ import com.memberconnect.backend.repository.UniversityRepository;
 import com.memberconnect.backend.repository.UniversityScholarshipExamMasterRepository;
 import com.memberconnect.backend.repository.UniversityScholarshipFundRequestRepository;
 import com.memberconnect.backend.repository.UniversityScholarshipRequestRepository;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.repository.MemberRepository;
@@ -40,6 +42,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -67,11 +70,17 @@ public class UniversityScholarshipService {
     @Autowired
     private S3Service s3Service;
 
+    @Autowired
+    private com.memberconnect.backend.config.CurrentUserService currentUserService;
+
     @Value("${scholarship.required.remitted.months}")
     private int requiredRemittedMonths;
 
     @Value("${scholarship.lookback.years}")
     private int lookbackYears;
+
+    @Value("${scholarship.finance.validation.source:member}")
+    private String financeValidationSource;
 
     @Value("${university.scholarship.minor.required.amount:500}")
     private int minorRequiredAmount;
@@ -234,6 +243,32 @@ public class UniversityScholarshipService {
             currentMonth = currentMonth.plusMonths(1);
         }
     }
+    
+    //temporary check
+    private void validateMemberFinanceEligibility(Member member) {
+
+        if (!member.isRemittance()) {
+            throw new RuntimeException(
+                    "Scholarship amount was not continuously remitted from the Member for the specified period"
+            );
+        }
+
+        if (!member.isSettlement()) {
+            throw new RuntimeException(
+                    "The Scholarship Amounts were not settled for some months"
+            );
+        }
+    }
+
+    private void validateFinanceEligibility(UniversityScholarshipRequestDto dto, Member member) {
+        if ("finance".equalsIgnoreCase(financeValidationSource)) {
+            validateScholarshipRemittanceMonths(dto);
+            validateRemainingMonthsSettled(dto);
+            return;
+        }
+
+        validateMemberFinanceEligibility(member);
+    }
 
     // Validate that no other scholarship was approved for the member within a year from the exam last date
     private void validateAnotherApprovedScholarshipWithinYear(UniversityScholarshipRequestDto dto) {
@@ -267,8 +302,17 @@ public class UniversityScholarshipService {
 
     // Get all scholarship requests with member and university details
     public List<UniversityScholarshipListDto> getAllScholarshipRequests() {
+        CurrentUserService.LocationScope locationScope =
+                currentUserService.resolveLocationScope(null);
+
+        if (locationScope.showsNothing()) {
+            return List.of();
+        }
+
         return scholarshipRequestRepository.findAll()
                 .stream()
+                .filter(request -> currentUserService.matchesScope(
+                        locationScope, request.getSubmissionLocation()))
                 .map(this::toListDto)
                 .toList();
     }
@@ -278,6 +322,13 @@ public class UniversityScholarshipService {
         UniversityScholarshipRequest request = scholarshipRequestRepository
                 .findByUniversityScholarshipRequestID(requestId)
                 .orElseThrow(() -> new RuntimeException("Scholarship request not found"));
+
+        CurrentUserService.LocationScope locationScope =
+                currentUserService.resolveLocationScope(null);
+        if (locationScope.showsNothing()
+                || !currentUserService.matchesScope(locationScope, request.getSubmissionLocation())) {
+            throw new AccessDeniedException("This scholarship request belongs to another District Office");
+        }
 
         return toListDto(request);
     }
@@ -330,6 +381,7 @@ public class UniversityScholarshipService {
         dto.setAvailablePeriod(calculateAvailablePeriod(request, null));
         dto.setFundRequests(fundRequests.stream().map(this::toFundRequestDto).toList());
         dto.setTotalUniversityScholarships(countApprovedUniversityScholarships(request));
+        dto.setSubmissionLocation(request.getSubmissionLocation());
         return dto;
     }
 
@@ -470,7 +522,8 @@ public class UniversityScholarshipService {
 
         return 0;
     }
-
+    
+    // Save Fund Request 
     private UniversityScholarshipFundRequestDto toFundRequestDto(UniversityScholarshipFundRequest request) {
         UniversityScholarshipFundRequestDto dto = new UniversityScholarshipFundRequestDto();
         dto.setId(request.getId());
@@ -486,9 +539,37 @@ public class UniversityScholarshipService {
         dto.setStatus(request.getStatus() != null ? request.getStatus().name() : null);
         dto.setIncompleteReason(request.getIncompleteReason());
         dto.setDecisionReason(request.getDecisionReason());
+        dto.setFinanceIntegratedAt(request.getFinanceIntegratedAt());
+        dto.setFinanceIntegratedBy(request.getFinanceIntegratedBy());
         return dto;
     }
+    
+    //hand an approved fund request to the Finance Module.
+    public UniversityScholarshipFundRequestDto integrateFundRequestWithFinance(
+            String scholarshipRequestId,
+            String fundRequestId
+    ) {
+        UniversityScholarshipFundRequest fundRequest =
+                findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
 
+        if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.APPROVED) {
+            throw new RuntimeException(
+                    "Only Approved Fund Requests can be integrated with the Finance Module");
+        }
+
+        if (fundRequest.getFinanceIntegratedAt() != null) {
+            throw new RuntimeException(
+                    "This Fund Request has already been integrated with the Finance Module");
+        }
+
+        com.memberconnect.backend.model.User currentUser = currentUserService.current();
+        fundRequest.setFinanceIntegratedAt(LocalDateTime.now());
+        fundRequest.setFinanceIntegratedBy(currentUser != null ? currentUser.getUsername() : null);
+
+        return toFundRequestDto(fundRequestRepository.save(fundRequest));
+    }
+
+    //Generate Fund Request ID
     private String generateFundRequestId() {
         long nextNumber = fundRequestRepository.count() + 1;
         return String.format("USFR-%03d", nextNumber);
@@ -589,6 +670,7 @@ public class UniversityScholarshipService {
         return fundRequest;
     }
 
+    //Submit Fund Request
     public UniversityScholarshipFundRequestDto submitFundRequest(String scholarshipRequestId, String fundRequestId) {
         UniversityScholarshipFundRequest fundRequest = findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
 
@@ -601,7 +683,8 @@ public class UniversityScholarshipService {
         fundRequest.setIncompleteReason(null);
         return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
-
+ 
+    //Mark Fund Request Incomplete
     public UniversityScholarshipFundRequestDto markFundRequestIncomplete(
             String scholarshipRequestId,
             String fundRequestId,
@@ -623,6 +706,65 @@ public class UniversityScholarshipService {
         return toFundRequestDto(fundRequestRepository.save(fundRequest));
     }
 
+    //change a fund request's status from View Mode.
+    public UniversityScholarshipFundRequestDto changeFundRequestStatus(
+            String scholarshipRequestId,
+            String fundRequestId,
+            String newStatusStr
+    ) {
+        UniversityScholarshipFundRequest fundRequest =
+                findFundRequestForScholarship(scholarshipRequestId, fundRequestId);
+
+        UniversityScholarshipFundRequestStatus newStatus;
+        try {
+            newStatus = UniversityScholarshipFundRequestStatus.valueOf(
+                    newStatusStr == null ? "" : newStatusStr.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new RuntimeException("Invalid status: " + newStatusStr);
+        }
+
+        UniversityScholarshipFundRequestStatus currentStatus = fundRequest.getStatus();
+        if (currentStatus == null) {
+            throw new RuntimeException("Current fund request status is unrecognized");
+        }
+
+        if (currentStatus == newStatus) {
+            return toFundRequestDto(fundRequest);
+        }
+
+        if (!isFundStatusTransitionAllowed(currentStatus, newStatus)) {
+            throw new RuntimeException(
+                    "Cannot change status from " + currentStatus + " to " + newStatus);
+        }
+
+        fundRequest.setStatus(newStatus);
+
+        if (newStatus == UniversityScholarshipFundRequestStatus.NEW) {
+            fundRequest.setIncompleteReason(null);
+            fundRequest.setDecisionReason(null);
+        }
+
+        return toFundRequestDto(fundRequestRepository.save(fundRequest));
+    }
+
+    private boolean isFundStatusTransitionAllowed(
+            UniversityScholarshipFundRequestStatus current,
+            UniversityScholarshipFundRequestStatus next) {
+        switch (current) {
+            case NEW:
+                return next == UniversityScholarshipFundRequestStatus.INACTIVE;
+            case SUBMITTED_FOR_COMMITTEE_APPROVAL:
+            case REJECTED:
+                return next == UniversityScholarshipFundRequestStatus.NEW
+                        || next == UniversityScholarshipFundRequestStatus.INACTIVE;
+            case INACTIVE:
+                return next == UniversityScholarshipFundRequestStatus.NEW;
+            default:
+                return false;
+        }
+    }
+
+    // Update Fund Request Status
     public UniversityScholarshipFundRequestDto updateFundRequestStatus(
             String scholarshipRequestId,
             String fundRequestId,
@@ -762,8 +904,7 @@ public class UniversityScholarshipService {
 
         validateMemberActiveOnExamLastDate(dto);
         validateMembershipDuration(dto);
-        validateScholarshipRemittanceMonths(dto);
-        validateRemainingMonthsSettled(dto);
+        validateFinanceEligibility(dto, member);
         validateAnotherApprovedScholarshipWithinYear(dto);
         
 
@@ -833,15 +974,12 @@ public class UniversityScholarshipService {
         request.setBank(bank);
         request.setBranch(branch);
 
-        // followDeviationProcess flag (optional, future UI/backend control)
         boolean followDeviation = Boolean.TRUE.equals(dto.getFollowDeviationProcess());
 
-        // Determine eligibility period from ScholarshipConfig
         int eligibilityMonths = scholarshipConfigRepository.findByConfigKey("scholarship.eligibility.period.months")
                 .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue)
                 .orElse(6);
 
-        // If request date is provided and exam info is available, check eligibility window
         try {
                 UniversityScholarshipExamMaster examMaster = examMasterRepository
                         .findByExamYear(dto.getExamYear())
@@ -849,27 +987,28 @@ public class UniversityScholarshipService {
 
                 if (dto.getRequestDate() != null && examMaster != null) {
                         LocalDate examLastDate = examMaster.getExamLastDate();
-                        // Eligible window: from examLastDate to examLastDate + eligibilityMonths (default 12 = 1 year)
+                       
                         LocalDate latestAllowed = examLastDate.plusMonths(eligibilityMonths);
 
                         LocalDate reqDate = dto.getRequestDate();
-                        // Deviation if request date is before exam last date OR after the 1-year window
+                        
                         if (reqDate.isBefore(examLastDate) || reqDate.isAfter(latestAllowed)) {
                                 followDeviation = true;
                         }
                 }
         } catch (Exception ignored) {
-        // If any config or exam master lookup fails, do not block save; leave followDeviation as provided
+
         }
 
         request.setFollowDeviationProcess(followDeviation);
 
-        request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
+        request.setSubmissionLocation(member.getSubmissionLocation());
+        com.memberconnect.backend.model.User currentUser = currentUserService.current();
+        request.setCreatedBy(currentUser != null ? currentUser.getUsername() : null);
+        request.setCreatedAt(LocalDateTime.now());
 
-        // Set status NEW
         request.setStatus(UniversityScholarshipRequestStatus.NEW);
         
-        // Check minor account if hasMinorAccount is not provided
         if (dto.getHasMinorAccount() == null) {
             Map<String, Object> minorData = checkMinorAccount(dto.getBcNo());
 
@@ -893,7 +1032,7 @@ public class UniversityScholarshipService {
         request.setUniversityScholarshipRequestID(generateUniversityScholarshipRequestID());
         return scholarshipRequestRepository.save(request);
     }   
-
+    
     public UniversityScholarshipRequest updateRequestByRequestId(String requestId, UniversityScholarshipRequestDto dto) {
         UniversityScholarshipRequest request = scholarshipRequestRepository
                         .findByUniversityScholarshipRequestID(requestId)
@@ -1095,26 +1234,52 @@ public class UniversityScholarshipService {
         return scholarshipRequestRepository.save(request);
     }
 
-    // Approve request by committee and forward to appropriate board list, or approve from board list
-    public UniversityScholarshipRequest approveRequest(String requestId) {
-                 UniversityScholarshipRequest request = scholarshipRequestRepository
-                         .findByUniversityScholarshipRequestID(requestId)
-                         .orElseThrow(() -> new RuntimeException("Request not found"));
+    public UniversityScholarshipRequest committeeApproveRequest(String requestId) {
+        UniversityScholarshipRequest request = scholarshipRequestRepository
+                .findByUniversityScholarshipRequestID(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
 
-                 if (request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST ||
-                     request.getStatus() == UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST) {
-                         request.setStatus(UniversityScholarshipRequestStatus.APPROVED);
-                 } else if (request.getStatus() == UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
-                         if (Boolean.TRUE.equals(request.getFollowDeviationProcess())) {
-                                 request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL);
-                         } else {
-                                 request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_BOARD_APPROVAL);
-                         }
-                 } else {
-                         throw new RuntimeException("Only requests submitted for committee approval or added to board approval list can be approved");
-                 }
+        if (request.getStatus() != UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
+            throw new RuntimeException(
+                    "Only requests submitted for Committee Approval can be approved by the Committee");
+        }
 
-                 return scholarshipRequestRepository.save(request);
+        if (Boolean.TRUE.equals(request.getFollowDeviationProcess())) {
+            request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL);
+        } else {
+            request.setStatus(UniversityScholarshipRequestStatus.SUBMITTED_FOR_NORMAL_BOARD_APPROVAL);
+        }
+
+        stampCommitteeDecision(request);
+
+        return scholarshipRequestRepository.save(request);
+    }
+
+    public UniversityScholarshipRequest committeeRejectRequest(String requestId, String reason) {
+        if (!StringUtils.hasText(reason)) {
+            throw new RuntimeException("A reason is required to reject a scholarship request");
+        }
+
+        UniversityScholarshipRequest request = scholarshipRequestRepository
+                .findByUniversityScholarshipRequestID(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
+                
+        if (request.getStatus() != UniversityScholarshipRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
+            throw new RuntimeException(
+                    "Only requests submitted for Committee Approval can be rejected by the Committee");
+        }
+
+        request.setStatus(UniversityScholarshipRequestStatus.REJECTED);
+        request.setRejectReason(reason.trim());
+        stampCommitteeDecision(request);
+
+        return scholarshipRequestRepository.save(request);
+    }
+
+    private void stampCommitteeDecision(UniversityScholarshipRequest request) {
+        com.memberconnect.backend.model.User currentUser = currentUserService.current();
+        request.setCommitteeDecisionBy(currentUser != null ? currentUser.getUsername() : null);
+        request.setCommitteeDecisionAt(LocalDateTime.now());
     }
     
     // Mark request as incomplete with reason
@@ -1133,7 +1298,7 @@ public class UniversityScholarshipService {
                 return scholarshipRequestRepository.save(request);
     }
 
-    // Attach scholarship requests to a board meeting for approval
+    // Attach scholarship requests to a normal board meeting for approval
     @Transactional
     public void attachBoardMeeting(Map<String, Object> payload) {
         Object meetingIdObj = payload.get("boardMeetingId");
@@ -1186,7 +1351,7 @@ public class UniversityScholarshipService {
             scholarshipRequestRepository.save(request);
         }
     }
-
+    
     private synchronized String generateNextApprovalListId(String prefix) {
         List<UniversityScholarshipRequest> requests = scholarshipRequestRepository.findAll();
         int maxVal = 0;
@@ -1200,17 +1365,14 @@ public class UniversityScholarshipService {
                         maxVal = val;
                     }
                 } catch (NumberFormatException e) {
-                    // Ignore non-numeric suffixes or variations
+
                 }
             }
         }
         return String.format("%s%03d", prefix, maxVal + 1);
     }
 
-    /**
-     * Deletes a Normal Approval List by rolling back all attached requests to
-     * SUBMITTED_FOR_NORMAL_BOARD_APPROVAL and detaching them from the board meeting.
-     */
+    // Deletes a Normal Approval List by rolling back all attached requests to
     @Transactional
     public void deleteApprovalList(String approvalListId) {
         List<UniversityScholarshipRequest> requests =
@@ -1230,10 +1392,8 @@ public class UniversityScholarshipService {
         }
     }
 
-    /**
-     * Deletes a Deviation Approval List by rolling back all attached requests to
-     * SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL and detaching them from the board meeting.
-     */
+    
+    //Deletes a Deviation Approval List by rolling back all attached requests to
     @Transactional
     public void deleteDeviationApprovalList(String approvalListId) {
         List<UniversityScholarshipRequest> requests =
@@ -1252,23 +1412,19 @@ public class UniversityScholarshipService {
             }
         }
     }
-
-    /**
-     * Processes normal board approvals with file upload.
-     */
+    // Processes normal board approvals with file upload.
     @Transactional
     public void processApprovals(String dataJson, MultipartFile file) {
         processApprovalDecisions(dataJson, file, UniversityScholarshipRequestStatus.ADDED_TO_NORMAL_BOARD_APPROVAL_LIST);
     }
 
-    /**
-     * Processes deviation board approvals with file upload.
-     */
+    // Processes deviation board approvals with file upload.
     @Transactional
     public void processDeviationApprovals(String dataJson, MultipartFile file) {
         processApprovalDecisions(dataJson, file, UniversityScholarshipRequestStatus.ADDED_TO_DEVIATION_BOARD_APPROVAL_LIST);
     }
 
+    // process approvals
     @SuppressWarnings("unchecked")
     private void processApprovalDecisions(String dataJson, MultipartFile file, UniversityScholarshipRequestStatus expectedStatus) {
         try {
@@ -1283,7 +1439,8 @@ public class UniversityScholarshipService {
             String scannedReportPath = null;
             if (file != null && !file.isEmpty()) {
                 try {
-                    scannedReportPath = s3Service.uploadFile(file);
+                    scannedReportPath = s3Service.uploadFile(file, S3Service.folder(
+                            "university-scholarships", "approval-lists", approvalListId, "scanned-report"));
                 } catch (Exception e) {
                     System.err.println("S3 upload failed: " + e.getMessage());
                     scannedReportPath = "uploads/" + file.getOriginalFilename();
@@ -1291,6 +1448,8 @@ public class UniversityScholarshipService {
             }
 
             java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            com.memberconnect.backend.model.User currentUser = currentUserService.current();
+            String processedBy = currentUser != null ? currentUser.getUsername() : null;
 
             for (Map<String, Object> dec : decisions) {
                 String requestId = (String) dec.get("requestId");
@@ -1301,9 +1460,23 @@ public class UniversityScholarshipService {
                         .findByUniversityScholarshipRequestID(requestId)
                         .orElseThrow(() -> new RuntimeException("Request not found: " + requestId));
 
+                if (request.getStatus() != expectedStatus) {
+                    throw new RuntimeException("Request " + requestId + " is not awaiting this approval list"
+                            + " (expected " + expectedStatus + ", found " + request.getStatus() + ")");
+                }
+
+                if (approvalListId != null && !approvalListId.equals(request.getApprovalListId())) {
+                    throw new RuntimeException("Request " + requestId
+                            + " does not belong to approval list " + approvalListId);
+                }
+
                 if ("reject".equalsIgnoreCase(action)) {
+                    
+                    if (!StringUtils.hasText(reason)) {
+                        throw new RuntimeException("A rejection reason is required for request " + requestId);
+                    }
                     request.setStatus(UniversityScholarshipRequestStatus.REJECTED);
-                    request.setRejectReason(reason);
+                    request.setRejectReason(reason.trim());
                     System.out.println("SIMULATING NOTIFICATION: SMS sent to Student " + request.getStudentName() + " and Member: Request rejected. Reason: " + reason);
                     System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request rejected. Reason: " + reason);
                 } else {
@@ -1312,7 +1485,7 @@ public class UniversityScholarshipService {
                     System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request approved.");
                 }
 
-                request.setProcessedBy("user1");
+                request.setProcessedBy(processedBy);
                 request.setProcessedAt(now);
                 if (scannedReportPath != null) {
                     request.setScannedReportPath(scannedReportPath);
@@ -1339,6 +1512,71 @@ public class UniversityScholarshipService {
             } catch (Exception ex) {
                 throw new RuntimeException("File not found: " + fileName);
             }
+        }
+    }
+
+    //change a request's status from View Mode.
+    public UniversityScholarshipRequest changeRequestStatus(String requestId, String newStatusStr) {
+        UniversityScholarshipRequest request = scholarshipRequestRepository
+                .findByUniversityScholarshipRequestID(requestId)
+                .orElseThrow(() -> new RuntimeException("University Scholarship request not found"));
+
+        UniversityScholarshipRequestStatus newStatus;
+        try {
+            newStatus = UniversityScholarshipRequestStatus.valueOf(newStatusStr);
+        } catch (IllegalArgumentException | NullPointerException ex) {
+            throw new RuntimeException("Invalid status: " + newStatusStr);
+        }
+
+        UniversityScholarshipRequestStatus currentStatus = request.getStatus();
+        if (currentStatus == null) {
+            throw new RuntimeException("Current request status is unrecognized");
+        }
+
+        if (currentStatus == newStatus) {
+            return request;
+        }
+
+        if (!isUniversityStatusTransitionAllowed(currentStatus, newStatus)) {
+            throw new RuntimeException(
+                    "Cannot change status from " + currentStatus + " to " + newStatus);
+        }
+
+        if (newStatus == UniversityScholarshipRequestStatus.NEW
+                && request.getApprovalListId() != null
+                && !request.getApprovalListId().isBlank()) {
+            throw new RuntimeException(
+                    "This request is attached to approval list " + request.getApprovalListId()
+                            + " and cannot be returned to New. Remove it from the list first.");
+        }
+
+        request.setStatus(newStatus);
+
+        if (newStatus == UniversityScholarshipRequestStatus.NEW) {
+            request.setIncompleteReason(null);
+            request.setRejectReason(null);
+        }
+
+        return scholarshipRequestRepository.save(request);
+    }
+
+    private boolean isUniversityStatusTransitionAllowed(
+            UniversityScholarshipRequestStatus current,
+            UniversityScholarshipRequestStatus next) {
+        switch (current) {
+            case NEW:
+                return next == UniversityScholarshipRequestStatus.INACTIVE;
+            case INCOMPLETE:
+            case SUBMITTED_FOR_COMMITTEE_APPROVAL:
+            case SUBMITTED_FOR_NORMAL_BOARD_APPROVAL:
+            case SUBMITTED_FOR_DEVIATION_BOARD_APPROVAL:
+            case REJECTED:
+                return next == UniversityScholarshipRequestStatus.NEW
+                        || next == UniversityScholarshipRequestStatus.INACTIVE;
+            case INACTIVE:
+                return next == UniversityScholarshipRequestStatus.NEW;
+            default:
+                return false;
         }
     }
 

@@ -171,4 +171,29 @@ public class Member {
     @Column(name = "dormant_selection_date")
     private LocalDate dormantSelectionDate;
 
+    // ---- Temporary Scholarship finance eligibility (MMS23) --------------------
+    //
+    // Stand-ins for the Finance Module, which has not been delivered. Maintaining the
+    // Remittance and Settlement tables by hand purely to answer "may this member apply
+    // for a Scholarship?" is not practical, so the answer is recorded directly here and
+    // set from the admin Member Accounts screen.
+    //
+    // The real month-by-month checks in UniversityScholarshipService are untouched and
+    // still selected by scholarship.finance.validation.source=finance. These two fields
+    // become dead weight once Finance is integrated, not a thing to migrate.
+    //
+    // Primitive boolean with a NOT NULL DEFAULT false column: an unassessed member is
+    // not eligible, and there is no third "unknown" state to reason about.
+    // columnDefinition carries the DEFAULT into the generated DDL. Without it,
+    // ddl-auto=update emits a bare "add column ... not null", which Postgres refuses on
+    // a table that already has rows - Hibernate logs that failure as a warning and
+    // carries on, leaving the column absent and every Member select broken.
+    @Column(name = "is_remittance", nullable = false,
+            columnDefinition = "boolean not null default false")
+    private boolean isRemittance;
+
+    @Column(name = "is_settlement", nullable = false,
+            columnDefinition = "boolean not null default false")
+    private boolean isSettlement;
+
 }

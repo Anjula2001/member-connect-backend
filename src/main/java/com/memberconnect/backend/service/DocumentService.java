@@ -132,7 +132,8 @@ public class DocumentService {
             uploadedDocumentRepository.delete(existingDocument);
         }
 
-        String fileKey = s3Service.uploadFile(file);
+        String fileKey = s3Service.uploadFile(file, S3Service.folder(
+                applicationType, String.valueOf(requestId), requiredDocument.getDocumentName()));
 
         UploadedDocument uploadedDocument = new UploadedDocument();
         uploadedDocument.setRequestId(String.valueOf(requestId));
@@ -277,6 +278,17 @@ public class DocumentService {
             }
         }
 
+        // MMT18: "The mandatory supporting documents might increase if there are
+        // Minor Savings Accounts for the Member that needs to be closed."
+        if ("MEMBER_DEATH".equals(applicationType)) {
+            boolean hasMinorSavings =
+                    !minorSavingsAccountRepository.findByMemberId(memberId).isEmpty();
+
+            if (hasMinorSavings) {
+                types.add("MEMBER_DEATH_MINOR");
+            }
+        }
+
         List<RequiredDocument> requiredDocs = requiredDocumentRepository.findByApplicationTypeIn(types);
 
         return requiredDocs.stream()
@@ -317,7 +329,8 @@ public class DocumentService {
                 uploadedDocumentRepository.delete(existingDocument);
             }
 
-            String fileKey = s3Service.uploadFile(file);
+            String fileKey = s3Service.uploadFile(file, S3Service.folder(
+                    applicationType, requestNo, String.valueOf(requiredDocumentId)));
 
             UploadedDocument uploaded = new UploadedDocument();
             uploaded.setRequestNo(requestNo);

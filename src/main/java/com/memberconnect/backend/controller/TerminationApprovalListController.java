@@ -3,6 +3,7 @@ package com.memberconnect.backend.controller;
 import com.memberconnect.backend.dto.TerminationApprovalListDTO;
 import com.memberconnect.backend.dto.TerminationRequestResponseDTO;
 import com.memberconnect.backend.service.TerminationApprovalListService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +19,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/termination-approval-lists")
 @CrossOrigin(origins = "http://localhost:3000")
+@PreAuthorize("hasAnyRole('HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
 public class TerminationApprovalListController {
 
     private final TerminationApprovalListService approvalListService;
@@ -55,6 +57,7 @@ public class TerminationApprovalListController {
     }
 
     @DeleteMapping("/{listId}")
+    @PreAuthorize("hasAnyRole('BOARD_SECRETARY','SUPER_ADMIN')")
     public String deleteApprovalList(@PathVariable String listId) {
         return approvalListService.deleteApprovalList(listId);
     }

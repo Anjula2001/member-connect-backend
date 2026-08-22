@@ -14,6 +14,8 @@ public class UniversityScholarshipFundRequestDto {
     private String status;
     private String incompleteReason;
     private String decisionReason;
+    private java.time.LocalDateTime financeIntegratedAt;
+    private String financeIntegratedBy;
 
     public Long getId() {
         return id;
@@ -101,5 +103,20 @@ public class UniversityScholarshipFundRequestDto {
 
     public void setDecisionReason(String decisionReason) {
         this.decisionReason = decisionReason;
+    }
+    public java.time.LocalDateTime getFinanceIntegratedAt() {
+        return financeIntegratedAt;
+    }
+
+    public void setFinanceIntegratedAt(java.time.LocalDateTime financeIntegratedAt) {
+        this.financeIntegratedAt = financeIntegratedAt;
+    }
+
+    public String getFinanceIntegratedBy() {
+        return financeIntegratedBy;
+    }
+
+    public void setFinanceIntegratedBy(String financeIntegratedBy) {
+        this.financeIntegratedBy = financeIntegratedBy;
     }
 }

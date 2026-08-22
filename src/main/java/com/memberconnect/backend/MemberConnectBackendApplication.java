@@ -55,6 +55,20 @@ public class MemberConnectBackendApplication {
 				System.err.println("FAILED TO DROP member_application_status_check CONSTRAINT: " + e.getMessage());
 			}
 
+			// Same drift, one table over, and the reason no DISTRICT_COMMITTEE or
+			// PD_COMMITTEE account can exist: users_role_check still enumerates the
+			// seven roles Role held when the column was first created, so inserting
+			// either Member Death committee role (MMT23/MMT24) is rejected by the
+			// database even though the enum and every @PreAuthorize already know
+			// about them. Without this the escalation half of the death workflow
+			// has nobody who can act on it.
+			try {
+				jdbcTemplate.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;");
+				System.out.println("SUCCESSFULLY DROPPED users_role_check CONSTRAINT!");
+			} catch (Exception e) {
+				System.err.println("FAILED TO DROP users_role_check CONSTRAINT: " + e.getMessage());
+			}
+
 			memberDeathRecordService.seedCauseOfDeathIfEmpty();
 		};
 	}

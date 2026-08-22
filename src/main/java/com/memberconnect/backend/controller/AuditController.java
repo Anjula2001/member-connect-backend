@@ -29,6 +29,16 @@ public class AuditController {
     @Autowired
     private MemberRepository memberRepository;
 
+    /**
+     * Newest audit entries across all modules, for the dashboard's Recent Activity card.
+     * Read-only and already covered by the class-level role check.
+     */
+    @GetMapping("/recent")
+    public List<AuditDTO> getRecentActivity(
+            @RequestParam(required = false, defaultValue = "5") int limit) {
+        return auditService.getRecentActivity(limit);
+    }
+
     @GetMapping("/application/{applicationId}")
     public List<AuditDTO> getApplicationHistory(@PathVariable Long applicationId) {
         return auditService.getApplicationHistory(applicationId);

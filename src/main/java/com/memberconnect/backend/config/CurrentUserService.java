@@ -1,5 +1,6 @@
 package com.memberconnect.backend.config;
 
+import java.util.List;
 import java.util.Set;
 
 import org.springframework.security.access.AccessDeniedException;
@@ -92,5 +93,80 @@ public class CurrentUserService {
         }
         String district = user.getAssignedDistrict();
         return (district == null || district.isBlank()) ? null : district;
+    }
+
+    /**
+     * The set of District Offices a list query may return, once the caller's own
+     * restrictions have been applied on top of whatever they asked for.
+     *
+     * @param filtered  false = no location filtering at all, return everything.
+     * @param locations when filtered, the allowed locations. An EMPTY list here means
+     *                  "return nothing" — it is not the same as no filtering.
+     */
+    public record LocationScope(boolean filtered, List<String> locations) {
+
+        public boolean showsNothing() {
+            return filtered && locations.isEmpty();
+        }
+    }
+
+    /**
+     * Works out which locations the current user may actually see, given what the
+     * client asked for.
+     *
+     * This exists because {@link #restrictedToLocation()} returns null for two
+     * opposite reasons — "you are national" and "you are restricted but have no
+     * district on file" — and a caller that cannot tell them apart will resolve a
+     * misconfigured account to full visibility, which is the exact leak location
+     * scoping is meant to close. Both scholarship modules call this rather than
+     * interpreting the nulls themselves, so they cannot drift apart.
+     *
+     * A restricted user is always pinned to their own district: locations they ask
+     * for are ignored rather than rejected, so a stale filter in the UI degrades to
+     * "your own district" instead of an error.
+     */
+    public LocationScope resolveLocationScope(List<String> requestedLocations) {
+        if (isLocationRestricted()) {
+            String pinned = restrictedToLocation();
+            return new LocationScope(true, pinned == null ? List.of() : List.of(pinned));
+        }
+
+        if (requestedLocations == null || requestedLocations.isEmpty()) {
+            return new LocationScope(false, List.of());
+        }
+
+        List<String> cleaned = requestedLocations.stream()
+                .filter(location -> location != null && !location.isBlank())
+                .filter(location -> !"ALL".equalsIgnoreCase(location))
+                .toList();
+
+        // "ALL", or a selection that contained nothing usable, means no filtering.
+        return cleaned.isEmpty()
+                ? new LocationScope(false, List.of())
+                : new LocationScope(true, cleaned);
+    }
+
+    /**
+     * Whether a record with the given location should be visible under a scope.
+     *
+     * An untagged record (null or blank location) is hidden from a location-restricted
+     * caller. This reversed on 2026-08-19: it used to return true so that rows predating
+     * the location column stayed visible to everyone, but the practical effect was that
+     * a District Office user saw every untagged request in the system alongside their
+     * own, which makes the Location filter untrustworthy and leaks other branches' work.
+     *
+     * Untagged rows remain fully visible to unrestricted roles (Head Office, Board
+     * Secretary, Accounts, Scholarship Officer, Super Admin), so nothing becomes
+     * unreachable — and UniversityScholarshipLocationBackfill tags rows on every start
+     * once their member has a location on file.
+     */
+    public boolean matchesScope(LocationScope scope, String recordLocation) {
+        if (!scope.filtered()) {
+            return true;
+        }
+        if (recordLocation == null || recordLocation.isBlank()) {
+            return false;
+        }
+        return scope.locations().stream().anyMatch(recordLocation::equalsIgnoreCase);
     }
 }
