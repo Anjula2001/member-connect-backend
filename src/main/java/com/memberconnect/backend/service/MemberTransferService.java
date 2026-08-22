@@ -1,11 +1,15 @@
 package com.memberconnect.backend.service;
 
+import com.memberconnect.backend.config.CurrentUserService;
+import com.memberconnect.backend.dto.MemberRelocationHandoffDTO;
 import com.memberconnect.backend.dto.MemberTransferDto;
+import com.memberconnect.backend.event.MemberTransferApprovedEvent;
 import com.memberconnect.backend.enums.MemberTransferStatus;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.model.MemberTransferRequest;
 import com.memberconnect.backend.model.WorkingLocation;
 import com.memberconnect.backend.repository.*;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -16,6 +20,9 @@ public class MemberTransferService {
 
     private final MemberTransferRepository memberTransferRepository;
     private final MemberRepository memberRepository;
+    private final CurrentUserService currentUserService;
+    private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
     private final WorkingLocationTypeRepository workingLocationTypeRepository;
     private final EducationalDistrictRepository educationalDistrictRepository;
     private final EducationalZoneRepository educationalZoneRepository;
@@ -26,6 +33,9 @@ public class MemberTransferService {
     public MemberTransferService(
             MemberTransferRepository memberTransferRepository,
             MemberRepository memberRepository,
+            CurrentUserService currentUserService,
+            NotificationService notificationService,
+            ApplicationEventPublisher eventPublisher,
             WorkingLocationTypeRepository workingLocationTypeRepository,
             EducationalDistrictRepository educationalDistrictRepository,
             EducationalZoneRepository educationalZoneRepository,
@@ -34,6 +44,9 @@ public class MemberTransferService {
             NatureOfOccupationRepository natureOfOccupationRepository) {
         this.memberTransferRepository = memberTransferRepository;
         this.memberRepository = memberRepository;
+        this.currentUserService = currentUserService;
+        this.notificationService = notificationService;
+        this.eventPublisher = eventPublisher;
         this.workingLocationTypeRepository = workingLocationTypeRepository;
         this.educationalDistrictRepository = educationalDistrictRepository;
         this.educationalZoneRepository = educationalZoneRepository;
@@ -42,15 +55,55 @@ public class MemberTransferService {
         this.natureOfOccupationRepository = natureOfOccupationRepository;
     }
 
-    // Method to get all member transfer requests
+    /**
+     * Every transfer request the caller may see (MMC28).
+     *
+     * A District Office user is pinned to their own district; Head Office, Board
+     * Secretary and Super Admin see them all. The filter is applied here rather than
+     * on the screen so a restricted caller cannot widen it by asking.
+     */
     public List<MemberTransferRequest> getAllRequests() {
-        return memberTransferRepository.findAll();
+        return getAllRequests(null);
+    }
+
+    public List<MemberTransferRequest> getAllRequests(List<String> requestedLocations) {
+        CurrentUserService.LocationScope scope =
+                currentUserService.resolveLocationScope(requestedLocations);
+
+        if (scope.showsNothing()) {
+            return List.of();
+        }
+
+        return memberTransferRepository.findAll().stream()
+                .filter(request -> currentUserService.matchesScope(
+                        scope, request.getSubmissionLocation()))
+                .toList();
     }
 
     // Method to get a specific member transfer request by ID
     public MemberTransferRequest getRequestById(Long id) {
-        return memberTransferRepository.findById(id)
+        MemberTransferRequest request = memberTransferRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Member transfer request not found"));
+
+        assertVisible(request);
+
+        return request;
+    }
+
+    /**
+     * Refuses a request that belongs to another District Office.
+     *
+     * Opening one by its id has to be checked separately from the list: filtering the
+     * list alone would leave the record reachable to anyone who guessed an id.
+     */
+    private void assertVisible(MemberTransferRequest request) {
+        CurrentUserService.LocationScope scope = currentUserService.resolveLocationScope(null);
+
+        if (scope.showsNothing()
+                || !currentUserService.matchesScope(scope, request.getSubmissionLocation())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "This member transfer request belongs to another District Office");
+        }
     }
 
     /**
@@ -114,8 +167,24 @@ public class MemberTransferService {
 
         request.setRequestId(generateMemberTransferRequestId());
         request.setStatus(MemberTransferStatus.SUBMITTEDFORAPPROVAL);
+        request.setSubmissionLocation(resolveSubmissionLocationFor(request.getMember()));
 
         return memberTransferRepository.save(request);
+    }
+
+    /**
+     * The office a request belongs to: the member's own administering office, or the
+     * district of the user raising it when the member carries none.
+     */
+    private String resolveSubmissionLocationFor(Member member) {
+        if (member != null) {
+            String memberLocation = member.getSubmissionLocation();
+            if (memberLocation != null && !memberLocation.isBlank()) {
+                return memberLocation;
+            }
+        }
+
+        return currentUserService.restrictedToLocation();
     }
 
     public void deleteRequest(Long id) {
@@ -219,6 +288,14 @@ public class MemberTransferService {
         // Update request status
         request.setStatus(MemberTransferStatus.APPROVED);
 
+        // Read before the writes below overwrite it. There is no persisted "Keep
+        // Current District" flag to consult: when that box is ticked the request carries
+        // the member's existing district as its new one, so comparing before with after
+        // is what tells the two cases apart.
+        String districtBefore = request.getMember() != null
+                ? request.getMember().getEducationalDistrict()
+                : null;
+
         // Update Member profile with requested changes
         Member member = request.getMember();
         if (member != null) {
@@ -265,7 +342,106 @@ public class MemberTransferService {
             memberRepository.save(member);
         }
 
-        return memberTransferRepository.save(request);
+        MemberTransferRequest saved = memberTransferRepository.save(request);
+
+        notifyDecision(saved, MemberTransferStatus.APPROVED);
+
+        String districtAfter = member != null ? member.getEducationalDistrict() : null;
+
+        if (districtChanged(districtBefore, districtAfter)) {
+            // Consumed AFTER_COMMIT by the Finance and Loan listeners, so an unreachable
+            // module cannot roll back an approval that has already been applied to the
+            // member's profile (MMC30).
+            eventPublisher.publishEvent(new MemberTransferApprovedEvent(
+                    member.getMemberId(),
+                    saved.getRequestId(),
+                    districtBefore,
+                    districtAfter
+            ));
+        }
+
+        return saved;
+    }
+
+    /**
+     * Whether an approved transfer actually moved the member to a different District.
+     *
+     * A transfer that leaves the district alone - including one where "Keep Current
+     * District" was ticked - moves no loans and no accounts, so nothing is sent.
+     */
+    private boolean districtChanged(String before, String after) {
+        if (after == null || after.isBlank()) {
+            return false;
+        }
+        if (before == null || before.isBlank()) {
+            // The member had no district recorded and now has one: that is a move into a
+            // district, and the receiving module needs to know about it.
+            return true;
+        }
+        return !before.trim().equalsIgnoreCase(after.trim());
+    }
+
+    /**
+     * The payload both downstream modules receive. Read at send time from the request
+     * rather than copied through the event, matching the termination handoff.
+     */
+    public MemberRelocationHandoffDTO buildRelocationHandoff(MemberTransferApprovedEvent event) {
+        MemberTransferRequest request = findRequestByIdOrRequestId(event.requestNo());
+        Member member = request.getMember();
+
+        MemberRelocationHandoffDTO handoff = new MemberRelocationHandoffDTO();
+        handoff.setRequestNo(event.requestNo());
+        handoff.setMemberId(event.memberId());
+        handoff.setFromDistrict(event.fromDistrict());
+        handoff.setToDistrict(event.toDistrict());
+        handoff.setApprovedOn(java.time.LocalDate.now());
+
+        if (member != null) {
+            handoff.setMemberName(member.getNameWithInitials() != null
+                    ? member.getNameWithInitials()
+                    : member.getFullName());
+            handoff.setNic(member.getNic());
+        }
+
+        if (request.getNewWorkingLocation() != null) {
+            handoff.setNewWorkingLocation(request.getNewWorkingLocation().getName());
+        }
+
+        return handoff;
+    }
+
+    /**
+     * Emails the member about a decision on their transfer (MMC30).
+     *
+     * Called after the save, so the member is only told about a decision that was
+     * actually recorded. Best-effort: NotificationService swallows delivery failures,
+     * and a request with no member linked is skipped rather than throwing - an
+     * undeliverable email must not undo an approval that has already been applied to
+     * the profile.
+     */
+    private void notifyDecision(MemberTransferRequest request, MemberTransferStatus status) {
+        Member member = request.getMember();
+        if (member == null || !StringUtils.hasText(member.getMemberId())) {
+            return;
+        }
+
+        String memberId = member.getMemberId();
+        String requestNo = request.getRequestId();
+
+        if (status == MemberTransferStatus.APPROVED) {
+            notificationService.notifyMemberTransferApproved(
+                    memberId,
+                    requestNo,
+                    request.getNewWorkingLocation() != null
+                            ? request.getNewWorkingLocation().getName()
+                            : null,
+                    request.getNewDesignation() != null
+                            ? request.getNewDesignation().getName()
+                            : null);
+        } else if (status == MemberTransferStatus.REJECTED) {
+            notificationService.notifyMemberTransferRejected(
+                    memberId, requestNo, request.getDecisionReason());
+        }
     }
 
     /**
@@ -325,6 +501,10 @@ public class MemberTransferService {
         request.setStatus(MemberTransferStatus.REJECTED);
         request.setDecisionReason(reason);
 
-        return memberTransferRepository.save(request);
+        MemberTransferRequest saved = memberTransferRepository.save(request);
+
+        notifyDecision(saved, MemberTransferStatus.REJECTED);
+
+        return saved;
     }
 }

@@ -972,6 +972,82 @@ public class NotificationService {
         );
     }
 
+    // ------------------------------------------------------------------
+    // Member Transfers (MMC30)
+    // ------------------------------------------------------------------
+
+    /**
+     * Tells the member their transfer request was approved and their profile updated.
+     *
+     * The new working location and designation are quoted back so the member can check
+     * that what was applied is what they asked for - a transfer changes where their
+     * membership is administered, so a wrong value matters to them immediately.
+     */
+    public void notifyMemberTransferApproved(
+            String memberId, String requestNo, String newWorkingLocation, String newDesignation) {
+        Member member = findMemberFor(memberId, requestNo, "member-transfer-approved");
+        if (member == null) {
+            return;
+        }
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Member Transfer Request " + requestNo + " \u2014 Approved",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "Your Member Transfer request has been APPROVED and your membership profile\n"
+                        + "has been updated with the requested changes.\n"
+                        + "\n"
+                        + "Request Number   : " + requestNo + "\n"
+                        + "Member Number    : " + memberId + "\n"
+                        + "Status           : Approved\n"
+                        + "Working Location : " + safeValue(newWorkingLocation) + "\n"
+                        + "Designation      : " + safeValue(newDesignation) + "\n"
+                        + "\n"
+                        + "If your District has changed, your loans and savings accounts are being\n"
+                        + "moved to the new District Office. Please contact your District Office if any\n"
+                        + "of the details above are not what you requested.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "member-transfer-approved"
+        );
+    }
+
+    /** Tells the member their transfer request was rejected, with the reason. */
+    public void notifyMemberTransferRejected(String memberId, String requestNo, String reason) {
+        Member member = findMemberFor(memberId, requestNo, "member-transfer-rejected");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Member Transfer Request " + requestNo + " \u2014 Rejected",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "Your Member Transfer request has been reviewed and has not been approved.\n"
+                        + "No changes have been made to your membership profile.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Status         : Rejected\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please contact your District Office if you would like to discuss this decision.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "member-transfer-rejected"
+        );
+    }
+
     /** Keeps a missing optional detail from printing as "null" in the body. */
     private String safeValue(String value) {
         return trimToNull(value) == null ? "-" : value.trim();
