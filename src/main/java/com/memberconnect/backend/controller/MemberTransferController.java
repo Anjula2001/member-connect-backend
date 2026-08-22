@@ -70,6 +70,23 @@ public class MemberTransferController {
         return memberTransferService.approveRequest(requestId);
     }
 
+    // Endpoint to change a request's status from View Mode
+    @PutMapping("/{requestId}/status")
+    public ResponseEntity<?> changeRequestStatus(
+            @PathVariable String requestId,
+            @RequestBody Map<String, String> body
+    ) {
+        try {
+            return ResponseEntity.ok(
+                    memberTransferService.changeRequestStatus(requestId, body.get("status")));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", e.getMessage() != null
+                            ? e.getMessage()
+                            : "Failed to change the request status"));
+        }
+    }
+
     // Endpoint to reject a member transfer request
     @PostMapping("/reject/{requestId}")
     public MemberTransferRequest rejectRequest(

@@ -268,6 +268,56 @@ public class MemberTransferService {
         return memberTransferRepository.save(request);
     }
 
+    /**
+     * Changes a request's status from View Mode.
+     *
+     * Only the two transitions the spec allows are possible: a request awaiting
+     * approval, or one that was rejected, may be made Inactive. Nothing else moves -
+     * an approved transfer has already been written onto the member's profile, and
+     * an inactive request is closed.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public MemberTransferRequest changeRequestStatus(String key, String newStatusStr) {
+        MemberTransferRequest request = findRequestByIdOrRequestId(key);
+
+        MemberTransferStatus newStatus;
+        try {
+            newStatus = MemberTransferStatus.valueOf(
+                    newStatusStr == null ? "" : newStatusStr.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new RuntimeException("Invalid status: " + newStatusStr);
+        }
+
+        MemberTransferStatus currentStatus = request.getStatus();
+        if (currentStatus == null) {
+            throw new RuntimeException("Current request status is unrecognized");
+        }
+
+        if (currentStatus == newStatus) {
+            return request;
+        }
+
+        if (!isStatusTransitionAllowed(currentStatus, newStatus)) {
+            throw new RuntimeException(
+                    "Cannot change status from " + currentStatus + " to " + newStatus);
+        }
+
+        request.setStatus(newStatus);
+
+        return memberTransferRepository.save(request);
+    }
+
+    private boolean isStatusTransitionAllowed(
+            MemberTransferStatus current, MemberTransferStatus next) {
+        switch (current) {
+            case SUBMITTEDFORAPPROVAL:
+            case REJECTED:
+                return next == MemberTransferStatus.INACTIVE;
+            default:
+                return false;
+        }
+    }
+
     @org.springframework.transaction.annotation.Transactional
     public MemberTransferRequest rejectRequest(String key, String reason) {
         MemberTransferRequest request = findRequestByIdOrRequestId(key);
