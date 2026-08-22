@@ -13,7 +13,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class MemberTransferService {
@@ -23,6 +25,7 @@ public class MemberTransferService {
     private final CurrentUserService currentUserService;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuditService auditService;
     private final WorkingLocationTypeRepository workingLocationTypeRepository;
     private final EducationalDistrictRepository educationalDistrictRepository;
     private final EducationalZoneRepository educationalZoneRepository;
@@ -36,6 +39,7 @@ public class MemberTransferService {
             CurrentUserService currentUserService,
             NotificationService notificationService,
             ApplicationEventPublisher eventPublisher,
+            AuditService auditService,
             WorkingLocationTypeRepository workingLocationTypeRepository,
             EducationalDistrictRepository educationalDistrictRepository,
             EducationalZoneRepository educationalZoneRepository,
@@ -47,6 +51,7 @@ public class MemberTransferService {
         this.currentUserService = currentUserService;
         this.notificationService = notificationService;
         this.eventPublisher = eventPublisher;
+        this.auditService = auditService;
         this.workingLocationTypeRepository = workingLocationTypeRepository;
         this.educationalDistrictRepository = educationalDistrictRepository;
         this.educationalZoneRepository = educationalZoneRepository;
@@ -169,7 +174,17 @@ public class MemberTransferService {
         request.setStatus(MemberTransferStatus.SUBMITTEDFORAPPROVAL);
         request.setSubmissionLocation(resolveSubmissionLocationFor(request.getMember()));
 
-        return memberTransferRepository.save(request);
+        MemberTransferRequest saved = memberTransferRepository.save(request);
+
+        auditService.recordFieldChanges(
+                AuditService.MODULE_MEMBER_TRANSFER,
+                memberDbId(saved),
+                "CREATED",
+                snapshotOf(saved.getMember()),
+                requestedValues(saved),
+                saved.getRequestId() + " · Submitted for approval");
+
+        return saved;
     }
 
     /**
@@ -296,6 +311,8 @@ public class MemberTransferService {
                 ? request.getMember().getEducationalDistrict()
                 : null;
 
+        Map<String, Object> profileBefore = snapshotOf(request.getMember());
+
         // Update Member profile with requested changes
         Member member = request.getMember();
         if (member != null) {
@@ -344,7 +361,17 @@ public class MemberTransferService {
 
         MemberTransferRequest saved = memberTransferRepository.save(request);
 
-        notifyDecision(saved, MemberTransferStatus.APPROVED);
+        // "An audit record will be created against the Member Record for all the changes
+        // done" (MMC30). Read off the member either side of the writes rather than from
+        // the request's snapshot, so the trail records what actually changed on the
+        // profile - onlyChanged then drops the fields the transfer left alone.
+        auditService.recordFieldChanges(
+                AuditService.MODULE_MEMBER_TRANSFER,
+                memberDbId(saved),
+                "APPROVED",
+                profileBefore,
+                snapshotOf(member),
+                saved.getRequestId() + " · Approved");
 
         String districtAfter = member != null ? member.getEducationalDistrict() : null;
 
@@ -480,7 +507,68 @@ public class MemberTransferService {
 
         request.setStatus(newStatus);
 
-        return memberTransferRepository.save(request);
+        MemberTransferRequest saved = memberTransferRepository.save(request);
+
+        auditService.record(
+                AuditService.MODULE_MEMBER_TRANSFER,
+                memberDbId(saved),
+                "STATUS_CHANGED",
+                currentStatus.name(),
+                newStatus.name(),
+                saved.getRequestId() + " · Status changed from View Mode");
+
+        return saved;
+    }
+
+    /** The Member row an audit entry hangs off, or null when the request has no member. */
+    private Long memberDbId(MemberTransferRequest request) {
+        return request.getMember() != null ? request.getMember().getId() : null;
+    }
+
+    /**
+     * The member profile fields a transfer may change, in the order the entry screen
+     * shows them. Used as both halves of the approval diff.
+     */
+    private Map<String, Object> snapshotOf(Member member) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        if (member == null) {
+            return values;
+        }
+
+        values.put("workingLocationType", member.getWorkingLocationType());
+        values.put("educationalDistrict", member.getEducationalDistrict());
+        values.put("educationalZone", member.getEducationalZone());
+        values.put("workingLocation", member.getWorkingLocation());
+        values.put("workingLocationAddress", member.getWorkingLocationAddress());
+        values.put("salaryPayingOffice", member.getSalaryPayingOffice());
+        values.put("computerNoInPayslip", member.getComputerNoInPayslip());
+        values.put("designation", member.getDesignation());
+        values.put("natureOfOccupation", member.getNatureOfOccupation() == null
+                ? null
+                : member.getNatureOfOccupation().name());
+        return values;
+    }
+
+    /** The values the request is asking for, recorded when it is raised. */
+    private Map<String, Object> requestedValues(MemberTransferRequest request) {
+        Map<String, Object> values = new LinkedHashMap<>();
+
+        values.put("workingLocationType", request.getNewWorkingLocationType() == null
+                ? null : request.getNewWorkingLocationType().getName());
+        values.put("educationalDistrict", request.getNewEducationalDistrict() == null
+                ? null : request.getNewEducationalDistrict().getName());
+        values.put("educationalZone", request.getNewEducationalZone() == null
+                ? null : request.getNewEducationalZone().getName());
+        values.put("workingLocation", request.getNewWorkingLocation() == null
+                ? null : request.getNewWorkingLocation().getName());
+        values.put("workingLocationAddress", request.getNewWorkingLocationAddress());
+        values.put("salaryPayingOffice", request.getNewSalaryPayingOffice());
+        values.put("computerNoInPayslip", request.getNewComputerNoInPayslip());
+        values.put("designation", request.getNewDesignation() == null
+                ? null : request.getNewDesignation().getName());
+        values.put("natureOfOccupation", request.getNewNatureOfOccupation() == null
+                ? null : request.getNewNatureOfOccupation().getName());
+        return values;
     }
 
     private boolean isStatusTransitionAllowed(
@@ -502,6 +590,17 @@ public class MemberTransferService {
         request.setDecisionReason(reason);
 
         MemberTransferRequest saved = memberTransferRepository.save(request);
+
+        // No field changes to record - a rejection leaves the profile untouched - so the
+        // decision itself is the entry, with the reason as its remark.
+        auditService.record(
+                AuditService.MODULE_MEMBER_TRANSFER,
+                memberDbId(saved),
+                "REJECTED",
+                MemberTransferStatus.SUBMITTEDFORAPPROVAL.name(),
+                MemberTransferStatus.REJECTED.name(),
+                saved.getRequestId()
+                        + (StringUtils.hasText(reason) ? " · Reason: " + reason.trim() : ""));
 
         notifyDecision(saved, MemberTransferStatus.REJECTED);
 
