@@ -15,17 +15,6 @@ import com.memberconnect.backend.repository.ProgramRepository;
 import com.memberconnect.backend.repository.UniversityProgramRepository;
 import com.memberconnect.backend.repository.UniversityRepository;
 
-/**
- * Maintenance of the University Scholarship master data: universities, programmes, and
- * the university/programme pairings that carry duration and scholarship amount.
- *
- * Add and edit only. Nothing here deletes: any of these rows can already be referenced
- * by an approved UniversityScholarshipRequest, and removing one would orphan it.
- * Retiring an entry properly needs an "active" flag, which these tables do not have.
- *
- * Separate from UniversityScholarshipService on purpose. That class is the request
- * workflow; this is reference data, with a different audience and a different right.
- */
 @Service
 public class UniversityMasterService {
 
@@ -42,7 +31,6 @@ public class UniversityMasterService {
     }
 
     // ---- Universities -------------------------------------------------------
-
     public List<UniversityMasterDto> getUniversities() {
         return universityRepository.findAll().stream()
                 .sorted((a, b) -> safe(a.getName()).compareToIgnoreCase(safe(b.getName())))
@@ -134,11 +122,7 @@ public class UniversityMasterService {
         return toDto(universityProgramRepository.save(row));
     }
 
-    /**
-     * Duration and scholarship amount are editable; the university/programme pair is
-     * not. Repointing an existing row at a different pair would silently change what
-     * every request already linked to it means.
-     */
+    
     public UniversityMasterDto updateUniversityProgram(Long id, UniversityMasterDto request) {
         UniversityProgram row = universityProgramRepository.findById(id)
                 .orElseThrow(() -> notFound("University Programme not found"));
@@ -146,8 +130,6 @@ public class UniversityMasterService {
         row.setScholarshipAmount(requireAmount(request.getScholarshipAmount()));
         return toDto(universityProgramRepository.save(row));
     }
-
-    // ---- helpers ------------------------------------------------------------
 
     private University requireUniversity(Long id) {
         if (id == null) {

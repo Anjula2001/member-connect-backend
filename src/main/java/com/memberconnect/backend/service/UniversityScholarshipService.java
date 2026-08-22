@@ -43,7 +43,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -126,31 +128,7 @@ public class UniversityScholarshipService {
         this.fundRequestRepository = fundRequestRepository;
     }
    
-    // Validate member active status 
-    private void validateMemberActiveOnExamLastDate(UniversityScholarshipRequestDto dto) {
-        
-        Member member = memberRepository.findByMemberId(dto.getMemberId())
-                .orElseThrow(() -> new RuntimeException("Member not found"));
-
-        if (member.getStatus() == null || !"ACTIVE".equalsIgnoreCase(member.getStatus().name())) {
-            throw new RuntimeException(
-                    "The University Scholarship Request cannot be saved. The Member is not Active "
-            );
-        }
-    }
-    
-    /**
-     * Validates that the member was Active on the selected exam's last date.
-     *
-     * Distinct from validateMemberActiveOnExamLastDate above, which checks the status
-     * the member holds now: a member can be Active today having been Inactive when the
-     * exam was sat, and the scholarship is earned at the exam rather than today. The
-     * reverse holds too - a member who went Inactive after the exam still qualifies.
-     *
-     * Where the history has nothing recorded on or before that date the request is let
-     * through: every status change made before the history table existed is invisible
-     * to it, and unrecorded history is not evidence that a member was inactive.
-     */
+    // Validates that the member was Active on the selected exam's last date.
     private void validateMemberActiveDuringExam(String memberId, String examYear) {
         if (!StringUtils.hasText(memberId) || !StringUtils.hasText(examYear)) {
             return;
@@ -306,7 +284,15 @@ public class UniversityScholarshipService {
         validateMemberFinanceEligibility(member);
     }
 
-    // Validate that no other scholarship was approved for the member within a year from the exam last date
+    /**
+     * Validate that the member holds no other approved scholarship for the same exam
+     * year, approved within a year of that exam.
+     *
+     * The window runs from the last day of the month the exam's last date falls in -
+     * the exam is treated as finishing with its month rather than on the day the last
+     * paper happens to be sat - and forward one year from there. A scholarship counts
+     * as inside the window when the board's decision on it was recorded in that period.
+     */
     private void validateAnotherApprovedScholarshipWithinYear(UniversityScholarshipRequestDto dto) {
 
         UniversityScholarshipExamMaster examMaster = examMasterRepository
@@ -314,19 +300,22 @@ public class UniversityScholarshipService {
                 .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
 
         LocalDate examLastDate = examMaster.getExamLastDate();
+        if (examLastDate == null) {
+            throw new RuntimeException("Selected exam last date not found in Exam Master");
+        }
 
         Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
-        LocalDate startDate = examLastDate.minusYears(1);
-        LocalDate endDate = examLastDate;
+        LocalDate examMonthEnd = examLastDate.with(TemporalAdjusters.lastDayOfMonth());
 
         boolean exists = scholarshipRequestRepository
-            .existsByMember_MemberIdAndStatusAndAcademicYearStartDateBetween(
+            .existsApprovedForExamYearProcessedBetween(
                     member.getMemberId(),
                     UniversityScholarshipRequestStatus.APPROVED,
-                    startDate,
-                    endDate
+                    dto.getExamYear(),
+                    examMonthEnd.atStartOfDay(),
+                    examMonthEnd.plusYears(1).atTime(LocalTime.MAX)
             );
 
         if (exists) {
@@ -938,7 +927,6 @@ public class UniversityScholarshipService {
         Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
-        validateMemberActiveOnExamLastDate(dto);
         validateMemberActiveDuringExam(dto.getMemberId(), dto.getExamYear());
         validateMembershipDuration(dto);
         validateFinanceEligibility(dto, member);
