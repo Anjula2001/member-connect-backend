@@ -53,6 +53,15 @@ public class RetirementRequest {
     @Column(name = "reject_reason", columnDefinition = "TEXT")
     private String rejectReason;
 
+    @Column(name = "submission_location")
+    private String submissionLocation;
+
+    @Column(name = "created_by")
+    private String createdBy;
+
+    @Column(name = "created_at")
+    private java.time.LocalDateTime createdAt;
+
     public Long getId() {
         return id;
     }
@@ -111,5 +120,26 @@ public class RetirementRequest {
     }
     public void setRejectReason(String rejectReason) {
         this.rejectReason = rejectReason;
+    }
+
+    public String getSubmissionLocation() {
+        return submissionLocation;
+    }
+    public void setSubmissionLocation(String submissionLocation) {
+        this.submissionLocation = submissionLocation;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public java.time.LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+    public void setCreatedAt(java.time.LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

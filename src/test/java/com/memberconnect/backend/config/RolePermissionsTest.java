@@ -60,19 +60,23 @@ class RolePermissionsTest {
     }
 
     @Test
-    void districtOfficeRaisesRetirementRequestsButCannotApproveThem() {
+    void districtOfficeOwnsRetirementRequestsEndToEnd() {
         assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_CREATE));
         assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_EDIT));
         assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_SUBMIT));
         assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_INCOMPLETE));
 
-        // MMT16's actor table says "District Office System User", but 3.1.1 says
-        // "the Authorized User". Resolved in favour of Head Office: the clerk who raises
-        // a retirement request must not be able to approve it, pull it back out of
-        // approval, or deactivate it.
-        assertFalse(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_APPROVE));
-        assertFalse(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_RETURN_TO_NEW));
-        assertFalse(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_SET_INACTIVE));
+        // MMT16's actor table names "District Office System User" as the approver, so
+        // the District Office approves retirement requests as well as raising them, and
+        // may pull one back out of approval or deactivate it. Unlike Grade 5, retirement
+        // is not split across two offices.
+        assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_APPROVE));
+        assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_RETURN_TO_NEW));
+        assertTrue(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.RET_REQUEST_SET_INACTIVE));
+
+        // The Grade 5 split is untouched: raising a scholarship request is still
+        // separate from approving one.
+        assertFalse(RolePermissions.has(Role.DISTRICT_OFFICE, Permission.G5_LIST_PROCESS));
     }
 
     @Test

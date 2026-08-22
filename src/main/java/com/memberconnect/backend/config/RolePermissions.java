@@ -22,9 +22,9 @@ import com.memberconnect.backend.enums.Role;
  *
  * Retirement carries the identical conflict — its MMT16 actor table names "District
  * Office System User" while 3.1.1 says "the Authorized User from the District Office"
- * — and is resolved the same way and for the same reason. The clerk who raises a
- * retirement request must not be able to approve it, so RET_REQUEST_APPROVE is held
- * by Head Office only and DISTRICT_OFFICE holds no approval right at all.
+ * — but is resolved the other way: both readings put the approver at the District
+ * Office, so DISTRICT_OFFICE holds RET_REQUEST_APPROVE. HEAD_OFFICE keeps it as well,
+ * so a retirement request can still be approved centrally.
  *
  * Roles absent from this map (DEATH_DONATION_OFFICER) hold no rights at all, rather
  * than falling through to a permissive default.
@@ -39,9 +39,14 @@ public final class RolePermissions {
         // never be accidentally locked away from the only always-seeded account.
         MATRIX.put(Role.SUPER_ADMIN, EnumSet.allOf(Permission.class));
 
-        // District Office — MMS01-MMS05 and MMT12-MMT15. Raises and maintains requests;
-        // cannot approve, cannot deactivate, cannot reopen a Board rejection, and cannot
-        // pull a retirement request back out of approval.
+        // District Office — MMS01-MMS05 and MMT12-MMT16. On the scholarship side it
+        // raises and maintains requests only: cannot approve, deactivate, or reopen a
+        // Board rejection.
+        //
+        // On retirement it owns the request end to end, including approval. That follows
+        // MMT16's actor table, which names "District Office System User" as the approver.
+        // It does mean the office that raises a retirement request can also approve it —
+        // the four-eyes split that Grade 5 keeps does not apply here.
         MATRIX.put(Role.DISTRICT_OFFICE, EnumSet.of(
                 Permission.G5_REQUEST_VIEW,
                 Permission.G5_REQUEST_CREATE,
@@ -54,7 +59,10 @@ public final class RolePermissions {
                 Permission.RET_REQUEST_CREATE,
                 Permission.RET_REQUEST_EDIT,
                 Permission.RET_REQUEST_SUBMIT,
-                Permission.RET_REQUEST_INCOMPLETE));
+                Permission.RET_REQUEST_INCOMPLETE,
+                Permission.RET_REQUEST_APPROVE,
+                Permission.RET_REQUEST_RETURN_TO_NEW,
+                Permission.RET_REQUEST_SET_INACTIVE));
 
         // Head Office — MMS06-MMS19 and MMT16. Owns both approval tracks end to end.
         // Deliberately holds no RET_REQUEST_CREATE: retirement requests are raised at the

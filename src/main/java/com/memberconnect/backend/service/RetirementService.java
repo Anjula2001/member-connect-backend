@@ -8,6 +8,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.memberconnect.backend.dto.MemberRetirementRequestDTO;
@@ -22,29 +24,36 @@ import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.model.RetirementRequest;
 import com.memberconnect.backend.repository.LoanObligationRepository;
 import com.memberconnect.backend.repository.LoanRepository;
+import com.memberconnect.backend.config.CurrentUserService;
+import com.memberconnect.backend.model.User;
 import com.memberconnect.backend.repository.MemberRepository;
 import com.memberconnect.backend.repository.RetirementRequestRepository;
 
 @Service
 public class RetirementService {
 
+    private static final Logger log = LoggerFactory.getLogger(RetirementService.class);
+
     private final MemberRepository memberRepository;
     private final RetirementRequestRepository requestRepository;
     private final LoanRepository loanRepository;
     private final LoanObligationRepository obligationRepository;
     private final DocumentService documentService;
+    private final CurrentUserService currentUserService;
 
     public RetirementService(
             MemberRepository memberRepository,
             RetirementRequestRepository requestRepository,
             LoanRepository loanRepository,
             LoanObligationRepository obligationRepository,
-            DocumentService documentService) {
+            DocumentService documentService,
+            CurrentUserService currentUserService) {
         this.memberRepository = memberRepository;
         this.requestRepository = requestRepository;
         this.loanRepository = loanRepository;
         this.obligationRepository = obligationRepository;
         this.documentService = documentService;
+        this.currentUserService = currentUserService;
     }
 
     // returns all retirement requests.
@@ -195,6 +204,16 @@ public class RetirementService {
             request.setRequestNo(generateRequestNo());
             request.setMemberId(memberId);
             request.setStatus(RetirementRequestStatus.NEW);
+            request.setCreatedAt(java.time.LocalDateTime.now());
+
+            User currentUser = currentUserService != null ? currentUserService.current() : null;
+            request.setCreatedBy(currentUser != null ? currentUser.getUsername() : null);
+
+            String location = member.getSubmissionLocation();
+            if ((location == null || location.isBlank()) && currentUser != null) {
+                location = currentUser.getAssignedDistrict();
+            }
+            request.setSubmissionLocation(location);
         }
 
         // update values
@@ -339,7 +358,16 @@ public class RetirementService {
         return mapToResponse(saved);
     }
 
-    // Approve retirement request
+    /**
+     * Approve a retirement request (MMT16) and complete the member's retirement.
+     *
+     * The member passes through RETIREMENT_APPROVED, the approved details go to the
+     * Finance Module, and the member ends up RETIRED. In the real system the last
+     * step is the Finance Module's own — it calls back once its activities are done.
+     * The Finance Module is outside this project's scope, so
+     * {@link #callFinanceModuleApi} stands in for it and the retirement completes in
+     * one call.
+     */
     public RetirementRequestResponseDTO approveRequest(String requestNo) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
@@ -351,7 +379,77 @@ public class RetirementService {
         member.setStatus(MemberStatus.RETIREMENT_APPROVED);
         memberRepository.save(member);
 
+        // The member stops here. MMT17 — handing the details to the Finance Module and
+        // retiring the member — is a separate, deliberate step: see sendToFinanceModule.
         return mapToResponse(saved);
+    }
+
+    /**
+     * MMT17 — hand one approved retirement to the Finance Module and complete the
+     * member's retirement.
+     *
+     * Driven by a button rather than by the approval itself, mirroring the Grade 5
+     * scholarship handoff. Only a member sitting at RETIREMENT_APPROVED qualifies, so
+     * the same retirement cannot be sent twice.
+     *
+     * The Finance call is deliberately NOT wrapped in a try/catch. This is a user
+     * action with a visible outcome: if it fails the exception surfaces in the UI and
+     * the member stays RETIREMENT_APPROVED, ready to be retried.
+     */
+    public RetirementRequestResponseDTO sendToFinanceModule(String requestNo) {
+        RetirementRequest request = requestRepository.findByRequestNo(requestNo)
+                .orElseThrow(() -> new RuntimeException("Retirement request not found"));
+
+        if (request.getStatus() != RetirementRequestStatus.APPROVED) {
+            throw new RuntimeException(
+                    "Only an approved retirement request can be sent to the Finance Module. "
+                            + requestNo + " is " + request.getStatus() + ".");
+        }
+
+        Member member = getMemberEntity(request.getMemberId());
+
+        if (member.getStatus() == MemberStatus.RETIRED) {
+            throw new RuntimeException(
+                    "Member " + member.getMemberId() + " is already retired.");
+        }
+
+        if (member.getStatus() != MemberStatus.RETIREMENT_APPROVED) {
+            throw new RuntimeException(
+                    "Member " + member.getMemberId() + " is " + member.getStatus()
+                            + " and cannot be retired. Expected " + MemberStatus.RETIREMENT_APPROVED + ".");
+        }
+
+        callFinanceModuleApi(request, member);
+
+        // Real Finance confirms this over an API of its own; the mock reports success
+        // immediately, so the member is retired here.
+        member.setStatus(MemberStatus.RETIRED);
+        memberRepository.save(member);
+
+        return mapToResponse(request);
+    }
+
+    /**
+     * Mock stand-in for the Finance Module's API (MMT17).
+     *
+     * Logs the details that would be POSTed so the handoff is visible end to end
+     * without a second system. Swap the body for a real HTTP call when the Finance
+     * Module exists; nothing else in this class has to change. Throwing from here
+     * leaves the member RETIREMENT_APPROVED, which is what the caller relies on.
+     */
+    private void callFinanceModuleApi(RetirementRequest request, Member member) {
+        User sender = currentUserService != null ? currentUserService.current() : null;
+
+        log.info("[FINANCE MODULE - MOCK API] retirement handed off: requestNo={} memberId={} "
+                + "memberName={} nic={} requestedDate={} effectiveDate={} location={} sentBy={}",
+                request.getRequestNo(),
+                member.getMemberId(),
+                member.getFullName(),
+                member.getNic(),
+                request.getRequestedDate(),
+                request.getEffectiveDate(),
+                request.getSubmissionLocation(),
+                sender != null ? sender.getUsername() : null);
     }
 
     // reject retirement request
@@ -397,7 +495,7 @@ public class RetirementService {
             Member member,
             boolean hasLoanBalance,
             boolean hasIndirectObligations) {
-        return new RetirementRequestResponseDTO(
+        RetirementRequestResponseDTO dto = new RetirementRequestResponseDTO(
                 request.getId(),
                 request.getRequestNo(),
                 request.getMemberId(),
@@ -414,6 +512,13 @@ public class RetirementService {
 
                 hasLoanBalance,
                 hasIndirectObligations);
+
+        dto.setSubmissionLocation(request.getSubmissionLocation());
+        dto.setCreatedBy(request.getCreatedBy());
+        dto.setCreatedAt(request.getCreatedAt() != null ? request.getCreatedAt().toString() : null);
+        dto.setMemberStatus(member != null && member.getStatus() != null ? member.getStatus().name() : null);
+
+        return dto;
     }
 
     // Update request details
@@ -465,6 +570,7 @@ public class RetirementService {
 
     // filtering rquests
     public List<RetirementRequestResponseDTO> searchRequests(
+            List<String> locations,
             List<String> statuses,
             String fromDate,
             String toDate,
@@ -472,6 +578,14 @@ public class RetirementService {
             String sortBy,
             String sortOrder
     ) {
+        String pinnedLocation = currentUserService != null ? currentUserService.restrictedToLocation() : null;
+
+        if (currentUserService != null && currentUserService.isLocationRestricted() && pinnedLocation == null) {
+            return List.of();
+        }
+
+        List<String> effectiveLocations = resolveLocationFilter(locations, pinnedLocation);
+
         // Status and date filtering needs no extra queries, so it runs first and
         // shrinks the set the member lookup below has to cover.
         List<RetirementRequest> candidates = requestRepository.findAll()
@@ -505,12 +619,15 @@ public class RetirementService {
                 .toList();
 
         // One query for every member on the page. The map is shared by the search
-        // filter and by the response mapping, replacing a lookup per row.
+        // filter, location filter, and response mapping, replacing a lookup per row.
         Map<String, Member> membersById = loadMembersByMemberId(
                 candidates.stream().map(RetirementRequest::getMemberId).toList()
         );
 
         List<RetirementRequest> matches = candidates.stream()
+
+                // location filter (matches effective locations, falling back to member.submissionLocation)
+                .filter(r -> matchesLocation(r, membersById.get(r.getMemberId()), effectiveLocations))
 
                 // search filter
                 .filter(r -> {
@@ -597,6 +714,35 @@ public class RetirementService {
                         Member::getMemberId,
                         member -> member,
                         (first, second) -> first));
+    }
+
+    private List<String> resolveLocationFilter(List<String> requested, String pinnedLocation) {
+        if (pinnedLocation != null) {
+            return List.of(pinnedLocation);
+        }
+        if (requested == null || requested.isEmpty()) {
+            return List.of();
+        }
+        List<String> cleaned = requested.stream()
+                .filter(location -> location != null && !location.isBlank())
+                .filter(location -> !"ALL".equalsIgnoreCase(location))
+                .toList();
+        return cleaned;
+    }
+
+    private boolean matchesLocation(RetirementRequest r, Member member, List<String> locations) {
+        if (locations == null || locations.isEmpty()) {
+            return true;
+        }
+        String location = r != null ? r.getSubmissionLocation() : null;
+        if ((location == null || location.isBlank()) && member != null) {
+            location = member.getSubmissionLocation();
+        }
+        if (location == null || location.isBlank()) {
+            return false;
+        }
+        final String locToMatch = location;
+        return locations.stream().anyMatch(loc -> loc.equalsIgnoreCase(locToMatch));
     }
 
     private boolean contains(String value, String key) {

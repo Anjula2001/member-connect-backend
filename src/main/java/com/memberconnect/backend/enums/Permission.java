@@ -56,7 +56,10 @@ public enum Permission {
 
     /**
      * MMS20 — hand approved scholarships to the Finance Module for disbursement.
-     * Defined now so the matrix is complete; there is no endpoint behind it yet.
+     * Defined so the matrix is complete; no endpoint is guarded by it, because the
+     * handoff runs automatically when the Board's approval list is processed rather
+     * than being triggered by a user. See
+     * Grade5ScholarshipApprovalListService#callFinanceModuleApi.
      */
     G5_FINANCE_DISBURSE,
 

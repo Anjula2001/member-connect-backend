@@ -49,6 +49,7 @@ public class RetirementRequestController {
     @PreAuthorize("hasAuthority('RET_REQUEST_VIEW')")
     @GetMapping
     public List<RetirementRequestResponseDTO> searchRequests(
+            @RequestParam(required = false) List<String> locations,
             @RequestParam(required = false) List<String> statuses,
             @RequestParam(required = false) String fromDate,
             @RequestParam(required = false) String toDate,
@@ -57,6 +58,7 @@ public class RetirementRequestController {
             @RequestParam(defaultValue = "asc") String sortOrder
     ) {
         return retirementService.searchRequests(
+                locations,
                 statuses,
                 fromDate,
                 toDate,
@@ -121,6 +123,22 @@ public class RetirementRequestController {
             @PathVariable String requestNo
     ) {
         return retirementService.approveRequest(requestNo);
+    }
+
+    /**
+     * MMT17 — send one approved retirement to the Finance Module and complete the
+     * member's retirement.
+     *
+     * Guarded by RET_REQUEST_APPROVE rather than a right of its own: the retirement
+     * approver is the office that follows the request through, and there is no
+     * separate Finance actor in MMT12-MMT17 the way MMS20 has one for Grade 5.
+     */
+    @PreAuthorize("hasAuthority('RET_REQUEST_APPROVE')")
+    @PostMapping("/{requestNo}/send-to-finance")
+    public RetirementRequestResponseDTO sendToFinanceModule(
+            @PathVariable String requestNo
+    ) {
+        return retirementService.sendToFinanceModule(requestNo);
     }
 
     // Reject request

@@ -6,6 +6,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +31,8 @@ import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class Grade5ScholarshipService {
+
+    private static final Logger log = LoggerFactory.getLogger(Grade5ScholarshipService.class);
 
     @Autowired
     private Grade5ScholarshipRepository repository;
@@ -896,4 +900,67 @@ public class Grade5ScholarshipService {
         }
     }
 
+
+    // ---- Finance Module integration (MMS20) ----
+
+    /**
+     * Hand one approved Grade 5 scholarship to the Finance Module and close the
+     * record.
+     *
+     * Driven by a button rather than by the approval itself: the Board approves, and
+     * the Finance Department then decides when the disbursement goes out. Only an
+     * APPROVED request qualifies, so a request cannot be disbursed twice — the second
+     * click finds it INACTIVE and is refused.
+     *
+     * The Finance call is deliberately NOT wrapped in a try/catch. This is a user
+     * action with a visible outcome: if the call fails the exception surfaces in the
+     * UI and the request stays APPROVED, ready to be retried. Closing a record whose
+     * money never moved would be the worse outcome.
+     */
+    public Grade5ScholarshipRequest sendToFinanceModule(String requestNo) {
+        Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo)
+                .orElseThrow(() -> new RuntimeException(
+                        "Grade 5 Scholarship Request not found: " + requestNo));
+
+        if (!ScholarshipRequestStatus.APPROVED.name().equalsIgnoreCase(request.getStatus())) {
+            throw new RuntimeException(
+                    "Only an approved Grade 5 Scholarship request can be sent to the Finance Module. "
+                            + requestNo + " is " + request.getStatus() + ".");
+        }
+
+        callFinanceModuleApi(request);
+
+        // "Once the funds are disbursed for the Grade 5 Scholarship, the record will
+        // be made Inactive."
+        request.setStatus(ScholarshipRequestStatus.INACTIVE.name());
+        return repository.save(request);
+    }
+
+    /**
+     * Mock stand-in for the Finance Module's API (MMS20).
+     *
+     * Logs the details that would be POSTed — who is owed what, and into which
+     * account — so the handoff is visible end to end without a second system. Swap
+     * the body for a real HTTP call when the Finance Module exists; nothing else has
+     * to change. Throwing from here leaves the request APPROVED, which is what the
+     * caller relies on.
+     */
+    private void callFinanceModuleApi(Grade5ScholarshipRequest request) {
+        User sender = currentUserService != null ? currentUserService.current() : null;
+
+        log.info("[FINANCE MODULE - MOCK API] Grade 5 scholarship handed off: requestNo={} memberId={} "
+                + "studentName={} examYear={} disbursementOption={} memberAmount={} minorAmount={} "
+                + "minorAccountNumber={} approvalListId={} location={} sentBy={}",
+                request.getRequestNo(),
+                request.getMemberId(),
+                request.getStudentName(),
+                request.getExamYear(),
+                request.getDisbursementOption(),
+                request.getMemberAmount(),
+                request.getMinorAmount(),
+                request.getMinorAccountNumber(),
+                request.getApprovalListId(),
+                request.getSubmissionLocation(),
+                sender != null ? sender.getUsername() : null);
+    }
 }

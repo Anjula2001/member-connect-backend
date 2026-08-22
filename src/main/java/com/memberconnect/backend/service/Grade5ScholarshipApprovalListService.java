@@ -202,6 +202,9 @@ public class Grade5ScholarshipApprovalListService {
                 approvedCount++;
                 System.out.println("SMS & EMAIL: Grade 5 Request " + request.getRequestNo()
                         + " approved. Fund disbursement is underway.");
+                // The approved request stops here. MMS20 — handing it to the Finance
+                // Module and closing it — is a separate, deliberate step, driven from
+                // Grade5ScholarshipService#sendToFinanceModule.
             }
             scholarshipRepository.save(request);
         }

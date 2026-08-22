@@ -237,6 +237,23 @@ public class Grade5ScholarshipController {
     }
 
     /**
+     * MMS20 — send one approved scholarship to the Finance Module for disbursement.
+     *
+     * Guarded by G5_FINANCE_DISBURSE, which only ACCOUNTS (the Head Office Finance
+     * Department) and Super Admin hold: the office that approves a scholarship is not
+     * the one that releases the money. On success the request comes back INACTIVE.
+     */
+    @PreAuthorize("hasAuthority('G5_FINANCE_DISBURSE')")
+    @PostMapping("/{requestNo}/send-to-finance")
+    public ResponseEntity<?> sendToFinanceModule(@PathVariable String requestNo) {
+        try {
+            return ResponseEntity.ok(service.sendToFinanceModule(requestNo));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
      * Change request status (view mode).
      *
      * The right required depends on the target status, not on the endpoint, so this
