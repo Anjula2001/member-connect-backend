@@ -54,6 +54,8 @@ class DormantLocationScopingTest {
     @Mock private BoardmeetingRepository boardMeetingRepository;
     @Mock private LoanObligationRepository obligationRepository;
 
+    @Mock private MemberStatusHistoryService memberStatusHistoryService;
+
     @InjectMocks private DormantMembershipService dormantService;
 
     @AfterEach

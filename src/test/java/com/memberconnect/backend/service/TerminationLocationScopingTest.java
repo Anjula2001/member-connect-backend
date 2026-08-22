@@ -62,6 +62,8 @@ class TerminationLocationScopingTest {
     @Mock private AuditService auditService;
 
 
+    @Mock private MemberStatusHistoryService memberStatusHistoryService;
+
     @InjectMocks private TerminationService terminationService;
 
     @AfterEach

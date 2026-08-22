@@ -60,6 +60,8 @@ class DormantApprovalListServiceTest {
     @Mock private AuditService auditService;
     @Mock private ApplicationEventPublisher eventPublisher;
 
+    @Mock private MemberStatusHistoryService memberStatusHistoryService;
+
     @InjectMocks private DormantMembershipService dormantService;
 
     private DormantApprovalList list;

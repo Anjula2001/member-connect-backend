@@ -33,18 +33,21 @@ public class RetirementService {
     private final LoanRepository loanRepository;
     private final LoanObligationRepository obligationRepository;
     private final DocumentService documentService;
+    private final MemberStatusHistoryService memberStatusHistoryService;
 
     public RetirementService(
             MemberRepository memberRepository,
             RetirementRequestRepository requestRepository,
             LoanRepository loanRepository,
             LoanObligationRepository obligationRepository,
-            DocumentService documentService) {
+            DocumentService documentService,
+            MemberStatusHistoryService memberStatusHistoryService) {
         this.memberRepository = memberRepository;
         this.requestRepository = requestRepository;
         this.loanRepository = loanRepository;
         this.obligationRepository = obligationRepository;
         this.documentService = documentService;
+        this.memberStatusHistoryService = memberStatusHistoryService;
     }
 
     // returns all retirement requests.
@@ -206,8 +209,12 @@ public class RetirementService {
         RetirementRequest saved = requestRepository.save(request);
 
         // Update member status
+        MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.RETIREMENT_REQUESTED);
         memberRepository.save(member);
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                requestedDate, "RETIREMENT_REQUESTED",
+                "Retirement request " + saved.getRequestNo());
 
         return mapToResponse(saved);
     }
@@ -290,8 +297,12 @@ public class RetirementService {
             request.setRejectReason(null);
 
             Member member = getMemberEntity(request.getMemberId());
+            MemberStatus previousMemberStatus = member.getStatus();
             member.setStatus(MemberStatus.ACTIVE);
             memberRepository.save(member);
+            memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                    null, "RETIREMENT_REQUEST_INACTIVE",
+                    "Retirement request " + request.getRequestNo() + " made inactive");
         } else if (newStatus == RetirementRequestStatus.NEW ||
                 newStatus == RetirementRequestStatus.INCOMPLETE ||
                 newStatus == RetirementRequestStatus.SUBMITTED_FOR_APPROVAL) {
@@ -301,8 +312,12 @@ public class RetirementService {
             }
 
             Member member = getMemberEntity(request.getMemberId());
+            MemberStatus previousMemberStatus = member.getStatus();
             member.setStatus(MemberStatus.RETIREMENT_REQUESTED);
             memberRepository.save(member);
+            memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                    request.getRequestedDate(), "RETIREMENT_REQUEST_REOPENED",
+                    "Retirement request " + request.getRequestNo() + " set to " + newStatus);
         }
 
         RetirementRequest saved = requestRepository.save(request);
@@ -348,8 +363,14 @@ public class RetirementService {
         RetirementRequest saved = requestRepository.save(request);
 
         Member member = getMemberEntity(request.getMemberId());
+        MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.RETIREMENT_APPROVED);
         memberRepository.save(member);
+        // The retirement's own effective date, not today: the member retires on the date
+        // the request names, which is what a later "was the member active on X" asks about
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                request.getEffectiveDate(), "RETIREMENT_APPROVED",
+                "Retirement request " + saved.getRequestNo() + " approved");
 
         return mapToResponse(saved);
     }
@@ -365,8 +386,12 @@ public class RetirementService {
         RetirementRequest saved = requestRepository.save(request);
 
         Member member = getMemberEntity(request.getMemberId());
+        MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.ACTIVE);
         memberRepository.save(member);
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                null, "RETIREMENT_REJECTED",
+                "Retirement request " + saved.getRequestNo() + " rejected");
 
         return mapToResponse(saved);
     }

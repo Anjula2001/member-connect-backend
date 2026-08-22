@@ -73,6 +73,9 @@ public class UniversityScholarshipService {
     @Autowired
     private com.memberconnect.backend.config.CurrentUserService currentUserService;
 
+    @Autowired
+    private MemberStatusHistoryService memberStatusHistoryService;
+
     @Value("${scholarship.required.remitted.months}")
     private int requiredRemittedMonths;
 
@@ -136,6 +139,39 @@ public class UniversityScholarshipService {
         }
     }
     
+    /**
+     * Validates that the member was Active on the selected exam's last date.
+     *
+     * Distinct from validateMemberActiveOnExamLastDate above, which checks the status
+     * the member holds now: a member can be Active today having been Inactive when the
+     * exam was sat, and the scholarship is earned at the exam rather than today. The
+     * reverse holds too - a member who went Inactive after the exam still qualifies.
+     *
+     * Where the history has nothing recorded on or before that date the request is let
+     * through: every status change made before the history table existed is invisible
+     * to it, and unrecorded history is not evidence that a member was inactive.
+     */
+    private void validateMemberActiveDuringExam(String memberId, String examYear) {
+        if (!StringUtils.hasText(memberId) || !StringUtils.hasText(examYear)) {
+            return;
+        }
+
+        UniversityScholarshipExamMaster examMaster = examMasterRepository
+                .findByExamYear(examYear)
+                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
+
+        LocalDate examLastDate = examMaster.getExamLastDate();
+        if (examLastDate == null) {
+            throw new RuntimeException("Selected exam last date not found in Exam Master");
+        }
+
+        if (memberStatusHistoryService.wasNotActiveOn(memberId, examLastDate)) {
+            throw new RuntimeException(
+                    "The University Scholarship Request cannot be saved. The Member is not Active during the selected Exam"
+            );
+        }
+    }
+
     // Validate membership duration of the member at the time of exam last date
     private void validateMembershipDuration(UniversityScholarshipRequestDto dto) {
 
@@ -903,6 +939,7 @@ public class UniversityScholarshipService {
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
         validateMemberActiveOnExamLastDate(dto);
+        validateMemberActiveDuringExam(dto.getMemberId(), dto.getExamYear());
         validateMembershipDuration(dto);
         validateFinanceEligibility(dto, member);
         validateAnotherApprovedScholarshipWithinYear(dto);
@@ -1041,6 +1078,15 @@ public class UniversityScholarshipService {
         if (request.getStatus() == UniversityScholarshipRequestStatus.APPROVED) {
                 throw new RuntimeException("Approved University Scholarship records cannot be edited from the normal edit screen");
         }
+
+        // The exam year is editable here, so the rule has to hold on the way out too -
+        // otherwise a request created against a valid exam could be switched to one the
+        // member was not Active for
+        validateMemberActiveDuringExam(
+                        dto.getMemberId() != null
+                                ? dto.getMemberId()
+                                : (request.getMember() != null ? request.getMember().getMemberId() : null),
+                        dto.getExamYear());
 
         if (dto.getMemberId() != null) {
                 Member member = memberRepository.findByMemberId(dto.getMemberId())

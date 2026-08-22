@@ -112,6 +112,7 @@ public class TerminationService {
     private final BranchRepository branchRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditService auditService;
+    private final MemberStatusHistoryService memberStatusHistoryService;
 
     public TerminationService(
             MemberRepository memberRepository,
@@ -125,7 +126,8 @@ public class TerminationService {
             BankRepository bankRepository,
             BranchRepository branchRepository,
             ApplicationEventPublisher eventPublisher,
-            AuditService auditService
+            AuditService auditService,
+            MemberStatusHistoryService memberStatusHistoryService
     ) {
         this.memberRepository = memberRepository;
         this.requestRepository = requestRepository;
@@ -139,6 +141,7 @@ public class TerminationService {
         this.branchRepository = branchRepository;
         this.eventPublisher = eventPublisher;
         this.auditService = auditService;
+        this.memberStatusHistoryService = memberStatusHistoryService;
     }
 
     /**
@@ -315,6 +318,9 @@ public class TerminationService {
         member.setStatus(MemberStatus.TERMINATION_REQUESTED);
         memberRepository.save(member);
         auditMemberStatusChange(saved, previousMemberStatus, member.getStatus(), "Termination request saved");
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                saved.getRequestedDate(), "TERMINATION_REQUESTED",
+                "Termination request " + saved.getRequestNo() + " saved");
 
         return mapToResponse(saved);
     }
@@ -531,6 +537,9 @@ public class TerminationService {
         member.setStatus(MemberStatus.TERMINATION_APPROVED);
         memberRepository.save(member);
         auditMemberStatusChange(saved, previousMemberStatus, member.getStatus(), "Board approval");
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                saved.getEffectiveDate(), "TERMINATION_APPROVED",
+                "Termination request " + saved.getRequestNo() + " approved by the Board");
 
         // Hands the member to the Finance Module for account closing (MMT11).
         // Published rather than called inline so the outbound HTTP call happens
@@ -572,6 +581,9 @@ public class TerminationService {
         member.setStatus(MemberStatus.ACTIVE);
         memberRepository.save(member);
         auditMemberStatusChange(saved, previousMemberStatus, member.getStatus(), "Board rejection");
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                null, "TERMINATION_REJECTED",
+                "Termination request " + saved.getRequestNo() + " rejected by the Board");
 
         // SRS MMT09: the member is told by SMS and email, with the reason.
         eventPublisher.publishEvent(new TerminationRejectedEvent(
@@ -625,6 +637,9 @@ public class TerminationService {
         MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.TERMINATED);
         memberRepository.save(member);
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                request.getEffectiveDate(), "TERMINATION_COMPLETED",
+                "Termination request " + request.getRequestNo() + " completed by Finance");
 
         // MMT11. Two rows, because two distinct facts are being asserted: that
         // Finance reported completion, and that the membership consequently closed.
@@ -735,6 +750,10 @@ public class TerminationService {
             member.setStatus(MemberStatus.TERMINATION_REQUESTED);
             memberRepository.save(member);
         }
+
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                null, "TERMINATION_REQUEST_STATUS_CHANGED",
+                "Manual status change on " + saved.getRequestNo() + " to " + targetStatus);
 
         auditMemberStatusChange(
                 saved,
