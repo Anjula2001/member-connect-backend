@@ -78,6 +78,9 @@ public class UniversityScholarshipService {
     @Autowired
     private MemberStatusHistoryService memberStatusHistoryService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     @Value("${scholarship.required.remitted.months}")
     private int requiredRemittedMonths;
 
@@ -1307,7 +1310,11 @@ public class UniversityScholarshipService {
         request.setRejectReason(reason.trim());
         stampCommitteeDecision(request);
 
-        return scholarshipRequestRepository.save(request);
+        UniversityScholarshipRequest saved = scholarshipRequestRepository.save(request);
+
+        notifyMember(saved, UniversityScholarshipRequestStatus.REJECTED, reason.trim());
+
+        return saved;
     }
 
     private void stampCommitteeDecision(UniversityScholarshipRequest request) {
@@ -1329,7 +1336,42 @@ public class UniversityScholarshipService {
                 request.setStatus(UniversityScholarshipRequestStatus.INCOMPLETE);
                 request.setIncompleteReason(reason);
 
-                return scholarshipRequestRepository.save(request);
+                UniversityScholarshipRequest saved = scholarshipRequestRepository.save(request);
+
+                notifyMember(saved, UniversityScholarshipRequestStatus.INCOMPLETE, reason);
+
+                return saved;
+    }
+
+    /**
+     * Emails the member about a decision on their request.
+     *
+     * Best-effort by design: NotificationService swallows its own delivery failures, and
+     * this adds the same guard around a member that cannot be resolved, because an
+     * undeliverable email must never undo a decision that has already been recorded.
+     */
+    private void notifyMember(
+            UniversityScholarshipRequest request,
+            UniversityScholarshipRequestStatus status,
+            String reason
+    ) {
+        String memberId = request.getMember() != null ? request.getMember().getMemberId() : null;
+        if (!StringUtils.hasText(memberId)) {
+            return;
+        }
+
+        String requestNo = request.getUniversityScholarshipRequestID();
+        String studentName = request.getStudentName();
+
+        switch (status) {
+            case INCOMPLETE -> notificationService.notifyUniversityScholarshipMarkedIncomplete(
+                    memberId, requestNo, studentName, reason);
+            case REJECTED -> notificationService.notifyUniversityScholarshipRejected(
+                    memberId, requestNo, studentName, reason);
+            case APPROVED -> notificationService.notifyUniversityScholarshipApproved(
+                    memberId, requestNo, studentName);
+            default -> { }
+        }
     }
 
     // Attach scholarship requests to a normal board meeting for approval
@@ -1511,12 +1553,8 @@ public class UniversityScholarshipService {
                     }
                     request.setStatus(UniversityScholarshipRequestStatus.REJECTED);
                     request.setRejectReason(reason.trim());
-                    System.out.println("SIMULATING NOTIFICATION: SMS sent to Student " + request.getStudentName() + " and Member: Request rejected. Reason: " + reason);
-                    System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request rejected. Reason: " + reason);
                 } else {
                     request.setStatus(UniversityScholarshipRequestStatus.APPROVED);
-                    System.out.println("SIMULATING NOTIFICATION: SMS sent to Student " + request.getStudentName() + " and Member: Request approved.");
-                    System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request approved.");
                 }
 
                 request.setProcessedBy(processedBy);
@@ -1530,7 +1568,11 @@ public class UniversityScholarshipService {
                     } catch (Exception ignored) {}
                 }
 
-                scholarshipRequestRepository.save(request);
+                UniversityScholarshipRequest saved = scholarshipRequestRepository.save(request);
+
+                // After the save, so the member is only told about a decision that was
+                // actually recorded
+                notifyMember(saved, saved.getStatus(), saved.getRejectReason());
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to process decisions: " + e.getMessage(), e);
