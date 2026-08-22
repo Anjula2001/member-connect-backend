@@ -1542,14 +1542,6 @@ public class UniversityScholarshipService {
                     "Cannot change status from " + currentStatus + " to " + newStatus);
         }
 
-        if (newStatus == UniversityScholarshipRequestStatus.NEW
-                && request.getApprovalListId() != null
-                && !request.getApprovalListId().isBlank()) {
-            throw new RuntimeException(
-                    "This request is attached to approval list " + request.getApprovalListId()
-                            + " and cannot be returned to New. Remove it from the list first.");
-        }
-
         request.setStatus(newStatus);
 
         if (newStatus == UniversityScholarshipRequestStatus.NEW) {
