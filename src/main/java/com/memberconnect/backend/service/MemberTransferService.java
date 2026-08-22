@@ -53,11 +53,49 @@ public class MemberTransferService {
                 .orElseThrow(() -> new RuntimeException("Member transfer request not found"));
     }
 
+    /**
+     * A member may only have one transfer request awaiting approval. A second one
+     * would compete with the first: whichever is approved last overwrites the
+     * member's working location with its own snapshot-era values.
+     *
+     * Only SUBMITTEDFORAPPROVAL blocks. An APPROVED transfer is finished work, so
+     * the member can be transferred again later; REJECTED and INACTIVE never block.
+     */
+    private void assertNoRequestAwaitingApproval(Member member) {
+        if (member == null || member.getMemberId() == null) {
+            return;
+        }
+
+        memberTransferRepository
+                .findFirstByMember_MemberIdAndStatus(
+                        member.getMemberId(), MemberTransferStatus.SUBMITTEDFORAPPROVAL)
+                .ifPresent(existing -> {
+                    throw new IllegalStateException(
+                            "Member " + member.getMemberId() + " already has transfer request "
+                                    + existing.getRequestId() + " awaiting approval."
+                                    + " That request must be approved or rejected first.");
+                });
+    }
+
+    // Returns the request awaiting approval for this member, or null when there is none
+    public MemberTransferRequest findRequestAwaitingApproval(String memberId) {
+        if (!StringUtils.hasText(memberId)) {
+            return null;
+        }
+
+        return memberTransferRepository
+                .findFirstByMember_MemberIdAndStatus(
+                        memberId, MemberTransferStatus.SUBMITTEDFORAPPROVAL)
+                .orElse(null);
+    }
+
     // Method to submit a new member transfer request
     public MemberTransferRequest submitRequest(MemberTransferDto dto) {
         MemberTransferRequest request = new MemberTransferRequest();
 
         applyDtoToEntity(dto, request);
+
+        assertNoRequestAwaitingApproval(request.getMember());
 
         // Snapshot the member's current values at time of request creation
         if (request.getMember() != null) {
