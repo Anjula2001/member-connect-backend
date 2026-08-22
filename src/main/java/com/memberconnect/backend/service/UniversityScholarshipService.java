@@ -731,7 +731,12 @@ public class UniversityScholarshipService {
 
         fundRequest.setStatus(UniversityScholarshipFundRequestStatus.INCOMPLETE);
         fundRequest.setIncompleteReason(reason.trim());
-        return toFundRequestDto(fundRequestRepository.save(fundRequest));
+
+        UniversityScholarshipFundRequest saved = fundRequestRepository.save(fundRequest);
+        notifyFundRequestMember(
+                saved, UniversityScholarshipFundRequestStatus.INCOMPLETE, reason.trim());
+
+        return toFundRequestDto(saved);
     }
 
     //change a fund request's status from View Mode.
@@ -824,7 +829,12 @@ public class UniversityScholarshipService {
 
             fundRequest.setStatus(UniversityScholarshipFundRequestStatus.INCOMPLETE);
             fundRequest.setIncompleteReason(reason.trim());
-            return toFundRequestDto(fundRequestRepository.save(fundRequest));
+
+            UniversityScholarshipFundRequest saved = fundRequestRepository.save(fundRequest);
+            notifyFundRequestMember(
+                    saved, UniversityScholarshipFundRequestStatus.INCOMPLETE, reason.trim());
+
+            return toFundRequestDto(saved);
         }
 
         if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
@@ -835,7 +845,12 @@ public class UniversityScholarshipService {
             fundRequest.setStatus(UniversityScholarshipFundRequestStatus.APPROVED);
             fundRequest.setIncompleteReason(null);
             fundRequest.setDecisionReason(null);
-            return toFundRequestDto(fundRequestRepository.save(fundRequest));
+
+            UniversityScholarshipFundRequest saved = fundRequestRepository.save(fundRequest);
+            notifyFundRequestMember(
+                    saved, UniversityScholarshipFundRequestStatus.APPROVED, null);
+
+            return toFundRequestDto(saved);
         }
 
         if (nextStatus == UniversityScholarshipFundRequestStatus.REJECTED) {
@@ -846,7 +861,12 @@ public class UniversityScholarshipService {
             fundRequest.setStatus(UniversityScholarshipFundRequestStatus.REJECTED);
             fundRequest.setIncompleteReason(null);
             fundRequest.setDecisionReason(reason.trim());
-            return toFundRequestDto(fundRequestRepository.save(fundRequest));
+
+            UniversityScholarshipFundRequest saved = fundRequestRepository.save(fundRequest);
+            notifyFundRequestMember(
+                    saved, UniversityScholarshipFundRequestStatus.REJECTED, reason.trim());
+
+            return toFundRequestDto(saved);
         }
 
         if (nextStatus != UniversityScholarshipFundRequestStatus.NEW) {
@@ -1370,6 +1390,41 @@ public class UniversityScholarshipService {
                     memberId, requestNo, studentName, reason);
             case APPROVED -> notificationService.notifyUniversityScholarshipApproved(
                     memberId, requestNo, studentName);
+            default -> { }
+        }
+    }
+
+    /**
+     * Emails the member about a decision on a fund request raised against their
+     * scholarship. Best-effort, like notifyMember above.
+     */
+    private void notifyFundRequestMember(
+            UniversityScholarshipFundRequest fundRequest,
+            UniversityScholarshipFundRequestStatus status,
+            String reason
+    ) {
+        UniversityScholarshipRequest scholarship = fundRequest.getUniversityScholarshipRequest();
+        String memberId = scholarship != null && scholarship.getMember() != null
+                ? scholarship.getMember().getMemberId()
+                : null;
+
+        if (!StringUtils.hasText(memberId)) {
+            return;
+        }
+
+        String fundRequestNo = fundRequest.getFundRequestId();
+        String scholarshipNo = scholarship.getUniversityScholarshipRequestID();
+        String studentName = scholarship.getStudentName();
+        String period = fundRequest.getRequestedPeriod();
+
+        switch (status) {
+            case INCOMPLETE -> notificationService.notifyFundRequestMarkedIncomplete(
+                    memberId, fundRequestNo, scholarshipNo, studentName, period, reason);
+            case REJECTED -> notificationService.notifyFundRequestRejected(
+                    memberId, fundRequestNo, scholarshipNo, studentName, period, reason);
+            case APPROVED -> notificationService.notifyFundRequestApproved(
+                    memberId, fundRequestNo, scholarshipNo, studentName, period,
+                    fundRequest.getRequestedAmount());
             default -> { }
         }
     }
