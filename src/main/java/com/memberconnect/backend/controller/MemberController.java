@@ -14,6 +14,8 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import com.memberconnect.backend.enums.MembershipDocumentType;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -90,9 +92,18 @@ public class MemberController {
             @RequestParam(required = false) String educationalZone,
             @RequestParam(required = false) String educationalDistrict,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartTo) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartTo,
+            // MR15/16/17: "Members without <document>" - applied here so the print
+            // screens stop fetching the whole active membership to discard most of it.
+            @RequestParam(required = false) MembershipDocumentType withoutDocument,
+            // MR15/16/17 Board Meeting Date period. Omitting both is the spec's "Any".
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate boardMeetingFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate boardMeetingTo,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDirection) {
         return memberService.searchMembers(query, statuses, locations, workingLocationType, educationalZone,
-                educationalDistrict, membershipStartFrom, membershipStartTo);
+                educationalDistrict, membershipStartFrom, membershipStartTo,
+                withoutDocument, boardMeetingFrom, boardMeetingTo, sortBy, sortDirection);
     }
 
     @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")

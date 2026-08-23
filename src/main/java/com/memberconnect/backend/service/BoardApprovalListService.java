@@ -109,13 +109,18 @@ public class BoardApprovalListService {
 
 	// ── toDto ────────────────────────────────────────────────────────────
 
-	private BoardApprovalListDTO toDto(BoardApprovalList entity) {
+	/**
+	 * Everything that does not require touching the applications collection.
+	 *
+	 * Shared by toDto (detail - includes the ids) and toSummaryDto (list view - the
+	 * count only), so the two cannot drift apart field by field.
+	 */
+	private BoardApprovalListDTO toScalarDto(BoardApprovalList entity) {
 		BoardApprovalListDTO dto = new BoardApprovalListDTO();
 		dto.setId(entity.getId());
 		dto.setListId(entity.getListId());
 		dto.setBoardMeetingId(entity.getBoardMeetingId());
 		dto.setBoardMeetingDate(entity.getBoardMeetingDate());
-		dto.setApplicationIds(entity.getApplications().stream().map(Member_Application::getApplicationID).collect(Collectors.toList()));
 		dto.setNameChangeRequestIds(parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv()));
 		dto.setNomineeChangeRequestIds(parseCsvAsIntegers(entity.getNomineeChangeRequestIdsCsv()));
 		dto.setStatus(entity.getStatus());
@@ -127,6 +132,24 @@ public class BoardApprovalListService {
 		dto.setRejectReason(entity.getRejectReason());
 		dto.setBoardRemarks(entity.getBoardRemarks());
 		dto.setApprovedListDocument(entity.getApprovedListDocument());
+		return dto;
+	}
+
+	/** Detail view: carries the full application id list. */
+	private BoardApprovalListDTO toDto(BoardApprovalList entity) {
+		BoardApprovalListDTO dto = toScalarDto(entity);
+		List<String> applicationIds = entity.getApplications().stream()
+				.map(Member_Application::getApplicationID)
+				.collect(Collectors.toList());
+		dto.setApplicationIds(applicationIds);
+		dto.setApplicationCount(applicationIds.size());
+		return dto;
+	}
+
+	/** List view: the count only, so no lazy collection is touched. */
+	private BoardApprovalListDTO toSummaryDto(BoardApprovalList entity, int applicationCount) {
+		BoardApprovalListDTO dto = toScalarDto(entity);
+		dto.setApplicationCount(applicationCount);
 		return dto;
 	}
 
@@ -396,9 +419,21 @@ public class BoardApprovalListService {
 
 	// ── Read ─────────────────────────────────────────────────────────────
 
-	public List<BoardApprovalListDTO> getAllBoardApprovalLists() {
-		return boardApprovalListRepository.findAll().stream()
-				.map(this::toDto)
+	/**
+	 * MR07's retrieval: "All" (both bounds null) or a Board Meeting date period.
+	 *
+	 * The period is applied in the query rather than in the browser, and the rows come
+	 * back without their application ids - two changes that together stop this screen
+	 * shipping every application of every list in order to render a row count.
+	 */
+	public List<BoardApprovalListDTO> getAllBoardApprovalLists(LocalDate from, LocalDate to) {
+		Map<Long, Integer> counts = boardApprovalListRepository.countApplicationsPerList().stream()
+				.collect(Collectors.toMap(
+						row -> (Long) row[0],
+						row -> ((Number) row[1]).intValue()));
+
+		return boardApprovalListRepository.findInMeetingDateRange(from, to).stream()
+				.map(entity -> toSummaryDto(entity, counts.getOrDefault(entity.getId(), 0)))
 				.toList();
 	}
 

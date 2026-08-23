@@ -104,7 +104,12 @@ public class MembershipDocumentService {
         };
     }
 
-    private LocalDateTime printedAt(Member member, MembershipDocumentType type) {
+    /**
+     * Public and static so MemberService can apply the same mapping when filtering
+     * "Members without <document>" (MR15/16/17). Two switches over the same three
+     * columns would be two places to forget a document type.
+     */
+    public static LocalDateTime printedAt(Member member, MembershipDocumentType type) {
         return switch (type) {
             case MEMBERSHIP_CARD -> member.getMembershipCardPrintedAt();
             case SIGNATURE_CARD -> member.getSignatureCardPrintedAt();

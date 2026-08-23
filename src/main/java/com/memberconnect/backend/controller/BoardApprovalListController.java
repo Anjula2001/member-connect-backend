@@ -7,8 +7,10 @@ import com.memberconnect.backend.dto.NommineChangeRequestDTO;
 import com.memberconnect.backend.service.BoardApprovalListService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -27,9 +29,15 @@ public class BoardApprovalListController {
 		return boardApprovalListService.createBoardApprovalList(boardApprovalListDTO);
 	}
 
+	/**
+	 * MR07: retrieve by "All" or a Board Meeting date period. Both bounds are optional
+	 * and independent, so an open-ended period may pass just one.
+	 */
 	@GetMapping("/getAllBoardApprovalLists")
-	public List<BoardApprovalListDTO> getAllBoardApprovalLists() {
-		return boardApprovalListService.getAllBoardApprovalLists();
+	public List<BoardApprovalListDTO> getAllBoardApprovalLists(
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+		return boardApprovalListService.getAllBoardApprovalLists(from, to);
 	}
 
 	@GetMapping("/getBoardApprovalListByListId/{listId}")

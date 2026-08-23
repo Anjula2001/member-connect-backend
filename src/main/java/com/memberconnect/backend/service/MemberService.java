@@ -17,7 +17,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import com.memberconnect.backend.enums.MembershipDocumentType;
+import com.memberconnect.backend.repository.BoardApprovalListRepository;
+
 import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 @Service
 @Transactional
@@ -46,6 +52,11 @@ public class MemberService {
 
     @Autowired
     private MemberApplicationRepository memberApplicationRepository;
+
+    // MR15/16/17's Board Meeting Date filter. A member carries no meeting date, so the
+    // period has to be resolved through the application the member was created from.
+    @Autowired
+    private BoardApprovalListRepository boardApprovalListRepository;
 
     @Autowired
     private ModelMapper modelMapper;
@@ -128,10 +139,24 @@ public class MemberService {
         return convertToDTO(member);
     }
 
+    /**
+     * @param withoutDocument when set, keeps only members whose copy of that document
+     *        has not been printed - the "Members without Membership Cards / Signature
+     *        Cards / Passbooks" option the print screens default to (MR15/16/17). It
+     *        used to be applied in the browser, which meant every active member was
+     *        fetched and most were discarded, and the discarded share grows as more
+     *        documents get printed.
+     * @param sortBy one of memberID, status, working-location-type, district, zone;
+     *        anything else (including null) sorts by membership date, the spec default.
+     * @param sortDirection "desc" to reverse; ascending otherwise, per the spec default.
+     */
     public List<MemberDTO> searchMembers(String query, List<MemberStatus> statuses, List<String> locations,
                                           String workingLocationType, String educationalZone,
                                           String educationalDistrict,
-                                          LocalDate membershipStartFrom, LocalDate membershipStartTo) {
+                                          LocalDate membershipStartFrom, LocalDate membershipStartTo,
+                                          MembershipDocumentType withoutDocument,
+                                          LocalDate boardMeetingFrom, LocalDate boardMeetingTo,
+                                          String sortBy, String sortDirection) {
 
         // Normalise sentinel values from the UI
         final String q = (query == null || query.isBlank()) ? null : query.toLowerCase().trim();
@@ -143,6 +168,15 @@ public class MemberService {
                 || "all-zones".equalsIgnoreCase(educationalZone)) ? null : educationalZone.toLowerCase();
         final String ed = (educationalDistrict == null || educationalDistrict.isBlank()
                 || "all-districts".equalsIgnoreCase(educationalDistrict)) ? null : educationalDistrict.toLowerCase();
+
+        // Resolved once rather than per member. Null means "Any" - the spec default -
+        // and is distinct from an empty set, which means a period was given and no
+        // meeting in it approved anybody.
+        final Set<Long> approvedApplicationIds =
+                (boardMeetingFrom == null && boardMeetingTo == null)
+                        ? null
+                        : new HashSet<>(boardApprovalListRepository
+                                .findApplicationIdsInMeetingDateRange(boardMeetingFrom, boardMeetingTo));
 
         return memberRepository.findAll().stream()
                 .filter(m -> {
@@ -183,10 +217,47 @@ public class MemberService {
                     if (membershipStartTo != null &&
                             (m.getMembershipStartDate() == null || m.getMembershipStartDate().isAfter(membershipStartTo)))
                         return false;
+                    // Board Meeting Date period: approved by a meeting inside it.
+                    if (approvedApplicationIds != null) {
+                        Long applicationId = m.getApplication() == null ? null : m.getApplication().getId();
+                        if (applicationId == null || !approvedApplicationIds.contains(applicationId))
+                            return false;
+                    }
+                    // "Members without <document>" - unprinted only.
+                    if (withoutDocument != null
+                            && MembershipDocumentService.printedAt(m, withoutDocument) != null)
+                        return false;
                     return true;
                 })
+                .sorted(memberComparator(sortBy, sortDirection))
                 .map(this::convertToDTO)
                 .toList();
+    }
+
+    /**
+     * The sort options MR13/MR15/MR16/MR17 list, applied here rather than in the
+     * browser so a paged result is ordered across the whole result and not just the
+     * page in hand.
+     *
+     * "District" is the submission location - the District Office the member
+     * registered through - matching the District column these screens render.
+     */
+    private Comparator<Member> memberComparator(String sortBy, String sortDirection) {
+        Comparator<String> text = Comparator.nullsLast(Comparator.naturalOrder());
+
+        Comparator<Member> comparator = switch (sortBy == null ? "" : sortBy) {
+            case "memberID" -> Comparator.comparing(Member::getMemberId, text);
+            case "status" -> Comparator.comparing(
+                    m -> m.getStatus() == null ? null : m.getStatus().name(), text);
+            case "working-location-type" -> Comparator.comparing(Member::getWorkingLocationType, text);
+            case "district" -> Comparator.comparing(Member::getSubmissionLocation, text);
+            case "zone" -> Comparator.comparing(Member::getEducationalZone, text);
+            default -> Comparator.comparing(
+                    Member::getMembershipStartDate,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+        };
+
+        return "desc".equalsIgnoreCase(sortDirection) ? comparator.reversed() : comparator;
     }
 
     public MemberDTO updateMember(Long id, MemberDTO dto) {
