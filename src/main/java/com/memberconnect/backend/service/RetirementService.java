@@ -10,13 +10,19 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.memberconnect.backend.dto.MemberRetirementRequestDTO;
 import com.memberconnect.backend.dto.MemberRetirementValidationDTO;
 import com.memberconnect.backend.dto.MemberSummaryDTO;
 import com.memberconnect.backend.dto.RetirementRequestResponseDTO;
 import com.memberconnect.backend.enums.MemberStatus;
+import com.memberconnect.backend.enums.Role;
+import com.memberconnect.backend.event.MemberRetiredEvent;
+import com.memberconnect.backend.event.RetirementMarkedIncompleteEvent;
+import com.memberconnect.backend.event.RetirementRejectedEvent;
 import com.memberconnect.backend.enums.RetirementRequestStatus;
 import com.memberconnect.backend.model.Loan;
 import com.memberconnect.backend.model.LoanObligation;
@@ -40,6 +46,7 @@ public class RetirementService {
     private final LoanObligationRepository obligationRepository;
     private final DocumentService documentService;
     private final CurrentUserService currentUserService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public RetirementService(
             MemberRepository memberRepository,
@@ -47,13 +54,15 @@ public class RetirementService {
             LoanRepository loanRepository,
             LoanObligationRepository obligationRepository,
             DocumentService documentService,
-            CurrentUserService currentUserService) {
+            CurrentUserService currentUserService,
+            ApplicationEventPublisher eventPublisher) {
         this.memberRepository = memberRepository;
         this.requestRepository = requestRepository;
         this.loanRepository = loanRepository;
         this.obligationRepository = obligationRepository;
         this.documentService = documentService;
         this.currentUserService = currentUserService;
+        this.eventPublisher = eventPublisher;
     }
 
     // returns all retirement requests.
@@ -209,9 +218,18 @@ public class RetirementService {
             User currentUser = currentUserService != null ? currentUserService.current() : null;
             request.setCreatedBy(currentUser != null ? currentUser.getUsername() : null);
 
-            String location = member.getSubmissionLocation();
-            if ((location == null || location.isBlank()) && currentUser != null) {
-                location = currentUser.getAssignedDistrict();
+            // submission_location records WHICH DISTRICT OFFICE RAISED the request, not
+            // which office administers the member - the member's own district is already
+            // on the Member row and matchesLocation() falls back to it when this is null.
+            //
+            // So it is stamped only for a District Office user, from their assigned
+            // district. A Super Admin (and any head-office role) has no district to act
+            // on behalf of, and previously inherited the member's one, which made a
+            // centrally-raised request look like Colombo or Kandy had raised it.
+            String location = null;
+            if (currentUser != null && currentUser.getRole() == Role.DISTRICT_OFFICE) {
+                String assigned = currentUser.getAssignedDistrict();
+                location = (assigned == null || assigned.isBlank()) ? null : assigned.trim();
             }
             request.setSubmissionLocation(location);
         }
@@ -346,7 +364,16 @@ public class RetirementService {
         }
     }
 
-    // Marks a retirement request as incomplete
+    /**
+     * Marks a retirement request as incomplete (MMT14) and tells the member why.
+     *
+     * @Transactional is required, not decorative: the notification is delivered by a
+     * @TransactionalEventListener bound to AFTER_COMMIT, and Spring silently discards
+     * such an event when it is published with no transaction in progress. It also
+     * makes the save and the publish one unit, so a member is never emailed about a
+     * status change that failed to persist.
+     */
+    @Transactional
     public RetirementRequestResponseDTO markIncomplete(String requestNo, String reason) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
@@ -355,6 +382,13 @@ public class RetirementService {
         request.setIncompleteReason(reason);
 
         RetirementRequest saved = requestRepository.save(request);
+
+        eventPublisher.publishEvent(new RetirementMarkedIncompleteEvent(
+                saved.getMemberId(),
+                saved.getRequestNo(),
+                reason
+        ));
+
         return mapToResponse(saved);
     }
 
@@ -396,6 +430,7 @@ public class RetirementService {
      * action with a visible outcome: if it fails the exception surfaces in the UI and
      * the member stays RETIREMENT_APPROVED, ready to be retried.
      */
+    @Transactional
     public RetirementRequestResponseDTO sendToFinanceModule(String requestNo) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
@@ -426,6 +461,14 @@ public class RetirementService {
         member.setStatus(MemberStatus.RETIRED);
         memberRepository.save(member);
 
+        // AFTER_COMMIT, so a member is only ever told their membership has ended once
+        // RETIRED is durable. A Finance failure throws above this line, leaving the
+        // member RETIREMENT_APPROVED and no email sent.
+        eventPublisher.publishEvent(new MemberRetiredEvent(
+                member.getMemberId(),
+                request.getRequestNo()
+        ));
+
         return mapToResponse(request);
     }
 
@@ -452,7 +495,15 @@ public class RetirementService {
                 sender != null ? sender.getUsername() : null);
     }
 
-    // reject retirement request
+    /**
+     * Reject a retirement request (MMT16), return the member to ACTIVE and tell them why.
+     *
+     * @Transactional earns its place twice here. It makes the two saves one unit - a
+     * request must never end up REJECTED while the member is left stranded in
+     * RETIREMENT_REQUESTED - and it gives the AFTER_COMMIT notification listener a
+     * transaction to bind to, without which Spring discards the event unsent.
+     */
+    @Transactional
     public RetirementRequestResponseDTO rejectRequest(String requestNo, String reason) {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
@@ -465,6 +516,12 @@ public class RetirementService {
         Member member = getMemberEntity(request.getMemberId());
         member.setStatus(MemberStatus.ACTIVE);
         memberRepository.save(member);
+
+        eventPublisher.publishEvent(new RetirementRejectedEvent(
+                saved.getMemberId(),
+                saved.getRequestNo(),
+                reason
+        ));
 
         return mapToResponse(saved);
     }

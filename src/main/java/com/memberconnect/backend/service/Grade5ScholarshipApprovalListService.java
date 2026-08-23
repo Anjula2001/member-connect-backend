@@ -1,7 +1,10 @@
 package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.Grade5ScholarshipApprovalListDTO;
+import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.Grade5RequestApprovalDetailDTO;
+import com.memberconnect.backend.event.Grade5ApprovedEvent;
+import com.memberconnect.backend.event.Grade5RejectedEvent;
 import com.memberconnect.backend.model.Grade5ScholarshipApprovalList;
 import com.memberconnect.backend.model.Grade5ScholarshipRequest;
 import com.memberconnect.backend.model.BoardMeeting;
@@ -9,6 +12,7 @@ import com.memberconnect.backend.repository.Grade5ScholarshipApprovalListReposit
 import com.memberconnect.backend.repository.Grade5ScholarshipRepository;
 import com.memberconnect.backend.repository.BoardmeetingRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +33,32 @@ public class Grade5ScholarshipApprovalListService {
 
     @Autowired
     private BoardmeetingRepository boardMeetingRepository;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    @Autowired
+    private CurrentUserService currentUserService;
+
+    /**
+     * Who to record as having processed a list.
+     *
+     * Read from the authenticated session rather than from the request body: this is an
+     * audit field on a Board decision, and a value the client supplies is a value the
+     * client can choose. The DTO's processedBy is ignored for the same reason.
+     *
+     * Falls back to the old literal only when there is no authenticated user at all,
+     * which in practice means a test calling the service directly.
+     */
+    private String resolveProcessedBy() {
+        com.memberconnect.backend.model.User user =
+                currentUserService != null ? currentUserService.current() : null;
+        if (user == null) {
+            return "Head Office User";
+        }
+        String fullName = user.getFullName();
+        return fullName != null && !fullName.isBlank() ? fullName.trim() : user.getUsername();
+    }
 
     private Grade5ScholarshipApprovalListDTO toDto(Grade5ScholarshipApprovalList entity) {
         Grade5ScholarshipApprovalListDTO dto = new Grade5ScholarshipApprovalListDTO();
@@ -196,22 +226,36 @@ public class Grade5ScholarshipApprovalListService {
             if ("REJECTED".equalsIgnoreCase(newStatus)) {
                 request.setIncompleteReason(detail.getRejectReason());
                 rejectedCount++;
-                System.out.println("SMS & EMAIL: Grade 5 Request " + request.getRequestNo() + " rejected. Reason: "
-                        + detail.getRejectReason());
             } else {
                 approvedCount++;
-                System.out.println("SMS & EMAIL: Grade 5 Request " + request.getRequestNo()
-                        + " approved. Fund disbursement is underway.");
                 // The approved request stops here. MMS20 — handing it to the Finance
                 // Module and closing it — is a separate, deliberate step, driven from
                 // Grade5ScholarshipService#sendToFinanceModule.
             }
-            scholarshipRepository.save(request);
+            Grade5ScholarshipRequest savedRequest = scholarshipRepository.save(request);
+
+            // Published, not sent: the listener is bound to AFTER_COMMIT, so the member
+            // hears nothing until the whole list has been processed and committed. That
+            // matters here more than elsewhere - this loop can throw partway through on
+            // an unknown request number, and an email announcing a Board decision that
+            // was then rolled back cannot be taken back.
+            if ("REJECTED".equalsIgnoreCase(newStatus)) {
+                eventPublisher.publishEvent(new Grade5RejectedEvent(
+                        savedRequest.getMemberId(),
+                        savedRequest.getRequestNo(),
+                        savedRequest.getStudentName(),
+                        detail.getRejectReason()));
+            } else {
+                eventPublisher.publishEvent(new Grade5ApprovedEvent(
+                        savedRequest.getMemberId(),
+                        savedRequest.getRequestNo(),
+                        savedRequest.getStudentName()));
+            }
         }
 
         entity.setStatus("PROCESSED");
         entity.setProcessedAt(LocalDateTime.now());
-        entity.setProcessedBy(dto.getProcessedBy() != null ? dto.getProcessedBy() : "Head Office User");
+        entity.setProcessedBy(resolveProcessedBy());
         entity.setActualMeetingDate(actualMeetingDate);
         entity.setBoardRemarks(boardRemarks);
         entity.setScannedReportPath(scannedReportPath);

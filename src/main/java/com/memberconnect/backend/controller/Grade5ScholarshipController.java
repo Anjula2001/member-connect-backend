@@ -133,6 +133,15 @@ public class Grade5ScholarshipController {
         return ResponseEntity.ok(request);
     }
 
+    // All requests for a member - a member can hold one per child, and one per exam year.
+    @PreAuthorize("hasAuthority('G5_REQUEST_VIEW')")
+    @GetMapping("/{memberId}/requests")
+    public List<Grade5ScholarshipRequest> getRequestsForMember(
+            @PathVariable String memberId
+    ) {
+        return service.getRequestsForMember(memberId);
+    }
+
     // Get a specific request by requestNo
     @PreAuthorize("hasAuthority('G5_REQUEST_VIEW')")
     @GetMapping("/request/{requestNo}")

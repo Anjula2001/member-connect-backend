@@ -50,8 +50,17 @@ public class CurrentUserService {
         return user == null ? null : user.getRole();
     }
 
+    /**
+     * Reads the authority flag as well as the role, so a right the SRS attaches to "the
+     * Authorized User" is honoured here and not only in the UI. This is the method the
+     * Grade 5 status-change endpoint calls through {@link #require}.
+     */
     public boolean has(Permission permission) {
-        return RolePermissions.has(currentRole(), permission);
+        User user = current();
+        if (user == null) {
+            return false;
+        }
+        return RolePermissions.has(user.getRole(), user.isAuthorized(), permission);
     }
 
     /** Throws AccessDeniedException (-> 403) when the caller lacks the right. */

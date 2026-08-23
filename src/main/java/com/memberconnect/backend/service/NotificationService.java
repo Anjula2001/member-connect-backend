@@ -326,7 +326,9 @@ public class NotificationService {
                     buildEmailBody(member, requestNo, reason)
             );
             log.info(
-                    "Notification channel EMAIL succeeded. memberId={}, requestNo={}",
+                    // Handed to the notification executor; SmtpEmailSender logs the
+                    // actual SENT/FAILED outcome once Gmail has answered.
+                    "Notification channel EMAIL accepted for delivery. memberId={}, requestNo={}",
                     memberId, requestNo
             );
         } catch (Exception e) {
@@ -384,7 +386,9 @@ public class NotificationService {
 
         try {
             emailSender.send(address, subject, body);
-            log.info("Notification channel EMAIL succeeded. memberId={}, purpose={}", memberId, purpose);
+            // Handed to the notification executor; SmtpEmailSender logs the actual
+            // SENT/FAILED outcome once Gmail has answered.
+            log.info("Notification channel EMAIL accepted for delivery. memberId={}, purpose={}", memberId, purpose);
         } catch (Exception e) {
             log.error(
                     "Notification channel EMAIL failed. memberId={}, purpose={}, cause={}",
@@ -600,6 +604,253 @@ public class NotificationService {
     // themselves - they are alive and it is their relative who died - so these
     // read contact details from the Member profile, not from a nominee.
     // ------------------------------------------------------------------
+
+    /**
+     * Tells the member their retirement request was marked INCOMPLETE, with the
+     * reason (MMT14).
+     *
+     * Email only, by design: retirement is not time-critical the way a death
+     * donation is, and the reason is usually a list of documents to bring, which
+     * does not survive being truncated into a 160-character SMS segment. If SMS is
+     * wanted later it is a dispatchSms call alongside, exactly as the death
+     * donation notification does.
+     */
+    public void notifyRetirementMarkedIncomplete(String memberId, String requestNo, String reason) {
+        Member member = findMemberFor(memberId, requestNo, "retirement-incomplete");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Retirement Request " + requestNo + " — Incomplete",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "Your membership retirement request has been reviewed and marked as INCOMPLETE.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Status         : Incomplete\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please visit your District Office with the details described above so the\n"
+                        + "request can be completed and submitted for approval.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "retirement-incomplete"
+        );
+    }
+
+    /**
+     * Tells the member their retirement request was rejected, with the reason
+     * (MMT16).
+     *
+     * Rejection returns the member to ACTIVE, so the message says so explicitly -
+     * a member told only that their retirement was "rejected" has no way to know
+     * whether their membership survived it.
+     *
+     * Email only, matching notifyRetirementMarkedIncomplete above.
+     */
+    public void notifyRetirementRejected(String memberId, String requestNo, String reason) {
+        Member member = findMemberFor(memberId, requestNo, "retirement-rejected");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Retirement Request " + requestNo + " — Rejected",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "Your membership retirement request has been reviewed and has NOT been\n"
+                        + "approved. Your membership remains active and no further action is required\n"
+                        + "unless you wish to reapply.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Status         : Rejected\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please contact your District Office if you wish to discuss this decision.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "retirement-rejected"
+        );
+    }
+
+    /**
+     * MMT17 - sent once the Finance Module hand-off has completed and the member has
+     * moved to RETIRED.
+     *
+     * Like its termination counterpart above, this is deliberately not sent at
+     * approval. Approval only moves the member to RETIREMENT_APPROVED; announcing that
+     * a membership has ended while Finance still holds the accounts open would be
+     * untrue.
+     */
+    public void notifyMemberRetired(String memberId, String requestNo) {
+        Member member = findMemberFor(memberId, requestNo, "member-retired");
+        if (member == null) {
+            return;
+        }
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Your Future Finance Institute membership has ended on retirement",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "Your retirement has been completed and your membership (" + memberId + ")\n"
+                        + "is now terminated due to retirement. Your accounts have been settled by the\n"
+                        + "Finance Department.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Status         : Retired\n"
+                        + "\n"
+                        + "Thank you for your membership with the Future Finance Institute.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "member-retired"
+        );
+    }
+
+    /**
+     * Tells the member their Grade 5 scholarship request was marked INCOMPLETE, with
+     * the reason (MMS04).
+     *
+     * The student is named in the message. A member can have more than one child with
+     * a request in flight, and "your scholarship request is incomplete" on its own
+     * would leave them working out which.
+     *
+     * Email only, matching the other Grade 5 and retirement notifications.
+     */
+    public void notifyGrade5MarkedIncomplete(
+            String memberId, String requestNo, String studentName, String reason) {
+
+        Member member = findMemberFor(memberId, requestNo, "grade5-incomplete");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+        String safeStudent = trimToNull(studentName) == null ? "your child" : studentName.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Grade 5 Scholarship Request " + requestNo + " — Incomplete",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The Grade 5 scholarship request submitted for " + safeStudent + " has been\n"
+                        + "reviewed and marked as INCOMPLETE. It has not been rejected - it cannot be\n"
+                        + "sent for approval until the point below is resolved.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Student        : " + safeStudent + "\n"
+                        + "Status         : Incomplete\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please visit your District Office with the details described above so the\n"
+                        + "request can be completed and submitted for approval.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "grade5-incomplete"
+        );
+    }
+
+    /**
+     * Tells the member the Board rejected their Grade 5 scholarship request, with the
+     * reason (MMS11 / MMS18).
+     */
+    public void notifyGrade5Rejected(
+            String memberId, String requestNo, String studentName, String reason) {
+
+        Member member = findMemberFor(memberId, requestNo, "grade5-rejected");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+        String safeStudent = trimToNull(studentName) == null ? "your child" : studentName.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Grade 5 Scholarship Request " + requestNo + " — Rejected",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The Board has reviewed the Grade 5 scholarship request submitted for\n"
+                        + safeStudent + " and has NOT approved it.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Student        : " + safeStudent + "\n"
+                        + "Status         : Rejected\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please contact your District Office if you wish to discuss this decision.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "grade5-rejected"
+        );
+    }
+
+    /**
+     * Tells the member the Board approved their Grade 5 scholarship request and that
+     * the fund disbursement is being arranged (MMS11 / MMS18).
+     *
+     * Says disbursement is UNDERWAY rather than done. Approval only clears the Board
+     * gate; the money moves at MMS20, when the request is handed to the Finance Module,
+     * and promising a completed payment here would be untrue.
+     */
+    public void notifyGrade5Approved(String memberId, String requestNo, String studentName) {
+        Member member = findMemberFor(memberId, requestNo, "grade5-approved");
+        if (member == null) {
+            return;
+        }
+
+        String safeStudent = trimToNull(studentName) == null ? "your child" : studentName.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Grade 5 Scholarship Request " + requestNo + " — Approved",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The Board has approved the Grade 5 scholarship request submitted for\n"
+                        + safeStudent + ". The necessary fund disbursement is now underway.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Student        : " + safeStudent + "\n"
+                        + "Status         : Approved\n"
+                        + "\n"
+                        + "You will be informed once the funds have been released. Please contact\n"
+                        + "your District Office if you have any questions.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "grade5-approved"
+        );
+    }
 
     /**
      * Tells the member their Death Donation Request was marked INCOMPLETE, with

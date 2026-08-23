@@ -13,4 +13,5 @@ public class UpdateUserAdminDTO {
     private Role role;
     private String assignedDistrict;
     private Boolean isActive;
+    private Boolean authorized;
 }

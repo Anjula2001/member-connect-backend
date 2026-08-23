@@ -200,7 +200,44 @@ public final class RolePermissions {
         // DEATH_DONATION_OFFICER is intentionally absent — no Grade 5 or retirement rights.
     }
 
+    /**
+     * Rights granted by the per-account authority flag, ON TOP of whatever the role
+     * already holds (see User.isAuthorized).
+     *
+     * Grade 5 puts both of these behind wording the role matrix cannot express. SRS
+     * 2.3.4 qualifies "-> INACTIVE" with "the user needs Inactive rights", and reopening
+     * a Board rejection is described the same way - a right held by a particular officer
+     * rather than by the whole District Office. Withholding them from DISTRICT_OFFICE
+     * outright was the closest a role list could get; the authority flag is what the SRS
+     * actually describes, so an authorized District Office officer holds them and an
+     * ordinary clerk in the same office still does not.
+     *
+     * HEAD_OFFICE is absent because it already holds both through GRADE5_BOARD. Only
+     * DISTRICT_OFFICE and HEAD_OFFICE accounts can carry the flag at all -
+     * UserAdminService forces it false for every other role.
+     */
+    private static final Map<Role, Set<Permission>> AUTHORITY_GRANTS = new EnumMap<>(Role.class);
+
+    static {
+        AUTHORITY_GRANTS.put(Role.DISTRICT_OFFICE, EnumSet.of(
+                Permission.G5_REQUEST_SET_INACTIVE,
+                Permission.G5_REQUEST_REOPEN));
+    }
+
     private RolePermissions() {
+    }
+
+    /** The extra rights this account gains from the authority flag; empty when unset. */
+    public static Set<Permission> forAuthority(Role role, boolean authorized) {
+        if (role == null || !authorized) {
+            return Collections.emptySet();
+        }
+        return AUTHORITY_GRANTS.getOrDefault(role, Collections.emptySet());
+    }
+
+    /** Role rights plus anything the authority flag adds. */
+    public static boolean has(Role role, boolean authorized, Permission permission) {
+        return has(role, permission) || forAuthority(role, authorized).contains(permission);
     }
 
     public static Set<Permission> forRole(Role role) {

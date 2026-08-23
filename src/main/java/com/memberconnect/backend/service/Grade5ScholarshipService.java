@@ -9,12 +9,15 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.memberconnect.backend.event.Grade5MarkedIncompleteEvent;
 
 import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.Grade5RequestListDTO;
 import com.memberconnect.backend.dto.Grade5StudentDTO;
-import com.memberconnect.backend.enums.MemberStatus;
 import com.memberconnect.backend.enums.ScholarshipRequestStatus;
 import com.memberconnect.backend.model.Grade5ExamMaster;
 import com.memberconnect.backend.model.Grade5ScholarshipRequest;
@@ -84,7 +87,17 @@ public class Grade5ScholarshipService {
         return minorRepo.findByBirthCertificateNo(birthCertificateNo);
     }
 
-    private void validateMemberActiveOnExamLastDate(String memberId, Integer examYear) {
+    /**
+     * Membership-period eligibility for a Grade 5 request (MMS02).
+     *
+     * The member-status gate that used to sit here - rejecting anyone not ACTIVE on the
+     * exam date - was removed by request. What remains is the 36-month continuous
+     * membership rule, checked both as of today and as of the exam date.
+     *
+     * Note that membershipStartDate is no longer required: the removed block was what
+     * rejected a null one, and the period checks below skip when it is absent.
+     */
+    private void validateMembershipPeriodForExam(String memberId, Integer examYear) {
         Member member = memberRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
@@ -99,13 +112,6 @@ public class Grade5ScholarshipService {
 
         if (examLastDate == null) {
             throw new RuntimeException("Selected exam date not found in Exam Master");
-        }
-
-        if (member.getStatus() != MemberStatus.ACTIVE
-                || member.getMembershipStartDate() == null
-                || member.getMembershipStartDate().isAfter(examLastDate)) {
-            throw new RuntimeException(
-                    "The Grade 5 Scholarship Request cannot be saved. The Member is not Active during the selected Exam");
         }
 
         LocalDate membershipStartDate = member.getMembershipStartDate();
@@ -323,7 +329,7 @@ public class Grade5ScholarshipService {
         Member member = memberRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
-        validateMemberActiveOnExamLastDate(memberId, dto.getExamYear());
+        validateMembershipPeriodForExam(memberId, dto.getExamYear());
         validateScholarshipRemittance(memberId, dto.getExamYear());
         validateFundDisbursement(dto);
 
@@ -524,19 +530,66 @@ public class Grade5ScholarshipService {
         return getFundDisbursementDetails(birthCertificateNo, null);
     }
 
+    /**
+     * Why a request follows the deviation process (MMS02), for the entry screen.
+     *
+     * One sentence covering every deviation case. The flag is not only set by the
+     * requested-date rule - it is also set by moving a request onto a deviation approval
+     * list, or straight through a status change - so a message that named specific dates
+     * would be wrong for those. Kept server-side rather than hard-coded in the page so
+     * the frontend never has to restate the rule.
+     */
+    private static final String DEVIATION_REASON =
+            "This request follows the deviation process. Because The Scholarship Request Date "
+                    + "is not within the defined eligibility period from the last exam date.";
+
+    /**
+     * Stamps the deviation reason onto a request on its way to the client, so a saved
+     * request that is opened later always states why it took the deviation route.
+     */
+    private Grade5ScholarshipRequest withDeviationReason(Grade5ScholarshipRequest request) {
+        if (request == null || !Boolean.TRUE.equals(request.getHasDeviation())) {
+            return request;
+        }
+
+        request.setDeviationReason(DEVIATION_REASON);
+        return request;
+    }
+
+    /** Every Grade 5 request held by a member, newest first. */
+    public List<Grade5ScholarshipRequest> getRequestsForMember(String memberId) {
+        return repository.findByMemberIdOrderByIdDesc(memberId)
+                .stream()
+                .map(this::withDeviationReason)
+                .toList();
+    }
+
     // Get latest request for member
     public Grade5ScholarshipRequest getLatestRequest(String memberId) {
         return repository
                 .findTopByMemberIdOrderByIdDesc(memberId)
+                .map(this::withDeviationReason)
                 .orElse(null);
     }
 
     // Get a specific request by requestNo
     public java.util.Optional<Grade5ScholarshipRequest> getRequestByRequestNo(String requestNo) {
-        return repository.findByRequestNo(requestNo);
+        return repository.findByRequestNo(requestNo).map(this::withDeviationReason);
     }
 
-    // Mark incomplete
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    /**
+     * Mark a Grade 5 scholarship request incomplete (MMS04) and tell the member why.
+     *
+     * @Transactional is required, not decorative: the notification is delivered by a
+     * @TransactionalEventListener bound to AFTER_COMMIT, and Spring silently discards
+     * such an event when it is published with no transaction in progress. It also makes
+     * the save and the publish one unit, so a member is never emailed about a status
+     * change that failed to persist.
+     */
+    @Transactional
     public Grade5ScholarshipRequest markIncomplete(String requestNo, String reason) {
         Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
@@ -544,7 +597,16 @@ public class Grade5ScholarshipService {
         request.setStatus("INCOMPLETE");
         request.setIncompleteReason(reason);
 
-        return repository.save(request);
+        Grade5ScholarshipRequest saved = repository.save(request);
+
+        eventPublisher.publishEvent(new Grade5MarkedIncompleteEvent(
+                saved.getMemberId(),
+                saved.getRequestNo(),
+                saved.getStudentName(),
+                reason
+        ));
+
+        return saved;
     }
 
     // Submit request
@@ -776,7 +838,7 @@ public class Grade5ScholarshipService {
         Grade5ScholarshipRequest entity = repository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
 
-        validateMemberActiveOnExamLastDate(entity.getMemberId(), dto.getExamYear());
+        validateMembershipPeriodForExam(entity.getMemberId(), dto.getExamYear());
         validateScholarshipRemittance(entity.getMemberId(), dto.getExamYear());
         validateFundDisbursement(dto);
 
@@ -818,7 +880,14 @@ public class Grade5ScholarshipService {
         entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
         entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
 
-        entity.setIncompleteReason(null);
+        // Keep the reason for as long as the request is still INCOMPLETE. This used to
+        // clear it unconditionally, which left the request showing status INCOMPLETE with
+        // nothing saying why - editing a request does not resolve what was wrong with it.
+        // The two events that DO resolve it, submitRequest and a status change back to
+        // NEW, clear the reason themselves.
+        if (!"INCOMPLETE".equals(entity.getStatus())) {
+            entity.setIncompleteReason(null);
+        }
 
         return repository.save(entity);
     }

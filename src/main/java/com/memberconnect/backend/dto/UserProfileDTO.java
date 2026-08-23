@@ -16,5 +16,6 @@ public class UserProfileDTO {
     private String profilePictureUrl;
     private String assignedDistrict;
     private boolean isActive;
+    private boolean authorized;
     private LocalDateTime createdAt;
 }

@@ -72,6 +72,7 @@ public class UserProfileService {
                 user.getProfilePictureUrl(),
                 user.getAssignedDistrict(),
                 user.isActive(),
+                user.isAuthorized(),
                 user.getCreatedAt()
         );
     }
