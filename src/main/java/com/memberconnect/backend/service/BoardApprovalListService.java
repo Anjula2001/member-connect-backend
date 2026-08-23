@@ -160,6 +160,10 @@ public class BoardApprovalListService {
 			for (String applicationId : dto.getApplicationIds()) {
 				Member_Application application = memberApplicationRepository.findByApplicationID(applicationId)
 						.orElseThrow(() -> new RuntimeException("Application not found: " + applicationId));
+				// MR08 rolls a deleted list back to what each application was BEFORE it
+				// joined - Submitted for Approval, or Rejected for a previous rejection.
+				// That original is only knowable if it is captured before the overwrite.
+				application.setStatusBeforeBoardList(application.getStatus());
 				application.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 				memberApplicationRepository.save(application);
 				// From dev: the Progress tab records the application joining the list.
@@ -590,7 +594,19 @@ public class BoardApprovalListService {
 
 		for (Member_Application application : entity.getApplications()) {
 			if (application.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
-				application.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+				// Spec MR08: "rolled back to the Submitted for Approval status or Rejected
+				// status depend on what status it was originally". Previously this always
+				// wrote Submitted for Approval, which silently erased a prior rejection -
+				// a rejected application re-listed and then un-listed came back looking as
+				// though it had never been rejected.
+				//
+				// Rows listed before StatusBeforeBoardList existed have nothing recorded,
+				// so they keep the old fallback.
+				ApplicationStatus restored = application.getStatusBeforeBoardList() == null
+						? ApplicationStatus.SUBMITTED_FOR_APPROVAL
+						: application.getStatusBeforeBoardList();
+				application.setStatus(restored);
+				application.setStatusBeforeBoardList(null);
 				memberApplicationRepository.save(application);
 			}
 		}

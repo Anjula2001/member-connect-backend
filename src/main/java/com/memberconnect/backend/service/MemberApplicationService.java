@@ -95,6 +95,13 @@ public class MemberApplicationService {
 
         Member_Application application = modelMapper.map(memberApplicationDTO, Member_Application.class);
         application.setApplicationID(generateApplicationId());
+        // Spec MR01: "Once saved the status will change to 'New'". Without this an
+        // application saved with no explicit status was persisted with status = null,
+        // which the registration list then rendered as the placeholder "PENDING" - a
+        // status no backend path ever writes and the spec does not define.
+        if (application.getStatus() == null) {
+            application.setStatus(ApplicationStatus.NEW);
+        }
         // Flag rejoins so the application is marked for the rest of its life. Uses the
         // same terminated-member lookup the NIC 'Validate' button surfaces.
         application.setRejoinFlag(findTerminatedMemberByNic(memberApplicationDTO.getNicNumber()).isPresent());
@@ -336,7 +343,16 @@ public class MemberApplicationService {
                         "You do not have rights to set this application's status to Inactive."
                 );
             }
+            // MR04's transition table - stops the Status Override field moving an
+            // application into a board-owned state (Added to Board Approval List,
+            // Rejected, Approved) that no board record backs.
+            ApplicationStatusPolicy.checkTransition(existing.getStatus(), dto.getStatus());
             existing.setStatus(dto.getStatus());
+            // The pre-list status is only of use while the board still holds the record.
+            // Once MR10 decides it, drop the memo so a later listing captures fresh.
+            if (dto.getStatus() != ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
+                existing.setStatusBeforeBoardList(null);
+            }
         }
         if (dto.getSubmissionLocation() != null) existing.setSubmissionLocation(dto.getSubmissionLocation());
 
@@ -441,6 +457,9 @@ public class MemberApplicationService {
         }
 
         ApplicationStatus before = app.getStatus();
+        // Allows MR01's Submit (New -> Submitted for Approval) and MR04's overrides,
+        // and refuses everything the board flow owns.
+        ApplicationStatusPolicy.checkTransition(before, status);
         app.setStatus(status);
         Member_Application saved = memberApplicationRepository.save(app);
         auditService.record(AuditService.MODULE_APPLICATION, saved.getId(), "Status Changed",
