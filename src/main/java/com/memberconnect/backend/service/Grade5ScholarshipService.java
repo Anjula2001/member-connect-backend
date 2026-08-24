@@ -61,8 +61,6 @@ public class Grade5ScholarshipService {
     @Value("${grade5.minor.account.required.remittance.amount:250.0}")
     private double defaultMinMinorRemittanceAmount;
 
-    // SRS 2.3.x: the base amount, the number of remitted months that earns the higher
-    // amount, and the multiplier applied to it are all configurable.
     @Value("${grade5.scholarship.base.amount:5000}")
     private int defaultBaseScholarshipAmount;
 
@@ -87,16 +85,7 @@ public class Grade5ScholarshipService {
         return minorRepo.findByBirthCertificateNo(birthCertificateNo);
     }
 
-    /**
-     * Membership-period eligibility for a Grade 5 request (MMS02).
-     *
-     * The member-status gate that used to sit here - rejecting anyone not ACTIVE on the
-     * exam date - was removed by request. What remains is the 36-month continuous
-     * membership rule, checked both as of today and as of the exam date.
-     *
-     * Note that membershipStartDate is no longer required: the removed block was what
-     * rejected a null one, and the period checks below skip when it is absent.
-     */
+    // Validate membership period for the selected exam year. The member must have been a member for at least 36 months as of the exam date.
     private void validateMembershipPeriodForExam(String memberId, Integer examYear) {
         Member member = memberRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
@@ -134,6 +123,7 @@ public class Grade5ScholarshipService {
         }
     }
 
+    // Validate scholarship remittance for the selected exam year. The member must have remitted the scholarship deduction continuously for the required number of months (default 6) as of the exam date.
     private void validateScholarshipRemittance(String memberId, Integer examYear) {
         Member member = memberRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
@@ -215,6 +205,7 @@ public class Grade5ScholarshipService {
         return eligibleMonths >= doubleAfterMonths ? baseAmount * multiplier : baseAmount;
     }
 
+    
     private void validateFundDisbursement(Grade5StudentDTO dto) {
         if (dto.getEligibleMonths() != null && dto.getEligibleMonths() < 0) {
             throw new RuntimeException("Eligible months cannot be negative.");
@@ -432,10 +423,6 @@ public class Grade5ScholarshipService {
             result.put("totalMonths", 0);
             result.put("eligibleMonths", 0);
 
-            // No minor account means no remitted months and so no doubling, but the
-            // student is still entitled to the base scholarship — all of it paid to the
-            // member. This branch used to return before the breakdown was calculated,
-            // which showed the screen a total of 0.
             result.putAll(calculateDisbursement(0, "MEMBER_ONLY", false));
             return result;
         }
@@ -530,23 +517,12 @@ public class Grade5ScholarshipService {
         return getFundDisbursementDetails(birthCertificateNo, null);
     }
 
-    /**
-     * Why a request follows the deviation process (MMS02), for the entry screen.
-     *
-     * One sentence covering every deviation case. The flag is not only set by the
-     * requested-date rule - it is also set by moving a request onto a deviation approval
-     * list, or straight through a status change - so a message that named specific dates
-     * would be wrong for those. Kept server-side rather than hard-coded in the page so
-     * the frontend never has to restate the rule.
-     */
+    // Deviation reason text, to be stamped onto a request that took the deviation route. It is not
     private static final String DEVIATION_REASON =
             "This request follows the deviation process. Because The Scholarship Request Date "
                     + "is not within the defined eligibility period from the last exam date.";
 
-    /**
-     * Stamps the deviation reason onto a request on its way to the client, so a saved
-     * request that is opened later always states why it took the deviation route.
-     */
+    // Stamp the deviation reason onto a request that took the deviation route. It is not
     private Grade5ScholarshipRequest withDeviationReason(Grade5ScholarshipRequest request) {
         if (request == null || !Boolean.TRUE.equals(request.getHasDeviation())) {
             return request;
@@ -580,15 +556,7 @@ public class Grade5ScholarshipService {
     @Autowired
     private ApplicationEventPublisher eventPublisher;
 
-    /**
-     * Mark a Grade 5 scholarship request incomplete (MMS04) and tell the member why.
-     *
-     * @Transactional is required, not decorative: the notification is delivered by a
-     * @TransactionalEventListener bound to AFTER_COMMIT, and Spring silently discards
-     * such an event when it is published with no transaction in progress. It also makes
-     * the save and the publish one unit, so a member is never emailed about a status
-     * change that failed to persist.
-     */
+    // Mark request as incomplete
     @Transactional
     public Grade5ScholarshipRequest markIncomplete(String requestNo, String reason) {
         Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo)
@@ -619,8 +587,7 @@ public class Grade5ScholarshipService {
             throw new RuntimeException("Only NEW or INCOMPLETE requests can be submitted");
         }
 
-        // Decide final submit status on the server to avoid relying on client-provided
-        // values.
+        // Decide final submit status on the server to avoid relying on client-provided values.
         boolean isDeviation = Boolean.TRUE.equals(request.getHasDeviation())
                 || shouldFollowDeviationProcess(request.getRequestedDate(), request.getExamYear())
                 || (status != null && status.toUpperCase().contains("DEVIATION"));
@@ -658,16 +625,11 @@ public class Grade5ScholarshipService {
             String sortDirection) {
         LocalDate today = LocalDate.now();
 
-        // A District Office user is pinned to their own branch regardless of what the
-        // client asked for. Enforcing this here rather than in the UI is what stops a
-        // hand-crafted request from reading another branch's records. Shared with the
-        // University module so the two cannot drift apart on who sees what.
+        
         CurrentUserService.LocationScope locationScope =
                 currentUserService.resolveLocationScope(locations);
 
-        // Restricted, but no district on the account: return nothing rather than
-        // falling back to "everything". Failing open here would hand a misconfigured
-        // District Office login the national dataset.
+        
         if (locationScope.showsNothing()) {
             return List.of();
         }
@@ -880,11 +842,7 @@ public class Grade5ScholarshipService {
         entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
         entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
 
-        // Keep the reason for as long as the request is still INCOMPLETE. This used to
-        // clear it unconditionally, which left the request showing status INCOMPLETE with
-        // nothing saying why - editing a request does not resolve what was wrong with it.
-        // The two events that DO resolve it, submitRequest and a status change back to
-        // NEW, clear the reason themselves.
+        
         if (!"INCOMPLETE".equals(entity.getStatus())) {
             entity.setIncompleteReason(null);
         }
@@ -920,10 +878,7 @@ public class Grade5ScholarshipService {
                     "Cannot change status from " + currentStatus + " to " + newStatus);
         }
 
-        // A request that has already been picked up onto an approval list cannot be
-        // pulled back to New by the originating office — Head Office may be mid-way
-        // through a Board Meeting with it on the printed list. Deleting the list
-        // (MMS09/MMS16) is the supported way to release it.
+        
         if (newStatus == ScholarshipRequestStatus.NEW
                 && request.getApprovalListId() != null
                 && !request.getApprovalListId().isBlank()) {
@@ -950,6 +905,7 @@ public class Grade5ScholarshipService {
         return repository.save(request);
     }
 
+    // Check if the status transition is allowed for Grade 5 Scholarship requests
     private boolean isGrade5StatusTransitionAllowed(ScholarshipRequestStatus current, ScholarshipRequestStatus next) {
         switch (current) {
             case NEW:
@@ -970,22 +926,7 @@ public class Grade5ScholarshipService {
     }
 
 
-    // ---- Finance Module integration (MMS20) ----
-
-    /**
-     * Hand one approved Grade 5 scholarship to the Finance Module and close the
-     * record.
-     *
-     * Driven by a button rather than by the approval itself: the Board approves, and
-     * the Finance Department then decides when the disbursement goes out. Only an
-     * APPROVED request qualifies, so a request cannot be disbursed twice — the second
-     * click finds it INACTIVE and is refused.
-     *
-     * The Finance call is deliberately NOT wrapped in a try/catch. This is a user
-     * action with a visible outcome: if the call fails the exception surfaces in the
-     * UI and the request stays APPROVED, ready to be retried. Closing a record whose
-     * money never moved would be the worse outcome.
-     */
+    // send to Finance Module only for approved requests
     public Grade5ScholarshipRequest sendToFinanceModule(String requestNo) {
         Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException(
@@ -1005,15 +946,7 @@ public class Grade5ScholarshipService {
         return repository.save(request);
     }
 
-    /**
-     * Mock stand-in for the Finance Module's API (MMS20).
-     *
-     * Logs the details that would be POSTed — who is owed what, and into which
-     * account — so the handoff is visible end to end without a second system. Swap
-     * the body for a real HTTP call when the Finance Module exists; nothing else has
-     * to change. Throwing from here leaves the request APPROVED, which is what the
-     * caller relies on.
-     */
+    // Mock API call to Finance Module
     private void callFinanceModuleApi(Grade5ScholarshipRequest request) {
         User sender = currentUserService != null ? currentUserService.current() : null;
 

@@ -11,19 +11,7 @@ import com.memberconnect.backend.event.Grade5MarkedIncompleteEvent;
 import com.memberconnect.backend.event.Grade5RejectedEvent;
 import com.memberconnect.backend.service.NotificationService;
 
-/**
- * Turns committed Grade 5 scholarship status changes into member notifications: marked
- * INCOMPLETE (MMS04), where the member has to supply something before the request can
- * be submitted, and the Board's decision at MMS11 / MMS18 - approved, with disbursement
- * being arranged, or rejected with the reason.
- *
- * AFTER_COMMIT for the same reason as the other notification listeners here: the
- * INCOMPLETE status is durable before anything is sent, and a rolled-back transaction
- * never reaches this listener, so no member is told about a change that did not happen.
- *
- * Grade5ScholarshipService.markIncomplete carries @Transactional purely so this binding
- * has a transaction to hang off - without one Spring discards the event unsent.
- */
+
 @Component
 public class Grade5NotificationListener {
 
@@ -45,10 +33,7 @@ public class Grade5NotificationListener {
                     event.reason()
             );
         } catch (Exception e) {
-            // NotificationService already isolates each channel, so reaching this is
-            // unexpected. It is caught anyway: an exception thrown from an after-commit
-            // callback cannot undo the commit, it only produces a confusing failure on
-            // an operation that has already succeeded.
+           
             log.error(
                     "Grade 5 incomplete notification failed unexpectedly. memberId={}, requestNo={}, cause={}",
                     event.memberId(), event.requestNo(), e.toString(), e
@@ -56,7 +41,7 @@ public class Grade5NotificationListener {
         }
     }
 
-    /** MMS11 / MMS18 - the Board rejected the request. */
+    /** the Board rejected the request. */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onGrade5Rejected(Grade5RejectedEvent event) {
         try {
@@ -74,7 +59,7 @@ public class Grade5NotificationListener {
         }
     }
 
-    /** MMS11 / MMS18 - the Board approved the request and disbursement is being arranged. */
+    /** Board approved the request and disbursement is being arranged. */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onGrade5Approved(Grade5ApprovedEvent event) {
         try {

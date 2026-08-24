@@ -251,6 +251,7 @@ public class DocumentService {
 
         uploadDocumentRepository.deleteById(id);
     }
+    
     public List<RequiredDocumentDTO> getRequiredDocuments(
             String requestNo,
             String memberId,
@@ -260,6 +261,7 @@ public class DocumentService {
 
         types.add(applicationType);
 
+        // Adding additional document types based on the application type 
         if ("RETIREMENT".equals(applicationType)) {
             boolean hasMinorSavings =
                     !minorSavingsAccountRepository.findByMemberId(memberId).isEmpty();
@@ -278,7 +280,6 @@ public class DocumentService {
             }
         }
 
-        // MMT18: "The mandatory supporting documents might increase if there are
         // Minor Savings Accounts for the Member that needs to be closed."
         if ("MEMBER_DEATH".equals(applicationType)) {
             boolean hasMinorSavings =

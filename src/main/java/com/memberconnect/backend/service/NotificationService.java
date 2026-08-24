@@ -135,14 +135,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * MMT11 - sent once the Finance Module has closed the accounts and the member
-     * has moved to TERMINATED.
-     *
-     * This is deliberately not sent at board approval. Approval only stops the
-     * monthly remittance; telling a member their membership is terminated while
-     * their savings accounts are still open would be untrue.
-     */
+   
     public void notifyMembershipTerminated(String memberId, String requestNo) {
         Member member = memberRepository.findByMemberId(memberId).orElse(null);
 
@@ -230,13 +223,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * MMC04 / MMC12 / MMC17 / MMC25 - sent when a profile change request is approved
-     * and the Member Profile has been updated with the requested values.
-     *
-     * One method covers all four request types because the SRS wording is identical
-     * for each; only the request type name and number differ.
-     */
+    // profile change approved notifications
     public void sendProfileChangeApproved(Member member, ProfileChangeType type, String requestNo) {
         String name = displayName(member);
         String what = type.getLabel();
@@ -267,11 +254,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * MMC04 / MMC12 / MMC17 / MMC25 - sent when a profile change request is rejected.
-     * The Member Profile is left untouched, and the reason entered by the approver is
-     * carried in both channels (truncated for SMS only, as elsewhere in this class).
-     */
+    // profile change rejected notifications
     public void sendProfileChangeRejected(
             Member member,
             ProfileChangeType type,
@@ -366,12 +349,7 @@ public class NotificationService {
         }
     }
 
-    /**
-     * Email channel for the registration-flow notifications, which identify the
-     * member by membership number rather than by a request number. Same contract
-     * as sendEmail above: a blank address is skipped, a transport failure is
-     * logged and never propagated to the caller's transaction.
-     */
+
     private void dispatchEmail(String to, String subject, String body, String memberId, String purpose) {
         String address = trimToNull(to);
 
@@ -421,12 +399,7 @@ public class NotificationService {
         }
     }
 
-    /**
-     * Greeting used by the registration-flow notifications. It prefers the name
-     * with initials, which is how the membership documentation addresses the
-     * member; the termination notification uses resolveMemberName instead, which
-     * prefers the full name. The two orders are deliberate, not an oversight.
-     */
+    
     private String displayName(Member member) {
         String nameWithInitials = trimToNull(member.getNameWithInitials());
         if (nameWithInitials != null) {
@@ -480,21 +453,7 @@ public class NotificationService {
         return "Member";
     }
 
-    // ------------------------------------------------------------------
-    // Record Member Death (SRS section 4).
-    //
-    // These differ from every other notification in this class in who they are
-    // addressed to: the member is dead, so the recipient is the NOMINEE, whose
-    // contact details live on the death record rather than on the Member. The
-    // record is therefore resolved here, at delivery time, instead of the
-    // contact details being carried on the event - a number captured at approval
-    // and delivered days later could easily be stale.
-    // ------------------------------------------------------------------
-
-    /**
-     * Tells the nominee that the Member Death Record has been marked INCOMPLETE,
-     * with the reason (MMT18).
-     */
+    // Member Death
     public void notifyMemberDeathMarkedIncomplete(String memberId, String recordNo, String reason) {
         MemberDeathRecord record = findDeathRecord(recordNo, "member-death-incomplete");
         if (record == null) {
@@ -525,11 +484,7 @@ public class NotificationService {
         dispatchSms(record.getNomineeMobile(), sms, memberId, "member-death-incomplete");
     }
 
-    /**
-     * Tells the nominee that the Member Death Record was rejected, at whichever
-     * level rejected it (MMT22 / MMT23 / MMT24). The member profile has already
-     * been put back to Active by the time this runs.
-     */
+    // Member Death rejected
     public void notifyMemberDeathRejected(String memberId, String recordNo, String reason, String level) {
         MemberDeathRecord record = findDeathRecord(recordNo, "member-death-rejected");
         if (record == null) {
@@ -560,11 +515,7 @@ public class NotificationService {
         dispatchSms(record.getNomineeMobile(), sms, memberId, "member-death-rejected");
     }
 
-    /**
-     * Tells the nominee that the Finance Module has closed every account and the
-     * membership is now terminated due to death, with the disbursement details
-     * (MMT25).
-     */
+    // Member Death completed
     public void notifyMemberDeceased(String memberId, String recordNo) {
         MemberDeathRecord record = findDeathRecord(recordNo, "member-deceased");
         if (record == null) {
@@ -597,24 +548,7 @@ public class NotificationService {
         dispatchSms(record.getNomineeMobile(), sms, memberId, "member-deceased");
     }
 
-    // ------------------------------------------------------------------
-    // Death Donations for Members (SRS Requirement 05, MMD01 / MMD05-07).
-    //
-    // Unlike Record Member Death above, the recipient is the REQUESTING MEMBER
-    // themselves - they are alive and it is their relative who died - so these
-    // read contact details from the Member profile, not from a nominee.
-    // ------------------------------------------------------------------
-
-    /**
-     * Tells the member their retirement request was marked INCOMPLETE, with the
-     * reason (MMT14).
-     *
-     * Email only, by design: retirement is not time-critical the way a death
-     * donation is, and the reason is usually a list of documents to bring, which
-     * does not survive being truncated into a 160-character SMS segment. If SMS is
-     * wanted later it is a dispatchSms call alongside, exactly as the death
-     * donation notification does.
-     */
+    // Retirement notifications (mark as Incomplete)
     public void notifyRetirementMarkedIncomplete(String memberId, String requestNo, String reason) {
         Member member = findMemberFor(memberId, requestNo, "retirement-incomplete");
         if (member == null) {
@@ -646,16 +580,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * Tells the member their retirement request was rejected, with the reason
-     * (MMT16).
-     *
-     * Rejection returns the member to ACTIVE, so the message says so explicitly -
-     * a member told only that their retirement was "rejected" has no way to know
-     * whether their membership survived it.
-     *
-     * Email only, matching notifyRetirementMarkedIncomplete above.
-     */
+   // Retirement notifications (rejected)
     public void notifyRetirementRejected(String memberId, String requestNo, String reason) {
         Member member = findMemberFor(memberId, requestNo, "retirement-rejected");
         if (member == null) {
@@ -688,15 +613,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * MMT17 - sent once the Finance Module hand-off has completed and the member has
-     * moved to RETIRED.
-     *
-     * Like its termination counterpart above, this is deliberately not sent at
-     * approval. Approval only moves the member to RETIREMENT_APPROVED; announcing that
-     * a membership has ended while Finance still holds the accounts open would be
-     * untrue.
-     */
+    // Retirement notifications (completed)
     public void notifyMemberRetired(String memberId, String requestNo) {
         Member member = findMemberFor(memberId, requestNo, "member-retired");
         if (member == null) {
@@ -726,16 +643,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * Tells the member their Grade 5 scholarship request was marked INCOMPLETE, with
-     * the reason (MMS04).
-     *
-     * The student is named in the message. A member can have more than one child with
-     * a request in flight, and "your scholarship request is incomplete" on its own
-     * would leave them working out which.
-     *
-     * Email only, matching the other Grade 5 and retirement notifications.
-     */
+   // Grade 5 Scholarship notifications (mark as Incomplete)
     public void notifyGrade5MarkedIncomplete(
             String memberId, String requestNo, String studentName, String reason) {
 
@@ -773,10 +681,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * Tells the member the Board rejected their Grade 5 scholarship request, with the
-     * reason (MMS11 / MMS18).
-     */
+    // Grade 5 Scholarship notifications (rejected)
     public void notifyGrade5Rejected(
             String memberId, String requestNo, String studentName, String reason) {
 
@@ -812,14 +717,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * Tells the member the Board approved their Grade 5 scholarship request and that
-     * the fund disbursement is being arranged (MMS11 / MMS18).
-     *
-     * Says disbursement is UNDERWAY rather than done. Approval only clears the Board
-     * gate; the money moves at MMS20, when the request is handed to the Finance Module,
-     * and promising a completed payment here would be untrue.
-     */
+    // Grade 5 Scholarship notifications (approved)
     public void notifyGrade5Approved(String memberId, String requestNo, String studentName) {
         Member member = findMemberFor(memberId, requestNo, "grade5-approved");
         if (member == null) {
@@ -852,10 +750,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * Tells the member their Death Donation Request was marked INCOMPLETE, with
-     * the reason (SRS MMD01, p.15).
-     */
+    // Death Donation notifications (mark as Incomplete)
     public void notifyDeathDonationMarkedIncomplete(String memberId, String requestNo, String reason) {
         Member member = findMemberFor(memberId, requestNo, "death-donation-incomplete");
         if (member == null) {
@@ -895,10 +790,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * Tells the member their Death Donation Request was rejected, naming the
-     * level that rejected it (MMD05 / MMD06 / MMD07).
-     */
+    // Death Donation notifications (rejected)
     public void notifyDeathDonationRejected(
             String memberId,
             String requestNo,
@@ -944,13 +836,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * Tells the member their Death Donation Request was approved (SRS p.5).
-     *
-     * Deliberately says the funds are "being processed" rather than paid: the
-     * approval hands off to the Finance Module (MMD08), which does the actual
-     * disbursement afterwards.
-     */
+    // Death Donation notifications (approved)
     public void notifyDeathDonationApproved(String memberId, String requestNo, String level) {
         Member member = findMemberFor(memberId, requestNo, "death-donation-approved");
         if (member == null) {
@@ -1001,11 +887,7 @@ public class NotificationService {
         return member;
     }
 
-    /**
-     * A missing record is logged and swallowed, like every other failure here: the
-     * approval it relates to is already committed and must not be undone by a
-     * notification that cannot be addressed.
-     */
+    // A missing death record is logged and swallowed, like every other failure here.
     private MemberDeathRecord findDeathRecord(String recordNo, String purpose) {
         MemberDeathRecord record = memberDeathRecordRepository.findByRecordId(recordNo).orElse(null);
         if (record == null) {
@@ -1051,24 +933,7 @@ public class NotificationService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    // ------------------------------------------------------------------
-    // Inactivating Dormant Membership Profiles (SRS section 4)
-    //
-    // Two member-facing messages, not three. There is deliberately no
-    // notification when the board REJECTS an inactivation: the member never knew
-    // they were on a list, so "the Board declined to deactivate you" is noise
-    // with no action attached, and it would disclose an internal deliberation
-    // they were never party to.
-    // ------------------------------------------------------------------
-
-    /**
-     * MMD10 - the identification process has flagged this member as dormant.
-     *
-     * Sent while the member can still do something about it: a single
-     * transaction before the next board meeting clears the flag automatically.
-     * Without this the first they hear of it is the inactivation notice, by
-     * which point reversing it needs Head Office.
-     */
+    // Dormant membership notifications (selected for dormant)
     public void notifySelectedForDormant(String memberId, int dormantPeriodMonths) {
         Member member = memberRepository.findByMemberId(memberId).orElse(null);
 
@@ -1106,7 +971,7 @@ public class NotificationService {
         );
     }
 
-    /** MMD17 / SRS 4.2.6 - the Board approved the inactivation and it is applied. */
+    /**the Board approved the inactivation and it is applied. */
     public void notifyMembershipInactivatedDormant(String memberId, String listId) {
         Member member = memberRepository.findByMemberId(memberId).orElse(null);
 

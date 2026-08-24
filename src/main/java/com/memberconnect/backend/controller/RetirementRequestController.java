@@ -21,15 +21,7 @@ import com.memberconnect.backend.enums.Permission;
 import com.memberconnect.backend.enums.RetirementRequestStatus;
 import com.memberconnect.backend.service.RetirementService;
 
-/**
- * Authorization note: the @PreAuthorize annotations sit on the controller rather than
- * the service, matching Grade5ScholarshipController. Spring rejects the call before the
- * method body runs, so GlobalExceptionHandler returns a proper 403 instead of the 400
- * that a denial raised deeper down would be downgraded to.
- *
- * MMT16 is the reason this exists: without it any authenticated user can approve a
- * retirement request, including the District Office clerk who raised it.
- */
+
 @RestController
 @RequestMapping("/api/retirement-requests")
 @CrossOrigin(origins = "http://localhost:3000")
@@ -68,16 +60,7 @@ public class RetirementRequestController {
         );
     }
 
-    /**
-     * Save retirement request.
-     *
-     * Guarded by RET_REQUEST_CREATE, but note that saveRequest doubles as an edit path:
-     * when the member already has a non-Inactive request it updates that record instead
-     * of creating one. A role granted RET_REQUEST_CREATE without RET_REQUEST_EDIT would
-     * therefore be able to edit through here. No role in RolePermissions holds one
-     * without the other, so nothing is exposed today — but any future grant that splits
-     * them needs to add RET_REQUEST_EDIT to this check.
-     */
+    // Create a new retirement request for a member
     @PreAuthorize("hasAuthority('RET_REQUEST_CREATE')")
     @PostMapping("/{memberId}")
     public RetirementRequestResponseDTO saveRetirementRequest(
@@ -125,14 +108,7 @@ public class RetirementRequestController {
         return retirementService.approveRequest(requestNo);
     }
 
-    /**
-     * MMT17 — send one approved retirement to the Finance Module and complete the
-     * member's retirement.
-     *
-     * Guarded by RET_REQUEST_APPROVE rather than a right of its own: the retirement
-     * approver is the office that follows the request through, and there is no
-     * separate Finance actor in MMT12-MMT17 the way MMS20 has one for Grade 5.
-     */
+    // Send request to finance module
     @PreAuthorize("hasAuthority('RET_REQUEST_APPROVE')")
     @PostMapping("/{requestNo}/send-to-finance")
     public RetirementRequestResponseDTO sendToFinanceModule(
@@ -152,12 +128,7 @@ public class RetirementRequestController {
         return retirementService.rejectRequest(requestNo, reason);
     }
 
-    /**
-     * Change retirement request status (view mode).
-     *
-     * The right required depends on the target status, not on the endpoint, so this
-     * cannot be a single @PreAuthorize.
-     */
+    // Change retirement request status
     @PutMapping("/{requestNo}/status")
     public RetirementRequestResponseDTO changeRetirementRequestStatus(
             @PathVariable String requestNo,
@@ -171,23 +142,7 @@ public class RetirementRequestController {
         return retirementService.changeRequestStatus(requestNo, status);
     }
 
-    /**
-     * Maps a status change to the right needed to perform it.
-     *
-     * Two families of move are privileged above ordinary edit rights:
-     *   -> INACTIVE                  SRS 3.2.4 qualifies this with "the user needs
-     *                                Inactive rights", so it is not everyday editing.
-     *   SUBMITTED/REJECTED/INACTIVE  Pulling a request back out of approval is qualified
-     *   -> NEW                       by 3.2.1 with "if the logged in user has the rights
-     *                                to change the status"; reopening a Rejected or
-     *                                Inactive request overturns a closed decision.
-     *
-     * INCOMPLETE -> NEW stays on ordinary edit rights: that is the normal "fix the
-     * request and carry on" path the District Office is expected to walk.
-     *
-     * An unrecognised status falls through to RET_REQUEST_EDIT and is then rejected by
-     * the service's own transition matrix, so a bad payload cannot pick a weaker right.
-     */
+    // Determine the required permission for changing the status of a retirement request based on its current and requested status.
     private Permission requiredPermissionForStatusChange(String currentStatus, String requestedStatus) {
         if (requestedStatus == null) {
             return Permission.RET_REQUEST_EDIT;
@@ -209,6 +164,7 @@ public class RetirementRequestController {
         return Permission.RET_REQUEST_EDIT;
     }
 
+    // Get retirement request by ID
     @PreAuthorize("hasAuthority('RET_REQUEST_VIEW')")
     @GetMapping("/request/{id}")
     public RetirementRequestResponseDTO getRetirementRequestById(
