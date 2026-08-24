@@ -90,6 +90,7 @@ public class DormantMembershipService {
     private final LoanObligationRepository obligationRepository;
     private final AuditService auditService;
     private final ApplicationEventPublisher eventPublisher;
+    private final MemberStatusHistoryService memberStatusHistoryService;
 
     public DormantMembershipService(
             MemberRepository memberRepository,
@@ -98,7 +99,8 @@ public class DormantMembershipService {
             BoardmeetingRepository boardMeetingRepository,
             LoanObligationRepository obligationRepository,
             AuditService auditService,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            MemberStatusHistoryService memberStatusHistoryService
     ) {
         this.memberRepository = memberRepository;
         this.configRepository = configRepository;
@@ -107,6 +109,7 @@ public class DormantMembershipService {
         this.obligationRepository = obligationRepository;
         this.auditService = auditService;
         this.eventPublisher = eventPublisher;
+        this.memberStatusHistoryService = memberStatusHistoryService;
     }
 
     // ---------------------------------------------------------------------
@@ -206,9 +209,13 @@ public class DormantMembershipService {
         for (Member member : flagged) {
             LocalDate anchor = activityAnchor(member);
             if (anchor != null && !anchor.isBefore(cutoff)) {
+                MemberStatus statusBeforeClear = member.getStatus();
                 member.setStatus(MemberStatus.ACTIVE);
                 member.setDormantSelectionDate(null);
                 memberRepository.save(member);
+                memberStatusHistoryService.record(member, statusBeforeClear, member.getStatus(),
+                        anchor, "DORMANT_FLAG_CLEARED",
+                        "Recent account activity cleared the dormant flag");
                 cleared++;
             }
         }
@@ -220,9 +227,13 @@ public class DormantMembershipService {
         for (Member member : actives) {
             LocalDate anchor = activityAnchor(member);
             if (anchor == null || anchor.isBefore(cutoff)) {
+                MemberStatus statusBeforeSelect = member.getStatus();
                 member.setStatus(MemberStatus.SELECTED_FOR_DORMANT);
                 member.setDormantSelectionDate(today);
                 memberRepository.save(member);
+                memberStatusHistoryService.record(member, statusBeforeSelect, member.getStatus(),
+                        today, "DORMANT_SELECTED",
+                        "Selected by the dormant identification run");
                 selected++;
 
                 eventPublisher.publishEvent(new DormantSelectedEvent(
@@ -370,6 +381,9 @@ public class DormantMembershipService {
 
             member.setStatus(MemberStatus.SENT_FOR_DORMANT_APPROVAL);
             memberRepository.save(member);
+            memberStatusHistoryService.record(member, previousStatus, member.getStatus(),
+                    null, "DORMANT_SENT_FOR_APPROVAL",
+                    "Added to dormant approval list " + entity.getListId());
 
             auditService.recordStatusChange(
                     AuditService.MODULE_DORMANT,
@@ -499,6 +513,9 @@ public class DormantMembershipService {
 
             entry.setDecidedAt(now);
             memberRepository.save(member);
+            memberStatusHistoryService.record(member, before, member.getStatus(),
+                    now.toLocalDate(), approved ? "DORMANT_BOARD_APPROVED" : "DORMANT_BOARD_REJECTED",
+                    "Board decision on " + entity.getListId());
 
             auditService.recordStatusChange(
                     AuditService.MODULE_DORMANT,
@@ -579,6 +596,9 @@ public class DormantMembershipService {
 
                 member.setStatus(restored);
                 memberRepository.save(member);
+                memberStatusHistoryService.record(member, MemberStatus.SENT_FOR_DORMANT_APPROVAL,
+                        restored, null, "DORMANT_APPROVAL_LIST_DELETED",
+                        "Approval list " + entity.getListId() + " deleted; member rolled back");
 
                 auditService.recordStatusChange(
                         AuditService.MODULE_DORMANT,
