@@ -50,6 +50,18 @@ public class User implements UserDetails {
     @Column(name = "is_active")
     private boolean isActive = true;
 
+    /**
+     * Whether this account carries authorising power on top of its role.
+     *
+     * Only meaningful for DISTRICT_OFFICE and HEAD_OFFICE staff: both offices hold a
+     * mix of clerks who prepare records and officers who sign them off, and the role
+     * alone cannot tell the two apart. Every other role is created with this false.
+     */
+    // columnDefinition carries the DEFAULT because ddl-auto=update adds this column to
+    // a Users table that already has rows; a bare "not null" ALTER would be rejected.
+    @Column(name = "authority", nullable = false, columnDefinition = "boolean not null default false")
+    private boolean authorized = false;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -69,6 +81,12 @@ public class User implements UserDetails {
         List<GrantedAuthority> authorities = new ArrayList<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_" + role.name()));
         for (Permission permission : RolePermissions.forRole(role)) {
+            authorities.add(new SimpleGrantedAuthority(permission.name()));
+        }
+        // Anything the account's authority flag adds. Emitted here as well as in
+        // CurrentUserService.has so that @PreAuthorize("hasAuthority(...)") and the
+        // programmatic checks cannot disagree about what this user may do.
+        for (Permission permission : RolePermissions.forAuthority(role, authorized)) {
             authorities.add(new SimpleGrantedAuthority(permission.name()));
         }
         return authorities;

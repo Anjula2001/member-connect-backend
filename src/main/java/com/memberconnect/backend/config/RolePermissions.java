@@ -10,8 +10,8 @@ import com.memberconnect.backend.enums.Permission;
 import com.memberconnect.backend.enums.Role;
 
 /**
- * The Scholarship role/permission matrix — the single place that decides which role
- * holds which right, for both Grade 5 (G5_*) and University (US_*) Scholarships.
+ * The Grade 5 Scholarship role/permission matrix — the single place that decides
+ * which role holds which right.
  *
  * Segregation of duties is the point: District Office raises requests, Head Office
  * approves them. Both SRS sections name "District Office System User" as the approver
@@ -27,8 +27,8 @@ import com.memberconnect.backend.enums.Role;
  * both would collapse two gates into one signature. US_COMMITTEE_APPROVE is therefore
  * given to SCHOLARSHIP_OFFICER and withheld from the Board roles.
  *
- * Roles absent from a module's grants (DEATH_DONATION_OFFICER everywhere) hold no
- * rights there at all, rather than falling through to a permissive default.
+ * Roles absent from this map (DEATH_DONATION_OFFICER) hold no Grade 5 rights at all,
+ * rather than falling through to a permissive default.
  */
 public final class RolePermissions {
 
@@ -40,8 +40,14 @@ public final class RolePermissions {
         // never be accidentally locked away from the only always-seeded account.
         MATRIX.put(Role.SUPER_ADMIN, EnumSet.allOf(Permission.class));
 
-        // District Office — MMS01-MMS05. Raises and maintains requests; cannot approve,
-        // cannot deactivate, cannot reopen a Board rejection.
+        // District Office — MMS01-MMS05 and MMT12-MMT16. On the scholarship side it
+        // raises and maintains requests only: cannot approve, deactivate, or reopen a
+        // Board rejection.
+        //
+        // On retirement it owns the request end to end, including approval. That follows
+        // MMT16's actor table, which names "District Office System User" as the approver.
+        // It does mean the office that raises a retirement request can also approve it —
+        // the four-eyes split that Grade 5 keeps does not apply here.
         MATRIX.put(Role.DISTRICT_OFFICE, EnumSet.of(
                 Permission.G5_REQUEST_VIEW,
                 Permission.G5_REQUEST_CREATE,
@@ -49,14 +55,16 @@ public final class RolePermissions {
                 Permission.G5_REQUEST_SUBMIT,
                 Permission.G5_REQUEST_INCOMPLETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-                // University scholarship requests (MMS21-MMS25) only.
-                //
-                // Fund requests (MMS42-MMS47) are deliberately absent in full — not even
-                // US_FUND_VIEW. Briefly granted on 2026-08-19 and revoked on 2026-08-20:
-                // the disbursement track belongs to Head Office / Board Secretary, and
-                // this role neither raises nor reads it. Because US_FUND_VIEW is what
-                // canAccessFundRequests() keys on, dropping it also removes the Fund
-                // Requests item from this role's sidebar.
+                // Retirement (MMT12-MMT16): raised, maintained and approved here.
+                Permission.RET_REQUEST_VIEW,
+                Permission.RET_REQUEST_CREATE,
+                Permission.RET_REQUEST_EDIT,
+                Permission.RET_REQUEST_SUBMIT,
+                Permission.RET_REQUEST_INCOMPLETE,
+                Permission.RET_REQUEST_APPROVE,
+                Permission.RET_REQUEST_RETURN_TO_NEW,
+                Permission.RET_REQUEST_SET_INACTIVE,
+                // University (MMS21-MMS25): raises and maintains requests only.
                 Permission.US_REQUEST_VIEW,
                 Permission.US_REQUEST_CREATE,
                 Permission.US_REQUEST_EDIT,
@@ -68,7 +76,10 @@ public final class RolePermissions {
                 Permission.MT_REQUEST_VIEW,
                 Permission.MT_REQUEST_CREATE));
 
-        // Head Office — MMS06-MMS19. Owns the approval track end to end.
+        // Head Office — MMS06-MMS19 and MMT16. Owns both approval tracks end to end.
+        // Deliberately holds no RET_REQUEST_CREATE: retirement requests are raised at the
+        // District Office, and granting creation here would put both halves of the
+        // maker/checker split in one office.
         MATRIX.put(Role.HEAD_OFFICE, EnumSet.of(
                 Permission.G5_REQUEST_VIEW,
                 Permission.G5_REQUEST_SET_INACTIVE,
@@ -79,17 +90,12 @@ public final class RolePermissions {
                 Permission.G5_LIST_PROCESS,
                 Permission.G5_LIST_DELETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-                // University board track (MMS27-MMS41) and fund requests end to end
-                // (MMS42-MMS47). Deliberately WITHOUT US_COMMITTEE_APPROVE, so the
-                // Committee gate is not cleared by the same office that runs the Board.
-                //
-                // US_FUND_APPROVE was granted here on 2026-08-19 by product decision:
-                // Head Office raises fund requests, so it also decides them. This is a
-                // knowing relaxation of the split that used to keep US_APPROVED_EDIT
-                // (changing a payee's bank account) apart from releasing payment into
-                // that account — both now sit with this role. If that pairing ever has
-                // to be broken again, move US_FUND_APPROVE out of HEAD_OFFICE and leave
-                // it with BOARD_SECRETARY, which is where it lived before.
+                // Retirement: approves, but never creates (see above).
+                Permission.RET_REQUEST_VIEW,
+                Permission.RET_REQUEST_APPROVE,
+                Permission.RET_REQUEST_SET_INACTIVE,
+                Permission.RET_REQUEST_RETURN_TO_NEW,
+                // University: the Board half plus fund requests (MMS27-MMS48).
                 Permission.US_REQUEST_VIEW,
                 Permission.US_REQUEST_SET_INACTIVE,
                 Permission.US_REQUEST_REOPEN,
@@ -105,14 +111,8 @@ public final class RolePermissions {
                 Permission.US_FUND_SUBMIT,
                 Permission.US_FUND_INCOMPLETE,
                 Permission.US_FUND_APPROVE,
-                // Fund request status changes from View Mode (New <-> Inactive).
-                // Withheld from District Office, which raises fund requests.
                 Permission.US_FUND_SET_INACTIVE,
                 Permission.US_FUND_REOPEN,
-                // MMS48 — hand an approved fund request to the Finance Module. Granted
-                // here on 2026-08-20 alongside ACCOUNTS, which keeps it as the actual
-                // Finance Department. Deliberately NOT added to BOARD_SECRETARY: that
-                // role mirrors Head Office on the board track, not on finance.
                 Permission.US_FINANCE_DISBURSE,
                 Permission.US_MASTER_VIEW,
                 // Member Transfers (MMC29-MMC30). MMC30 names the District Office as
@@ -123,9 +123,14 @@ public final class RolePermissions {
                 Permission.MT_REQUEST_APPROVE,
                 Permission.MT_REQUEST_SET_INACTIVE));
 
-        // Board Secretary — the same approval track, plus delete privileges. Mirrors
-        // DELETE_RIGHTS_ROLES in the frontend's Member Registration matrix so the two
-        // modules do not disagree about who may destroy an approval list.
+        // Board Secretary — the same Grade 5 approval track, plus delete privileges.
+        // Mirrors DELETE_RIGHTS_ROLES in the frontend's Member Registration matrix so the
+        // two modules do not disagree about who may destroy an approval list.
+        //
+        // On the retirement side it gets the housekeeping rights (Inactive, Return to New)
+        // that INACTIVE_RIGHTS_ROLES already grants it elsewhere, but NOT
+        // RET_REQUEST_APPROVE: MMT16 runs no Board Meeting, so retirement approval stays
+        // with Head Office alone.
         MATRIX.put(Role.BOARD_SECRETARY, EnumSet.of(
                 Permission.G5_REQUEST_VIEW,
                 Permission.G5_REQUEST_SET_INACTIVE,
@@ -136,8 +141,11 @@ public final class RolePermissions {
                 Permission.G5_LIST_PROCESS,
                 Permission.G5_LIST_DELETE,
                 Permission.G5_EXAM_MASTER_VIEW,
-                // Everything Head Office holds on the University side, including
-                // US_FUND_APPROVE.
+                // Retirement: housekeeping only, no RET_REQUEST_APPROVE (see above).
+                Permission.RET_REQUEST_VIEW,
+                Permission.RET_REQUEST_SET_INACTIVE,
+                Permission.RET_REQUEST_RETURN_TO_NEW,
+                // University: same Board track, minus US_FINANCE_DISBURSE.
                 Permission.US_REQUEST_VIEW,
                 Permission.US_REQUEST_SET_INACTIVE,
                 Permission.US_REQUEST_REOPEN,
@@ -189,21 +197,63 @@ public final class RolePermissions {
                 Permission.US_MASTER_VIEW,
                 Permission.US_MASTER_MANAGE));
 
-        // Accounts — "Head Office - Finance Department" in 2.2.1. Read-only on the
-        // scholarship side; owns disbursement once MMS20 exists.
+        // Accounts — "Head Office - Finance Department" in 2.2.1 and in the retirement
+        // 3.1.1 narrative. Read-only on the scholarship side; owns disbursement once
+        // MMS20 exists. Read-only on retirement too: MMT17 hands approved retirements to
+        // the Finance Module over an API that does not exist yet, so there is no right to
+        // grant for it here.
         MATRIX.put(Role.ACCOUNTS, EnumSet.of(
                 Permission.G5_REQUEST_VIEW,
                 Permission.G5_LIST_VIEW,
                 Permission.G5_FINANCE_DISBURSE,
+                Permission.RET_REQUEST_VIEW,
                 Permission.US_REQUEST_VIEW,
                 Permission.US_LIST_VIEW,
                 Permission.US_FUND_VIEW,
                 Permission.US_FINANCE_DISBURSE));
 
-        // DEATH_DONATION_OFFICER is intentionally absent — no Grade 5 rights.
+        // SCHOLARSHIP_OFFICER holds no retirement rights — it is not an actor in MMT12-MMT17.
+        // DEATH_DONATION_OFFICER is intentionally absent — no Grade 5 or retirement rights.
+    }
+
+    /**
+     * Rights granted by the per-account authority flag, ON TOP of whatever the role
+     * already holds (see User.isAuthorized).
+     *
+     * Grade 5 puts both of these behind wording the role matrix cannot express. SRS
+     * 2.3.4 qualifies "-> INACTIVE" with "the user needs Inactive rights", and reopening
+     * a Board rejection is described the same way - a right held by a particular officer
+     * rather than by the whole District Office. Withholding them from DISTRICT_OFFICE
+     * outright was the closest a role list could get; the authority flag is what the SRS
+     * actually describes, so an authorized District Office officer holds them and an
+     * ordinary clerk in the same office still does not.
+     *
+     * HEAD_OFFICE is absent because it already holds both through GRADE5_BOARD. Only
+     * DISTRICT_OFFICE and HEAD_OFFICE accounts can carry the flag at all -
+     * UserAdminService forces it false for every other role.
+     */
+    private static final Map<Role, Set<Permission>> AUTHORITY_GRANTS = new EnumMap<>(Role.class);
+
+    static {
+        AUTHORITY_GRANTS.put(Role.DISTRICT_OFFICE, EnumSet.of(
+                Permission.G5_REQUEST_SET_INACTIVE,
+                Permission.G5_REQUEST_REOPEN));
     }
 
     private RolePermissions() {
+    }
+
+    /** The extra rights this account gains from the authority flag; empty when unset. */
+    public static Set<Permission> forAuthority(Role role, boolean authorized) {
+        if (role == null || !authorized) {
+            return Collections.emptySet();
+        }
+        return AUTHORITY_GRANTS.getOrDefault(role, Collections.emptySet());
+    }
+
+    /** Role rights plus anything the authority flag adds. */
+    public static boolean has(Role role, boolean authorized, Permission permission) {
+        return has(role, permission) || forAuthority(role, authorized).contains(permission);
     }
 
     public static Set<Permission> forRole(Role role) {

@@ -6,13 +6,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.memberconnect.backend.event.Grade5MarkedIncompleteEvent;
 
 import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.Grade5RequestListDTO;
 import com.memberconnect.backend.dto.Grade5StudentDTO;
-import com.memberconnect.backend.enums.MemberStatus;
 import com.memberconnect.backend.enums.ScholarshipRequestStatus;
 import com.memberconnect.backend.model.Grade5ExamMaster;
 import com.memberconnect.backend.model.Grade5ScholarshipRequest;
@@ -30,6 +35,8 @@ import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class Grade5ScholarshipService {
+
+    private static final Logger log = LoggerFactory.getLogger(Grade5ScholarshipService.class);
 
     @Autowired
     private Grade5ScholarshipRepository repository;
@@ -54,16 +61,32 @@ public class Grade5ScholarshipService {
     @Value("${grade5.minor.account.required.remittance.amount:250.0}")
     private double defaultMinMinorRemittanceAmount;
 
+    @Value("${grade5.scholarship.base.amount:5000}")
+    private int defaultBaseScholarshipAmount;
+
+    @Value("${grade5.scholarship.double.eligible.months:36}")
+    private int defaultDoubleEligibleMonths;
+
+    @Value("${grade5.scholarship.amount.multiplier:2}")
+    private int defaultAmountMultiplier;
+
     // Check exam number exists
     public boolean isExamNumberExists(String examNo) {
         return repository.existsByExaminationNumber(examNo);
+    }
+
+    // Check birth certificate number exists. One birth certificate identifies one
+    // student, so a second request carrying it is a duplicate of an existing one.
+    public boolean isBirthCertificateNumberExists(String birthCertificateNo) {
+        return repository.existsByBirthCertificateNumber(birthCertificateNo);
     }
 
     public List<MinorSavingsAccount> getMinorAccounts(String birthCertificateNo) {
         return minorRepo.findByBirthCertificateNo(birthCertificateNo);
     }
 
-    private void validateMemberActiveOnExamLastDate(String memberId, Integer examYear) {
+    // Validate membership period for the selected exam year. The member must have been a member for at least 36 months as of the exam date.
+    private void validateMembershipPeriodForExam(String memberId, Integer examYear) {
         Member member = memberRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
@@ -78,13 +101,6 @@ public class Grade5ScholarshipService {
 
         if (examLastDate == null) {
             throw new RuntimeException("Selected exam date not found in Exam Master");
-        }
-
-        if (member.getStatus() != MemberStatus.ACTIVE
-                || member.getMembershipStartDate() == null
-                || member.getMembershipStartDate().isAfter(examLastDate)) {
-            throw new RuntimeException(
-                    "The Grade 5 Scholarship Request cannot be saved. The Member is not Active during the selected Exam");
         }
 
         LocalDate membershipStartDate = member.getMembershipStartDate();
@@ -107,6 +123,7 @@ public class Grade5ScholarshipService {
         }
     }
 
+    // Validate scholarship remittance for the selected exam year. The member must have remitted the scholarship deduction continuously for the required number of months (default 6) as of the exam date.
     private void validateScholarshipRemittance(String memberId, Integer examYear) {
         Member member = memberRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
@@ -156,6 +173,39 @@ public class Grade5ScholarshipService {
         }
     }
 
+    private int configValue(String primaryKey, String fallbackKey, int fallbackValue) {
+        return scholarshipConfigRepository.findByConfigKey(primaryKey)
+                .or(() -> scholarshipConfigRepository.findByConfigKey(fallbackKey))
+                .map(com.memberconnect.backend.model.ScholarshipConfig::getConfigValue)
+                .filter(value -> value != null && value > 0)
+                .orElse(fallbackValue);
+    }
+
+    /**
+     * The total the student is entitled to. Rs. 5,000 normally; doubled once the minor
+     * account has been remitted with the required amount for the configured number of
+     * months (36 by default, and the months need not be consecutive).
+     */
+    private int expectedTotalAmount(int eligibleMonths) {
+        int baseAmount = configValue(
+                "grade5.scholarship.base.amount",
+                "scholarship.base.amount",
+                defaultBaseScholarshipAmount > 0 ? defaultBaseScholarshipAmount : 5000);
+
+        int doubleAfterMonths = configValue(
+                "grade5.scholarship.double.eligible.months",
+                "scholarship.double.eligible.months",
+                defaultDoubleEligibleMonths > 0 ? defaultDoubleEligibleMonths : 36);
+
+        int multiplier = configValue(
+                "grade5.scholarship.amount.multiplier",
+                "scholarship.amount.multiplier",
+                defaultAmountMultiplier > 0 ? defaultAmountMultiplier : 2);
+
+        return eligibleMonths >= doubleAfterMonths ? baseAmount * multiplier : baseAmount;
+    }
+
+    
     private void validateFundDisbursement(Grade5StudentDTO dto) {
         if (dto.getEligibleMonths() != null && dto.getEligibleMonths() < 0) {
             throw new RuntimeException("Eligible months cannot be negative.");
@@ -176,13 +226,49 @@ public class Grade5ScholarshipService {
             throw new RuntimeException("Minor account number is required.");
         }
 
-        if ("MINOR_ONLY".equalsIgnoreCase(option) && (dto.getMinorAccountNumber() == null || dto.getMinorAccountNumber().trim().isEmpty())) {
+        if ("MINOR_ONLY".equalsIgnoreCase(option)
+                && (dto.getMinorAccountNumber() == null || dto.getMinorAccountNumber().trim().isEmpty())) {
             throw new RuntimeException("Minor account number is required for Minor Account Only option.");
         }
 
         if ((dto.getMemberAmount() != null && dto.getMemberAmount() < 0)
                 || (dto.getMinorAmount() != null && dto.getMinorAmount() < 0)) {
             throw new RuntimeException("Disbursement amounts cannot be negative.");
+        }
+
+        int eligibleMonths = dto.getEligibleMonths() != null ? dto.getEligibleMonths() : 0;
+
+        // The eligible months are counted from minor account remittances, so there is no
+        // way to have earned any without an account to remit into.
+        if (!hasMinorAccount && eligibleMonths > 0) {
+            throw new RuntimeException(
+                    "Eligible months cannot be greater than zero without a minor account.");
+        }
+
+        int expectedTotal = expectedTotalAmount(eligibleMonths);
+        Integer memberAmount = dto.getMemberAmount();
+        Integer minorAmount = dto.getMinorAmount();
+
+        // No minor account: the whole scholarship is paid to the member.
+        if (!hasMinorAccount) {
+            if (minorAmount != null && minorAmount != 0) {
+                throw new RuntimeException(
+                        "Without a minor account the minor account amount must be zero.");
+            }
+
+            if (memberAmount != null && memberAmount != expectedTotal) {
+                throw new RuntimeException(
+                        "Without a minor account the full scholarship amount of Rs. "
+                                + expectedTotal + " must be paid to the member.");
+            }
+        }
+
+        // Whatever the split, the two halves must still add up to what the student earned.
+        if (memberAmount != null && minorAmount != null
+                && memberAmount + minorAmount != expectedTotal) {
+            throw new RuntimeException(
+                    "Member and minor account amounts must add up to the total scholarship amount of Rs. "
+                            + expectedTotal + ".");
         }
     }
 
@@ -234,13 +320,17 @@ public class Grade5ScholarshipService {
         Member member = memberRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
-        validateMemberActiveOnExamLastDate(memberId, dto.getExamYear());
+        validateMembershipPeriodForExam(memberId, dto.getExamYear());
         validateScholarshipRemittance(memberId, dto.getExamYear());
         validateFundDisbursement(dto);
 
         // Prevent duplicate
         if (repository.existsByExaminationNumber(dto.getExaminationNumber())) {
             throw new RuntimeException("Examination number already exists");
+        }
+
+        if (repository.existsByBirthCertificateNumber(dto.getBirthCertificateNumber())) {
+            throw new RuntimeException("Birth certificate number already exists");
         }
 
         Grade5ScholarshipRequest entity = new Grade5ScholarshipRequest();
@@ -261,8 +351,7 @@ public class Grade5ScholarshipService {
         Map<String, Object> calc = calculateDisbursement(
                 dto.getEligibleMonths(),
                 dto.getDisbursementOption(),
-                dto.getMinorAccountExists()
-        );
+                dto.getMinorAccountExists());
 
         entity.setMinorAccountExists(dto.getMinorAccountExists());
         entity.setMinorAccountNumber(dto.getMinorAccountNumber());
@@ -273,11 +362,18 @@ public class Grade5ScholarshipService {
         entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
         entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
 
-        // Location comes from the member's administering District Office, not from the
-        // logged-in user — a member may apply at any office (SRS 2.3.1) but the request
-        // belongs to the branch that holds their membership.
-        entity.setSubmissionLocation(member.getSubmissionLocation());
         User currentUser = currentUserService.current();
+
+        // The request is booked to the district of the office that raised it. Accounts
+        // with no district of their own (Super Admin, Scholarship Officer) fall back to
+        // the member's administering office, so the column is never left null — the
+        // location filter on the search screen matches on it.
+        String raisingDistrict = currentUser != null ? currentUser.getAssignedDistrict() : null;
+        entity.setSubmissionLocation(
+                (raisingDistrict != null && !raisingDistrict.isBlank())
+                        ? raisingDistrict.trim()
+                        : member.getSubmissionLocation());
+
         entity.setCreatedBy(currentUser != null ? currentUser.getUsername() : null);
         entity.setCreatedAt(java.time.LocalDateTime.now());
 
@@ -326,7 +422,8 @@ public class Grade5ScholarshipService {
             result.put("minorAccountNo", null);
             result.put("totalMonths", 0);
             result.put("eligibleMonths", 0);
-            result.put("doubleAmount", false);
+
+            result.putAll(calculateDisbursement(0, "MEMBER_ONLY", false));
             return result;
         }
 
@@ -383,13 +480,12 @@ public class Grade5ScholarshipService {
     // Calculate fund disbursement breakdown
     public Map<String, Object> calculateDisbursement(Integer months, String option, Boolean hasMinorAccount) {
         int eligibleMonths = (months != null && months >= 0) ? months : 0;
-        boolean isDouble = eligibleMonths >= 36;
-        int normalAmount = 5000;
-        int doubleAmount = 10000;
-        int totalAmount = isDouble ? doubleAmount : normalAmount;
+        int totalAmount = expectedTotalAmount(eligibleMonths);
+        boolean isDouble = totalAmount > expectedTotalAmount(0);
 
         boolean minorExists = Boolean.TRUE.equals(hasMinorAccount);
-        String resolvedOption = minorExists ? (option != null && !option.trim().isEmpty() ? option : "MEMBER_AND_MINOR") : "MEMBER_ONLY";
+        String resolvedOption = minorExists ? (option != null && !option.trim().isEmpty() ? option : "MEMBER_AND_MINOR")
+                : "MEMBER_ONLY";
 
         int memberAmount = 0;
         int minorAmount = 0;
@@ -398,8 +494,9 @@ public class Grade5ScholarshipService {
             memberAmount = totalAmount;
             minorAmount = 0;
         } else if ("MEMBER_AND_MINOR".equalsIgnoreCase(resolvedOption)) {
-            memberAmount = totalAmount / 2;
+            // An odd configured total would otherwise lose a rupee to integer division.
             minorAmount = totalAmount / 2;
+            memberAmount = totalAmount - minorAmount;
         } else if ("MINOR_ONLY".equalsIgnoreCase(resolvedOption)) {
             memberAmount = 0;
             minorAmount = totalAmount;
@@ -420,19 +517,47 @@ public class Grade5ScholarshipService {
         return getFundDisbursementDetails(birthCertificateNo, null);
     }
 
+    // Deviation reason text, to be stamped onto a request that took the deviation route. It is not
+    private static final String DEVIATION_REASON =
+            "This request follows the deviation process. Because The Scholarship Request Date "
+                    + "is not within the defined eligibility period from the last exam date.";
+
+    // Stamp the deviation reason onto a request that took the deviation route. It is not
+    private Grade5ScholarshipRequest withDeviationReason(Grade5ScholarshipRequest request) {
+        if (request == null || !Boolean.TRUE.equals(request.getHasDeviation())) {
+            return request;
+        }
+
+        request.setDeviationReason(DEVIATION_REASON);
+        return request;
+    }
+
+    /** Every Grade 5 request held by a member, newest first. */
+    public List<Grade5ScholarshipRequest> getRequestsForMember(String memberId) {
+        return repository.findByMemberIdOrderByIdDesc(memberId)
+                .stream()
+                .map(this::withDeviationReason)
+                .toList();
+    }
+
     // Get latest request for member
     public Grade5ScholarshipRequest getLatestRequest(String memberId) {
         return repository
                 .findTopByMemberIdOrderByIdDesc(memberId)
+                .map(this::withDeviationReason)
                 .orElse(null);
     }
 
     // Get a specific request by requestNo
     public java.util.Optional<Grade5ScholarshipRequest> getRequestByRequestNo(String requestNo) {
-        return repository.findByRequestNo(requestNo);
+        return repository.findByRequestNo(requestNo).map(this::withDeviationReason);
     }
 
-    // Mark incomplete
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    // Mark request as incomplete
+    @Transactional
     public Grade5ScholarshipRequest markIncomplete(String requestNo, String reason) {
         Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
@@ -440,7 +565,16 @@ public class Grade5ScholarshipService {
         request.setStatus("INCOMPLETE");
         request.setIncompleteReason(reason);
 
-        return repository.save(request);
+        Grade5ScholarshipRequest saved = repository.save(request);
+
+        eventPublisher.publishEvent(new Grade5MarkedIncompleteEvent(
+                saved.getMemberId(),
+                saved.getRequestNo(),
+                saved.getStudentName(),
+                reason
+        ));
+
+        return saved;
     }
 
     // Submit request
@@ -453,8 +587,7 @@ public class Grade5ScholarshipService {
             throw new RuntimeException("Only NEW or INCOMPLETE requests can be submitted");
         }
 
-        // Decide final submit status on the server to avoid relying on client-provided
-        // values.
+        // Decide final submit status on the server to avoid relying on client-provided values.
         boolean isDeviation = Boolean.TRUE.equals(request.getHasDeviation())
                 || shouldFollowDeviationProcess(request.getRequestedDate(), request.getExamYear())
                 || (status != null && status.toUpperCase().contains("DEVIATION"));
@@ -492,16 +625,11 @@ public class Grade5ScholarshipService {
             String sortDirection) {
         LocalDate today = LocalDate.now();
 
-        // A District Office user is pinned to their own branch regardless of what the
-        // client asked for. Enforcing this here rather than in the UI is what stops a
-        // hand-crafted request from reading another branch's records. Shared with the
-        // University module so the two cannot drift apart on who sees what.
+        
         CurrentUserService.LocationScope locationScope =
                 currentUserService.resolveLocationScope(locations);
 
-        // Restricted, but no district on the account: return nothing rather than
-        // falling back to "everything". Failing open here would hand a misconfigured
-        // District Office login the national dataset.
+        
         if (locationScope.showsNothing()) {
             return List.of();
         }
@@ -672,7 +800,7 @@ public class Grade5ScholarshipService {
         Grade5ScholarshipRequest entity = repository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
 
-        validateMemberActiveOnExamLastDate(entity.getMemberId(), dto.getExamYear());
+        validateMembershipPeriodForExam(entity.getMemberId(), dto.getExamYear());
         validateScholarshipRemittance(entity.getMemberId(), dto.getExamYear());
         validateFundDisbursement(dto);
 
@@ -680,6 +808,12 @@ public class Grade5ScholarshipService {
                 dto.getExaminationNumber(),
                 requestNo)) {
             throw new RuntimeException("Examination number already exists");
+        }
+
+        if (repository.existsByBirthCertificateNumberAndRequestNoNot(
+                dto.getBirthCertificateNumber(),
+                requestNo)) {
+            throw new RuntimeException("Birth certificate number already exists");
         }
 
         LocalDate requestedDate = LocalDate.parse(dto.getRequestedDate());
@@ -697,8 +831,7 @@ public class Grade5ScholarshipService {
         Map<String, Object> calc = calculateDisbursement(
                 dto.getEligibleMonths(),
                 dto.getDisbursementOption(),
-                dto.getMinorAccountExists()
-        );
+                dto.getMinorAccountExists());
 
         entity.setMinorAccountExists(dto.getMinorAccountExists());
         entity.setMinorAccountNumber(dto.getMinorAccountNumber());
@@ -709,7 +842,10 @@ public class Grade5ScholarshipService {
         entity.setIsDoubleAmount((Boolean) calc.get("isDoubleAmount"));
         entity.setHasDeviation(shouldFollowDeviationProcess(requestedDate, dto.getExamYear()));
 
-        entity.setIncompleteReason(null);
+        
+        if (!"INCOMPLETE".equals(entity.getStatus())) {
+            entity.setIncompleteReason(null);
+        }
 
         return repository.save(entity);
     }
@@ -742,10 +878,7 @@ public class Grade5ScholarshipService {
                     "Cannot change status from " + currentStatus + " to " + newStatus);
         }
 
-        // A request that has already been picked up onto an approval list cannot be
-        // pulled back to New by the originating office — Head Office may be mid-way
-        // through a Board Meeting with it on the printed list. Deleting the list
-        // (MMS09/MMS16) is the supported way to release it.
+        
         if (newStatus == ScholarshipRequestStatus.NEW
                 && request.getApprovalListId() != null
                 && !request.getApprovalListId().isBlank()) {
@@ -772,6 +905,7 @@ public class Grade5ScholarshipService {
         return repository.save(request);
     }
 
+    // Check if the status transition is allowed for Grade 5 Scholarship requests
     private boolean isGrade5StatusTransitionAllowed(ScholarshipRequestStatus current, ScholarshipRequestStatus next) {
         switch (current) {
             case NEW:
@@ -791,4 +925,44 @@ public class Grade5ScholarshipService {
         }
     }
 
+
+    // send to Finance Module only for approved requests
+    public Grade5ScholarshipRequest sendToFinanceModule(String requestNo) {
+        Grade5ScholarshipRequest request = repository.findByRequestNo(requestNo)
+                .orElseThrow(() -> new RuntimeException(
+                        "Grade 5 Scholarship Request not found: " + requestNo));
+
+        if (!ScholarshipRequestStatus.APPROVED.name().equalsIgnoreCase(request.getStatus())) {
+            throw new RuntimeException(
+                    "Only an approved Grade 5 Scholarship request can be sent to the Finance Module. "
+                            + requestNo + " is " + request.getStatus() + ".");
+        }
+
+        callFinanceModuleApi(request);
+
+        // "Once the funds are disbursed for the Grade 5 Scholarship, the record will
+        // be made Inactive."
+        request.setStatus(ScholarshipRequestStatus.INACTIVE.name());
+        return repository.save(request);
+    }
+
+    // Mock API call to Finance Module
+    private void callFinanceModuleApi(Grade5ScholarshipRequest request) {
+        User sender = currentUserService != null ? currentUserService.current() : null;
+
+        log.info("[FINANCE MODULE - MOCK API] Grade 5 scholarship handed off: requestNo={} memberId={} "
+                + "studentName={} examYear={} disbursementOption={} memberAmount={} minorAmount={} "
+                + "minorAccountNumber={} approvalListId={} location={} sentBy={}",
+                request.getRequestNo(),
+                request.getMemberId(),
+                request.getStudentName(),
+                request.getExamYear(),
+                request.getDisbursementOption(),
+                request.getMemberAmount(),
+                request.getMinorAmount(),
+                request.getMinorAccountNumber(),
+                request.getApprovalListId(),
+                request.getSubmissionLocation(),
+                sender != null ? sender.getUsername() : null);
+    }
 }

@@ -117,6 +117,11 @@ class Grade5ScholarshipServiceTest {
         dto.setExaminationNumber("EXAM654321");
         dto.setDistrictCutOffMark(100);
         dto.setMarksObtained(90);
+        // No minor account, so the whole scholarship is paid to the member. Without
+        // this the save stops at the fund disbursement gate and never reaches the
+        // deviation check this test is about.
+        dto.setMinorAccountExists(false);
+        dto.setDisbursementOption("MEMBER_ONLY");
 
         AtomicReference<com.memberconnect.backend.model.Grade5ScholarshipRequest> savedRequest = new AtomicReference<>();
 

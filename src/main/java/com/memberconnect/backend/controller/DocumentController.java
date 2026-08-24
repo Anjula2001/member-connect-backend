@@ -147,12 +147,14 @@ public class DocumentController {
         return documentService.getUploadedDocuments(requestNo);
     }
 
+    // Upload a generic file to S3
     @PostMapping("/file/upload")
     public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) throws IOException {
         String fileName = s3Service.uploadFile(file);
         return ResponseEntity.ok(fileName);
     }
 
+    // Download a generic file from S3 by its file name
     @GetMapping("/file/download")
     public ResponseEntity<byte[]> downloadGenericFile(@RequestParam("fileName") String fileName) {
         String contentType = s3Service.getFileContentType(fileName);
@@ -163,6 +165,7 @@ public class DocumentController {
                 .body(fileBytes);
     }
 
+    // Get uploaded documents for a specific request and required document type
     @GetMapping("/{requestType}/{requestNo}/documents/{requiredDocumentId}/uploaded")
     public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
             @PathVariable String requestType,
@@ -179,6 +182,7 @@ public class DocumentController {
         );
     }
 
+    // Delete an uploaded document by its ID
     @DeleteMapping("/{requestType}/documents/{uploadedDocumentId}/file")
     public void deleteUploadedDocument(
             @PathVariable String requestType,
@@ -226,12 +230,9 @@ public class DocumentController {
             case "retirement-requests" -> "RETIREMENT";
             case "grade5-requests" -> "GRADE5";
             case "termination-requests" -> "TERMINATION";
-            // The scanned, board-signed "Termination Request List for Board
-            // Approval" sheet (MMT09). Its document types were already seeded by
-            // TerminationDocumentSeeder but were unreachable without this case.
+            
             case "termination-approval-lists" -> "TERMINATION_APPROVAL_REPORT";
-            // Record Member Death (MMT18). Its document types are seeded by
-            // MemberDeathDocumentSeeder and would be unreachable without this case.
+            
             case "member-death-records" -> "MEMBER_DEATH";
             default -> throw new RuntimeException(
                     "Invalid request type: " + requestType

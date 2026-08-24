@@ -59,6 +59,20 @@ public class Grade5ScholarshipController {
         return response;
     }
 
+    // Validate birth certificate number
+    @PreAuthorize("hasAuthority('G5_REQUEST_CREATE') or hasAuthority('G5_REQUEST_EDIT')")
+    @GetMapping("/exists-birth-certificate")
+    public Map<String, Boolean> checkBirthCertificateNumber(
+            @RequestParam String birthCertificateNo
+    ) {
+        boolean exists = service.isBirthCertificateNumberExists(birthCertificateNo);
+
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("exists", exists);
+
+        return response;
+    }
+
     // Save full request
     @PreAuthorize("hasAuthority('G5_REQUEST_CREATE')")
     @PostMapping("/save")
@@ -117,6 +131,15 @@ public class Grade5ScholarshipController {
         }
 
         return ResponseEntity.ok(request);
+    }
+
+    // All requests for a member - a member can hold one per child, and one per exam year.
+    @PreAuthorize("hasAuthority('G5_REQUEST_VIEW')")
+    @GetMapping("/{memberId}/requests")
+    public List<Grade5ScholarshipRequest> getRequestsForMember(
+            @PathVariable String memberId
+    ) {
+        return service.getRequestsForMember(memberId);
     }
 
     // Get a specific request by requestNo
@@ -222,14 +245,18 @@ public class Grade5ScholarshipController {
         }
     }
 
-    /**
-     * Change request status (view mode).
-     *
-     * The right required depends on the target status, not on the endpoint, so this
-     * cannot be a single @PreAuthorize. The check runs before the try/catch below —
-     * inside it, the AccessDeniedException would be caught as a RuntimeException and
-     * returned as 400 instead of 403.
-     */
+    // Send request to Finance Module
+    @PreAuthorize("hasAuthority('G5_FINANCE_DISBURSE')")
+    @PostMapping("/{requestNo}/send-to-finance")
+    public ResponseEntity<?> sendToFinanceModule(@PathVariable String requestNo) {
+        try {
+            return ResponseEntity.ok(service.sendToFinanceModule(requestNo));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+   // Change request status 
     @PutMapping("/{requestNo}/status")
     public ResponseEntity<?> changeRequestStatus(
             @PathVariable String requestNo,
@@ -250,22 +277,7 @@ public class Grade5ScholarshipController {
         }
     }
 
-    /**
-     * Maps a status change to the right needed to perform it.
-     *
-     * Two moves are deliberately privileged above ordinary edit rights:
-     *   -> INACTIVE            SRS 2.3.4 qualifies this everywhere with "the user needs
-     *                          Inactive rights", so it is not part of everyday editing.
-     *   REJECTED -> NEW        This reverses a Board decision, so it needs
-     *                          G5_REQUEST_REOPEN, which District Office does not hold.
-     *
-     * Every other move to NEW stays on ordinary edit rights: INCOMPLETE -> NEW is the
-     * normal "fix the request and carry on" path, and SUBMITTED -> NEW is explicitly
-     * granted to the originating office by MMS05.
-     *
-     * An unrecognised status falls through to G5_REQUEST_EDIT and is then rejected by
-     * the service's own validation, so a bad payload cannot pick a weaker right.
-     */
+    // Determine the required permission for changing the status of a Grade 5 Scholarship request
     private Permission requiredPermissionForStatusChange(String currentStatus, String requestedStatus) {
         if (requestedStatus == null) {
             return Permission.G5_REQUEST_EDIT;

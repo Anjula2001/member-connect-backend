@@ -17,6 +17,14 @@ public class RetirementRequestResponseDTO {
     private String rejectReason;
     private boolean hasLoanBalance;
     private boolean hasIndirectObligations;
+    private String submissionLocation;
+    private String createdBy;
+    private String createdAt;
+
+    // The member's own status. The request stays APPROVED after the Finance Module
+    // handoff — it is this that moves to RETIRED — so the UI needs both to tell an
+    // approved-but-not-yet-sent retirement from a completed one.
+    private String memberStatus;
 
     public RetirementRequestResponseDTO() {}
 
@@ -112,5 +120,37 @@ public class RetirementRequestResponseDTO {
 
     public boolean isHasIndirectObligations() {
         return hasIndirectObligations;
+    }
+
+    public String getSubmissionLocation() {
+        return submissionLocation;
+    }
+
+    public void setSubmissionLocation(String submissionLocation) {
+        this.submissionLocation = submissionLocation;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public String getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(String createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public String getMemberStatus() {
+        return memberStatus;
+    }
+
+    public void setMemberStatus(String memberStatus) {
+        this.memberStatus = memberStatus;
     }
 }
