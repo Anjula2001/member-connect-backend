@@ -47,6 +47,7 @@ public class RetirementService {
     private final DocumentService documentService;
     private final CurrentUserService currentUserService;
     private final ApplicationEventPublisher eventPublisher;
+    private final MemberStatusHistoryService memberStatusHistoryService;
 
     public RetirementService(
             MemberRepository memberRepository,
@@ -55,7 +56,8 @@ public class RetirementService {
             LoanObligationRepository obligationRepository,
             DocumentService documentService,
             CurrentUserService currentUserService,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            MemberStatusHistoryService memberStatusHistoryService) {
         this.memberRepository = memberRepository;
         this.requestRepository = requestRepository;
         this.loanRepository = loanRepository;
@@ -63,6 +65,7 @@ public class RetirementService {
         this.documentService = documentService;
         this.currentUserService = currentUserService;
         this.eventPublisher = eventPublisher;
+        this.memberStatusHistoryService = memberStatusHistoryService;
     }
 
     // returns all retirement requests.
@@ -243,8 +246,12 @@ public class RetirementService {
         RetirementRequest saved = requestRepository.save(request);
 
         // Update member status
+        MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.RETIREMENT_REQUESTED);
         memberRepository.save(member);
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                requestedDate, "RETIREMENT_REQUESTED",
+                "Retirement request " + saved.getRequestNo());
 
         return mapToResponse(saved);
     }
@@ -327,8 +334,12 @@ public class RetirementService {
             request.setRejectReason(null);
 
             Member member = getMemberEntity(request.getMemberId());
+            MemberStatus previousMemberStatus = member.getStatus();
             member.setStatus(MemberStatus.ACTIVE);
             memberRepository.save(member);
+            memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                    null, "RETIREMENT_REQUEST_INACTIVE",
+                    "Retirement request " + request.getRequestNo() + " made inactive");
         } else if (newStatus == RetirementRequestStatus.NEW ||
                 newStatus == RetirementRequestStatus.INCOMPLETE ||
                 newStatus == RetirementRequestStatus.SUBMITTED_FOR_APPROVAL) {
@@ -338,8 +349,12 @@ public class RetirementService {
             }
 
             Member member = getMemberEntity(request.getMemberId());
+            MemberStatus previousMemberStatus = member.getStatus();
             member.setStatus(MemberStatus.RETIREMENT_REQUESTED);
             memberRepository.save(member);
+            memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                    request.getRequestedDate(), "RETIREMENT_REQUEST_REOPENED",
+                    "Retirement request " + request.getRequestNo() + " set to " + newStatus);
         }
 
         RetirementRequest saved = requestRepository.save(request);
@@ -410,8 +425,14 @@ public class RetirementService {
         RetirementRequest saved = requestRepository.save(request);
 
         Member member = getMemberEntity(request.getMemberId());
+        MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.RETIREMENT_APPROVED);
         memberRepository.save(member);
+        // The retirement's own effective date, not today: the member retires on the date
+        // the request names, which is what a later "was the member active on X" asks about
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                request.getEffectiveDate(), "RETIREMENT_APPROVED",
+                "Retirement request " + saved.getRequestNo() + " approved");
 
         // The member stops here. MMT17 — handing the details to the Finance Module and
         // retiring the member — is a separate, deliberate step: see sendToFinanceModule.
@@ -458,8 +479,14 @@ public class RetirementService {
 
         // Real Finance confirms this over an API of its own; the mock reports success
         // immediately, so the member is retired here.
+        MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.RETIRED);
         memberRepository.save(member);
+        // Mirrors TERMINATION_COMPLETED: the membership closes on the retirement's own
+        // effective date, which is what a later "was the member active on X" asks about.
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                request.getEffectiveDate(), "RETIREMENT_COMPLETED",
+                "Retirement request " + request.getRequestNo() + " completed by Finance");
 
         // AFTER_COMMIT, so a member is only ever told their membership has ended once
         // RETIRED is durable. A Finance failure throws above this line, leaving the
@@ -514,8 +541,12 @@ public class RetirementService {
         RetirementRequest saved = requestRepository.save(request);
 
         Member member = getMemberEntity(request.getMemberId());
+        MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.ACTIVE);
         memberRepository.save(member);
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                null, "RETIREMENT_REJECTED",
+                "Retirement request " + saved.getRequestNo() + " rejected");
 
         eventPublisher.publishEvent(new RetirementRejectedEvent(
                 saved.getMemberId(),

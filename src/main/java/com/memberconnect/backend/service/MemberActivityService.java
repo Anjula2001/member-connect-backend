@@ -50,9 +50,13 @@ public class MemberActivityService {
     private static final Logger log = LoggerFactory.getLogger(MemberActivityService.class);
 
     private final MemberRepository memberRepository;
+    private final MemberStatusHistoryService memberStatusHistoryService;
 
-    public MemberActivityService(MemberRepository memberRepository) {
+    public MemberActivityService(
+            MemberRepository memberRepository,
+            MemberStatusHistoryService memberStatusHistoryService) {
         this.memberRepository = memberRepository;
+        this.memberStatusHistoryService = memberStatusHistoryService;
     }
 
     /** Records activity for a member id, doing nothing if no such member exists. */
@@ -106,6 +110,9 @@ public class MemberActivityService {
             member.setStatus(MemberStatus.ACTIVE);
             member.setDormantSelectionDate(null);
             moved = true;
+            memberStatusHistoryService.record(member, MemberStatus.SELECTED_FOR_DORMANT,
+                    MemberStatus.ACTIVE, activityDate, "DORMANT_FLAG_CLEARED_BY_ACTIVITY",
+                    "Account activity from " + source);
 
             log.info(
                     "Dormant flag cleared by activity. memberId={}, source={}",

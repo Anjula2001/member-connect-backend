@@ -70,7 +70,11 @@ public final class RolePermissions {
                 Permission.US_REQUEST_EDIT,
                 Permission.US_REQUEST_SUBMIT,
                 Permission.US_REQUEST_INCOMPLETE,
-                Permission.US_MASTER_VIEW));
+                Permission.US_MASTER_VIEW,
+                // Member Transfers (MMC27-MMC29). Raises and reads; approval and the
+                // Inactive right sit with Head Office.
+                Permission.MT_REQUEST_VIEW,
+                Permission.MT_REQUEST_CREATE));
 
         // Head Office — MMS06-MMS19 and MMT16. Owns both approval tracks end to end.
         // Deliberately holds no RET_REQUEST_CREATE: retirement requests are raised at the
@@ -110,7 +114,14 @@ public final class RolePermissions {
                 Permission.US_FUND_SET_INACTIVE,
                 Permission.US_FUND_REOPEN,
                 Permission.US_FINANCE_DISBURSE,
-                Permission.US_MASTER_VIEW));
+                Permission.US_MASTER_VIEW,
+                // Member Transfers (MMC29-MMC30). MMC30 names the District Office as
+                // the approver, resolved here in favour of Head Office for the reason
+                // given at the top of this file: the office that raises a request does
+                // not approve it. District Office keeps VIEW and CREATE only.
+                Permission.MT_REQUEST_VIEW,
+                Permission.MT_REQUEST_APPROVE,
+                Permission.MT_REQUEST_SET_INACTIVE));
 
         // Board Secretary — the same Grade 5 approval track, plus delete privileges.
         // Mirrors DELETE_RIGHTS_ROLES in the frontend's Member Registration matrix so the
@@ -152,7 +163,12 @@ public final class RolePermissions {
                 Permission.US_FUND_APPROVE,
                 Permission.US_FUND_SET_INACTIVE,
                 Permission.US_FUND_REOPEN,
-                Permission.US_MASTER_VIEW));
+                Permission.US_MASTER_VIEW,
+                // Member Transfers. Mirrors this role's standing elsewhere: it reads
+                // requests and holds the Inactive right, but approval of a transfer
+                // stays with Head Office.
+                Permission.MT_REQUEST_VIEW,
+                Permission.MT_REQUEST_SET_INACTIVE));
 
         // Scholarship Officer — not named as an actor anywhere in the SRS, but it is the
         // only role whose name fits ownership of the Exam Master (exam dates and district

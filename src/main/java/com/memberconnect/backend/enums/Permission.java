@@ -170,5 +170,30 @@ public enum Permission {
     US_MASTER_MANAGE,
 
     /** MMS48 — hand approved fund requests to Finance. No endpoint behind it yet. */
-    US_FINANCE_DISBURSE
+    US_FINANCE_DISBURSE,
+
+    // ===================== Member Transfers (MMC27-MMC30) =====================
+    //
+    // A transfer is created already at "Submitted for Approval" and MMC27 states it
+    // can never be edited afterwards, so there is deliberately no MT_REQUEST_EDIT:
+    // there is no editable state for one to govern.
+
+    /** MMC28 / MMC29 — search and open transfer requests. */
+    MT_REQUEST_VIEW,
+
+    /** MMC27 — raise a transfer request against a member's profile. */
+    MT_REQUEST_CREATE,
+
+    /**
+     * MMC30 — approve or reject a transfer request.
+     *
+     * Held by Head Office rather than the District Office the function names as its
+     * actor, for the reason RolePermissions records for the scholarship modules: the
+     * office that raises a request cannot be the office that approves it. Approve and
+     * reject are one right because they are the two halves of a single decision.
+     */
+    MT_REQUEST_APPROVE,
+
+    /** MMC29 — "the user needs Inactive rights" for the View Mode status change. */
+    MT_REQUEST_SET_INACTIVE
 }

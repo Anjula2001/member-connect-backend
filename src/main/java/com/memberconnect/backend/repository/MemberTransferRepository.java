@@ -1,5 +1,6 @@
 package com.memberconnect.backend.repository;
 
+import com.memberconnect.backend.enums.MemberTransferStatus;
 import com.memberconnect.backend.model.MemberTransferRequest;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -10,4 +11,11 @@ public interface MemberTransferRepository extends JpaRepository<MemberTransferRe
     Optional<MemberTransferRequest> findByRequestId(String requestId);
 
     boolean existsByRequestId(String requestId);
+
+    // member_id holds the member's business key (see MemberTransferRequest's
+    // @JoinColumn referencedColumnName), so these navigate member.memberId
+    boolean existsByMember_MemberIdAndStatus(String memberId, MemberTransferStatus status);
+
+    Optional<MemberTransferRequest> findFirstByMember_MemberIdAndStatus(
+            String memberId, MemberTransferStatus status);
 }
