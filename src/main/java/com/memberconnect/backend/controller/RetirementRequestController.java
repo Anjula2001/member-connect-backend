@@ -36,7 +36,8 @@ public class RetirementRequestController {
             @RequestParam(required = false) String toDate,
             @RequestParam(required = false) String searchKey,
             @RequestParam(defaultValue = "requestedDate") String sortBy,
-            @RequestParam(defaultValue = "asc") String sortOrder
+            @RequestParam(defaultValue = "asc") String sortOrder,
+            @RequestParam(required = false) List<String> locations
     ) {
         return retirementService.searchRequests(
                 statuses,
@@ -44,7 +45,8 @@ public class RetirementRequestController {
                 toDate,
                 searchKey,
                 sortBy,
-                sortOrder
+                sortOrder,
+                locations
         );
     }
 

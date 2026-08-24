@@ -8,18 +8,24 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.memberconnect.backend.dto.MemberRetirementRequestDTO;
 import com.memberconnect.backend.dto.MemberRetirementValidationDTO;
 import com.memberconnect.backend.dto.MemberSummaryDTO;
 import com.memberconnect.backend.dto.RetirementRequestResponseDTO;
 import com.memberconnect.backend.enums.MemberStatus;
+import com.memberconnect.backend.enums.Role;
 import com.memberconnect.backend.enums.RetirementRequestStatus;
 import com.memberconnect.backend.model.Loan;
 import com.memberconnect.backend.model.LoanObligation;
 import com.memberconnect.backend.model.Member;
 import com.memberconnect.backend.model.RetirementRequest;
+import com.memberconnect.backend.model.User;
 import com.memberconnect.backend.repository.LoanObligationRepository;
 import com.memberconnect.backend.repository.LoanRepository;
 import com.memberconnect.backend.repository.MemberRepository;
@@ -283,6 +289,28 @@ public class RetirementService {
                     "Cannot change status from " + currentStatus + " to " + newStatus);
         }
 
+        /*
+         * MMT15 marks every Inactive transition "The user needs Inactive rights".
+         *
+         * Retirement was the only one of the three modules not enforcing it -
+         * TerminationService and MemberDeathRecordService both gate this - so any user
+         * who could open a retirement request could retire it AND, because the branch
+         * below puts the member back to ACTIVE, silently undo a retirement in progress.
+         *
+         * Both directions are gated, not just deactivation: an INACTIVE request was
+         * retired by someone holding that right, and reviving it undoes that decision,
+         * which should take the same authority. Mirrors TerminationService.changeStatus.
+         */
+        boolean touchesInactive = newStatus == RetirementRequestStatus.INACTIVE
+                || currentStatus == RetirementRequestStatus.INACTIVE;
+
+        if (touchesInactive && !currentUserHasInactiveRights()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "You do not have rights to change this retirement request to or from Inactive."
+            );
+        }
+
         request.setStatus(newStatus);
 
         if (newStatus == RetirementRequestStatus.INACTIVE) {
@@ -307,6 +335,24 @@ public class RetirementService {
 
         RetirementRequest saved = requestRepository.save(request);
         return mapToResponse(saved);
+    }
+
+    /**
+     * Who may move a retirement request into or out of Inactive.
+     *
+     * Same three roles TerminationService.currentUserHasInactiveRights allows, kept
+     * identical deliberately: the two modules sit on one screen under one sidebar item,
+     * and a right that applied to a termination but not a retirement would be arbitrary.
+     */
+    private boolean currentUserHasInactiveRights() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth == null || !(auth.getPrincipal() instanceof User user)) {
+            return false;
+        }
+
+        Role role = user.getRole();
+        return role == Role.HEAD_OFFICE || role == Role.BOARD_SECRETARY || role == Role.SUPER_ADMIN;
     }
 
     // in view mode status transition
@@ -470,8 +516,11 @@ public class RetirementService {
             String toDate,
             String searchKey,
             String sortBy,
-            String sortOrder
+            String sortOrder,
+            List<String> locations
     ) {
+        Set<String> effectiveLocations = resolveVisibleLocations(locations);
+
         // Status and date filtering needs no extra queries, so it runs first and
         // shrinks the set the member lookup below has to cover.
         List<RetirementRequest> candidates = requestRepository.findAll()
@@ -511,6 +560,28 @@ public class RetirementService {
         );
 
         List<RetirementRequest> matches = candidates.stream()
+
+                /*
+                 * Location filter (MMT02).
+                 *
+                 * Unlike TerminationRequest, RetirementRequest carries no
+                 * submissionLocation column, so the district has to be read off the
+                 * member - which is why this runs here rather than beside the status and
+                 * date filters above: it needs membersById to have been loaded.
+                 *
+                 * A request whose member cannot be resolved is excluded rather than
+                 * included, on the same reasoning TerminationService applies to a null
+                 * submissionLocation: a row whose district cannot be established must not
+                 * be shown to a district user who may not be entitled to it.
+                 */
+                .filter(r -> {
+                    if (effectiveLocations == null) return true;
+
+                    Member member = membersById.get(r.getMemberId());
+                    return member != null
+                            && member.getSubmissionLocation() != null
+                            && effectiveLocations.contains(member.getSubmissionLocation());
+                })
 
                 // search filter
                 .filter(r -> {
@@ -579,6 +650,49 @@ public class RetirementService {
                         membersWithLoanBalance.contains(request.getMemberId()),
                         membersWithObligations.contains(request.getMemberId())))
                 .toList();
+    }
+
+    /**
+     * The locations this caller may actually see, mirroring
+     * TerminationService.resolveVisibleLocations.
+     *
+     * Retirement previously had no location handling at all: the controller did not even
+     * accept the parameter, so the screen's Location filter silently did nothing for
+     * retirement rows, and - more seriously - a District Office user saw every district's
+     * retirement requests while being correctly confined to their own for terminations
+     * and member deaths, on the same screen and the same filter.
+     *
+     * Returning null means "no restriction". A District Office user is pinned to their
+     * assigned district whatever they asked for, which is what makes this an access rule
+     * rather than a filter.
+     */
+    private Set<String> resolveVisibleLocations(List<String> requestedLocations) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth != null && auth.getPrincipal() instanceof User user
+                && user.getRole() == Role.DISTRICT_OFFICE) {
+            String assigned = user.getAssignedDistrict();
+
+            if (assigned == null || assigned.isBlank()) {
+                // A district user with no district assigned can be scoped to
+                // nothing safely, but not to everything.
+                return Set.of();
+            }
+
+            return Set.of(assigned);
+        }
+
+        if (requestedLocations == null || requestedLocations.isEmpty()) {
+            return null;
+        }
+
+        Set<String> cleaned = requestedLocations.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(location -> !location.isEmpty() && !"All".equalsIgnoreCase(location))
+                .collect(Collectors.toSet());
+
+        return cleaned.isEmpty() ? null : cleaned;
     }
 
     private Map<String, Member> loadMembersByMemberId(List<String> memberIds) {

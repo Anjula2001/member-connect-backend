@@ -147,9 +147,9 @@ public final class RolePermissions {
                 Permission.US_MASTER_VIEW));
 
         // Scholarship Officer — not named as an actor anywhere in the SRS, but it is the
-        // only role whose name fits ownership of the Exam Master (exam dates and district
-        // cut-off marks), and it is the seat chosen for the University Scholarship
-        // Committee (MMS26).
+        // the seat chosen for the University Scholarship Committee (MMS26). It reads the
+        // Exam Master but does not maintain it: cut-off marks decide who qualifies, so
+        // that stays with Super Admin.
         //
         // Note the asymmetry between the two modules, which is deliberate. On Grade 5
         // this role may raise requests, because Grade 5 has no committee step for it to
@@ -163,8 +163,10 @@ public final class RolePermissions {
                 Permission.G5_REQUEST_SUBMIT,
                 Permission.G5_REQUEST_INCOMPLETE,
                 Permission.G5_LIST_VIEW,
+                // Reads the Exam Master; no longer maintains it. Exam dates and district
+                // cut-off marks decide who qualifies for a scholarship, so editing them
+                // is Super Admin's alone - see Grade5ExamManagementController.
                 Permission.G5_EXAM_MASTER_VIEW,
-                Permission.G5_EXAM_MASTER_MANAGE,
                 // University: Committee only, plus the masters it owns.
                 Permission.US_REQUEST_VIEW,
                 Permission.US_COMMITTEE_APPROVE,

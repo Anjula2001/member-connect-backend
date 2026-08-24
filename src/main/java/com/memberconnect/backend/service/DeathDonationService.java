@@ -414,9 +414,21 @@ public class DeathDonationService {
                     "A request in status " + current + " cannot be changed to " + target);
         }
 
-        if (target == DeathDonationRequestStatus.INACTIVE && !currentUserHasInactiveRights()) {
+        /*
+         * MMD04 marks every Inactive transition "The user needs Inactive rights".
+         *
+         * Both directions are gated, not just deactivation: an INACTIVE request was
+         * retired by someone holding that right, and reviving it undoes that decision,
+         * which should take the same authority. This previously checked the target only,
+         * so any caller could pull a request back out of Inactive - the one direction
+         * TerminationService and RetirementService both refuse.
+         */
+        boolean touchesInactive = target == DeathDonationRequestStatus.INACTIVE
+                || current == DeathDonationRequestStatus.INACTIVE;
+
+        if (touchesInactive && !currentUserHasInactiveRights()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Making a death donation request inactive requires inactive rights");
+                    "You do not have rights to change this death donation request to or from Inactive.");
         }
 
         request.setStatus(target);

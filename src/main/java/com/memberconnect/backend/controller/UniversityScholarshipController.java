@@ -205,6 +205,56 @@ public class UniversityScholarshipController {
         return ResponseEntity.ok(service.getAllScholarshipRequests());
     }
 
+    /**
+     * The University Scholarship list, narrowed by the screen's criteria.
+     *
+     * Replaces the pattern where the screen called /university-scholarships for every
+     * request in its scope and applied Location, Status, Received On, Search and Sort in
+     * the browser. Location is still resolved server-side, so a District Office caller
+     * cannot widen its own scope by editing the request.
+     *
+     * Every parameter is optional; omitting them all matches the old behaviour.
+     */
+    @PreAuthorize("hasAuthority('US_REQUEST_VIEW')")
+    @GetMapping("/university-scholarships/search")
+    public ResponseEntity<?> searchScholarshipRequests(
+            @RequestParam(required = false) List<String> locations,
+            @RequestParam(required = false) List<String> statuses,
+            @RequestParam(required = false, defaultValue = "all") String receivedOn,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false, defaultValue = "requested-date") String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDirection) {
+
+        return ResponseEntity.ok(service.searchScholarshipRequests(
+                locations, statuses, receivedOn, fromDate, toDate, search, sortBy, sortDirection));
+    }
+
+    /**
+     * The Fund Requests list, narrowed by the same criteria.
+     *
+     * Deliberately its own route rather than a flag on the scholarship search: fund
+     * requests are a separate entity with their own status enum, so sharing would mean
+     * one endpoint returning two different shapes. The screen previously read the
+     * scholarship endpoint and flattened fund requests out of it client-side.
+     */
+    @PreAuthorize("hasAuthority('US_FUND_VIEW')")
+    @GetMapping("/university-scholarship-fund-requests/search")
+    public ResponseEntity<?> searchFundRequests(
+            @RequestParam(required = false) List<String> locations,
+            @RequestParam(required = false) List<String> statuses,
+            @RequestParam(required = false, defaultValue = "all") String receivedOn,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false, defaultValue = "requested-date") String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDirection) {
+
+        return ResponseEntity.ok(service.searchFundRequests(
+                locations, statuses, receivedOn, fromDate, toDate, search, sortBy, sortDirection));
+    }
+
     // Endpoint to get all university scholarship requests for a member
     @PreAuthorize("hasAuthority('US_REQUEST_VIEW')")
     @GetMapping("/university-scholarships/member/{memberId}")
