@@ -1,10 +1,12 @@
 package com.memberconnect.backend.controller;
 
+import com.memberconnect.backend.dto.ApprovalListPageDTO;
 import com.memberconnect.backend.dto.BoardApprovalListDTO;
 import com.memberconnect.backend.dto.MemberApplicationDTO;
 import com.memberconnect.backend.dto.NameChangeRequestDTO;
 import com.memberconnect.backend.dto.NommineChangeRequestDTO;
 import com.memberconnect.backend.service.BoardApprovalListService;
+import com.memberconnect.backend.service.BoardApprovalSearchService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -24,6 +26,9 @@ public class BoardApprovalListController {
 	@Autowired
 	private BoardApprovalListService boardApprovalListService;
 
+	@Autowired
+	private BoardApprovalSearchService boardApprovalSearchService;
+
 	@PostMapping("/createBoardApprovalList")
 	public BoardApprovalListDTO createBoardApprovalList(@RequestBody BoardApprovalListDTO boardApprovalListDTO) {
 		return boardApprovalListService.createBoardApprovalList(boardApprovalListDTO);
@@ -38,6 +43,28 @@ public class BoardApprovalListController {
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
 			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
 		return boardApprovalListService.getAllBoardApprovalLists(from, to);
+	}
+
+	/**
+	 * One page of the Board Approvals list, merged across both approval list tables.
+	 *
+	 * The screen shows membership and termination lists in a single table, and used to
+	 * fetch both endpoints in full and merge them in the browser. Merging server-side
+	 * is what makes a page meaningful: the order runs across both sources, so page 2
+	 * of the merged result cannot be assembled from page 2 of each.
+	 *
+	 * Lives on this controller rather than a third one because the class-level roles
+	 * are identical on both, and any caller of this screen already needs both.
+	 *
+	 * {@code page} is zero-based; {@code size} is capped server-side.
+	 */
+	@GetMapping("/combined/page")
+	public ApprovalListPageDTO searchCombinedApprovalLists(
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+			@RequestParam(required = false) Integer page,
+			@RequestParam(required = false) Integer size) {
+		return boardApprovalSearchService.search(from, to, page, size);
 	}
 
 	@GetMapping("/getBoardApprovalListByListId/{listId}")

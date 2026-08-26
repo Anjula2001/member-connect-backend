@@ -26,8 +26,8 @@ public interface TerminationApprovalListRepository extends JpaRepository<Termina
      */
     @Query("""
             SELECT tal FROM TerminationApprovalList tal
-            WHERE (:from IS NULL OR tal.boardMeetingDate >= :from)
-              AND (:to IS NULL OR tal.boardMeetingDate <= :to)
+            WHERE (cast(:from as LocalDate) IS NULL OR tal.boardMeetingDate >= :from)
+              AND (cast(:to as LocalDate) IS NULL OR tal.boardMeetingDate <= :to)
             """)
     List<TerminationApprovalList> findInMeetingDateRange(
             @Param("from") LocalDate from,

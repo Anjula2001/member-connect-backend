@@ -31,8 +31,8 @@ public interface BoardApprovalListRepository extends JpaRepository<BoardApproval
 	 */
 	@Query("""
 			SELECT l FROM BoardApprovalList l
-			WHERE (:from IS NULL OR l.boardMeetingDate >= :from)
-			  AND (:to IS NULL OR l.boardMeetingDate <= :to)
+			WHERE (cast(:from as LocalDate) IS NULL OR l.boardMeetingDate >= :from)
+			  AND (cast(:to as LocalDate) IS NULL OR l.boardMeetingDate <= :to)
 			""")
 	List<BoardApprovalList> findInMeetingDateRange(
 			@Param("from") LocalDate from,
@@ -62,8 +62,8 @@ public interface BoardApprovalListRepository extends JpaRepository<BoardApproval
 	@Query("""
 			SELECT a.id FROM BoardApprovalList l
 			JOIN l.applications a
-			WHERE (:from IS NULL OR l.boardMeetingDate >= :from)
-			  AND (:to IS NULL OR l.boardMeetingDate <= :to)
+			WHERE (cast(:from as LocalDate) IS NULL OR l.boardMeetingDate >= :from)
+			  AND (cast(:to as LocalDate) IS NULL OR l.boardMeetingDate <= :to)
 			""")
 	List<Long> findApplicationIdsInMeetingDateRange(
 			@Param("from") LocalDate from,

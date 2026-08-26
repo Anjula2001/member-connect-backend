@@ -2,6 +2,7 @@ package com.memberconnect.backend.dto;
 
 import lombok.Data;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import com.memberconnect.backend.enums.MemberStatus;
 import com.memberconnect.backend.enums.Gender;
 import com.memberconnect.backend.enums.Language;
@@ -47,4 +48,18 @@ public class MemberDTO {
   private Identification identification;
   private String identificationNumber;
   private String identificationDetails;
+
+  /**
+   * When each pre-printed document was last produced for this member, or null if it
+   * never has been (MR15/MR16/MR17).
+   *
+   * These are read by the three Print screens, whose "Printed" column, row checkbox
+   * and Re-print button all key off them. They were missing from this DTO while the
+   * Member entity carried them and MembershipDocumentService stamped them, so the
+   * column reported "Not printed" for every row — including members the same search
+   * endpoint could already filter out via withoutDocument.
+   */
+  private LocalDateTime membershipCardPrintedAt;
+  private LocalDateTime signatureCardPrintedAt;
+  private LocalDateTime passbookPrintedAt;
 }
