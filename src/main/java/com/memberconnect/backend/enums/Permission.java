@@ -1,18 +1,23 @@
 package com.memberconnect.backend.enums;
 
 /**
- * Fine-grained rights for the Grade 5 Scholarship module (MMS01-MMS20).
+ * Fine-grained rights for the Grade 5 Scholarship module (MMS01-MMS20), the
+ * University Scholarship module (MMS21-MMS48) and the Member Retirement module
+ * (MMT12-MMT17).
  *
  * These exist because "role" alone is too coarse for what the SRS actually asks
  * for. Section 2.3.4 keeps talking about "the user needs Inactive rights" and
  * MMS09/MMS16 about "the authorized user who has the delete privileges" — those
  * are rights held in addition to a role, not roles in their own right. Modelling
  * them as named permissions lets a controller say exactly which right it needs
- * instead of re-listing roles at every call site.
+ * instead of re-listing roles at every call site. The Retirement SRS repeats the
+ * same pattern ("the Authorized User", "the user needs Inactive rights", "if the
+ * logged in user has the rights to change the status", "if the user has edit
+ * rights"), so it reuses this enum rather than growing a second scheme.
  *
  * Roles map to permissions in {@link com.memberconnect.backend.config.RolePermissions}.
- * Nothing outside the Grade 5 module is governed here — Member Registration keeps
- * its own role checks, and University Scholarships / Death Donation are untouched.
+ * Member Registration keeps its own role checks, and Termination / Death Donation
+ * are untouched.
  */
 public enum Permission {
 
@@ -52,9 +57,37 @@ public enum Permission {
 
     /**
      * MMS20 — hand approved scholarships to the Finance Module for disbursement.
-     * Defined now so the matrix is complete; there is no endpoint behind it yet.
+     * Defined so the matrix is complete; no endpoint is guarded by it, because the
+     * handoff runs automatically when the Board's approval list is processed rather
+     * than being triggered by a user. See
+     * Grade5ScholarshipApprovalListService#callFinanceModuleApi.
      */
     G5_FINANCE_DISBURSE,
+
+    // ---- Retirement requests (MMT12-MMT16) : District Office raises, Head Office approves ----
+    RET_REQUEST_VIEW,
+    RET_REQUEST_CREATE,
+
+    /** MMT15 / 3.2.2 — "if the logged in user has edit rights". */
+    RET_REQUEST_EDIT,
+
+    RET_REQUEST_SUBMIT,
+    RET_REQUEST_INCOMPLETE,
+
+    /** Set a request to Inactive — SRS 3.2.4 "the user needs Inactive rights". */
+    RET_REQUEST_SET_INACTIVE,
+
+    /**
+     * Move a request back to New from Submitted for Approval, Rejected or Inactive.
+     * Split out from ordinary edit rights on purpose: SRS 3.2.1 qualifies the
+     * Submitted -> New move with "if the logged in user has the rights to change the
+     * status", and the Rejected -> New move overturns an approval decision. The
+     * everyday Incomplete -> New fix-and-carry-on path stays on RET_REQUEST_EDIT.
+     */
+    RET_REQUEST_RETURN_TO_NEW,
+
+    /** MMT16 — the "Authorized User" who may Approve or Reject a submitted request. */
+    RET_REQUEST_APPROVE,
 
     // ================= University Scholarships (MMS21-MMS48) =================
     //
@@ -137,5 +170,30 @@ public enum Permission {
     US_MASTER_MANAGE,
 
     /** MMS48 — hand approved fund requests to Finance. No endpoint behind it yet. */
-    US_FINANCE_DISBURSE
+    US_FINANCE_DISBURSE,
+
+    // ===================== Member Transfers (MMC27-MMC30) =====================
+    //
+    // A transfer is created already at "Submitted for Approval" and MMC27 states it
+    // can never be edited afterwards, so there is deliberately no MT_REQUEST_EDIT:
+    // there is no editable state for one to govern.
+
+    /** MMC28 / MMC29 — search and open transfer requests. */
+    MT_REQUEST_VIEW,
+
+    /** MMC27 — raise a transfer request against a member's profile. */
+    MT_REQUEST_CREATE,
+
+    /**
+     * MMC30 — approve or reject a transfer request.
+     *
+     * Held by Head Office rather than the District Office the function names as its
+     * actor, for the reason RolePermissions records for the scholarship modules: the
+     * office that raises a request cannot be the office that approves it. Approve and
+     * reject are one right because they are the two halves of a single decision.
+     */
+    MT_REQUEST_APPROVE,
+
+    /** MMC29 — "the user needs Inactive rights" for the View Mode status change. */
+    MT_REQUEST_SET_INACTIVE
 }

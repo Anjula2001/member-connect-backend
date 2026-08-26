@@ -73,12 +73,7 @@ public class MemberController {
         return ResponseEntity.ok(memberService.getMemberByNic(nic));
     }
 
-    /**
-     * Flexible search endpoint used by the directory page.
-     * All parameters are optional.
-     * GET
-     * /api/members/search?query=&statuses=ACTIVE,INACTIVE&locations=Colombo&workingLocationType=school&educationalZone=colombo-zone
-     */
+    
     @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
             + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/search")
@@ -134,6 +129,7 @@ public class MemberController {
     }
 
     // Validate a member for retirement
+    @PreAuthorize("hasAuthority('RET_REQUEST_VIEW')")
     @GetMapping("/{memberId}/retirement-validation")
     public MemberRetirementValidationDTO validateMemberForRetirement(
             @PathVariable String memberId) {
@@ -147,9 +143,7 @@ public class MemberController {
         return terminationService.validateMemberForTermination(memberId);
     }
 
-    // Validate a member for member death record (SRS 4.2.1). Restricted to the
-    // roles that take part in the death workflow - it reports the member's loan
-    // and indirect-obligation position, which is not general-purpose data.
+   // Validate a member for death record
     @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
             + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/{memberId}/member-death-validation")

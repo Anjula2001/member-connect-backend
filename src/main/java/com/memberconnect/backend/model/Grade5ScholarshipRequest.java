@@ -158,6 +158,25 @@ public class Grade5ScholarshipRequest {
         this.districtCutOffMark = districtCutOffMark;
     }
 
+    /**
+     * Why this request follows the deviation process, in words.
+     *
+     * Not a column: the answer depends on the Grade 5 exam master, which the entity
+     * cannot reach, so Grade5ScholarshipService stamps it on the way out. Storing it
+     * would let it drift from the exam date it was derived from - if the master is
+     * corrected, a persisted sentence would still quote the old date.
+     */
+    @jakarta.persistence.Transient
+    private String deviationReason;
+
+    public String getDeviationReason() {
+        return deviationReason;
+    }
+
+    public void setDeviationReason(String deviationReason) {
+        this.deviationReason = deviationReason;
+    }
+
     public Boolean getHasDeviation() {
         if ("SUBMITTED_FOR_DEVIATION_APPROVAL".equals(status) || "ADDED_TO_SCHOLARSHIP_DEVIATION_APPROVAL_LIST".equals(status)) {
             return true;

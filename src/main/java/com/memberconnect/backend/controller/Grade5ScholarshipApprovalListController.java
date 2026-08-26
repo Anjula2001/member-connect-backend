@@ -11,15 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Head Office / Board Secretary territory (MMS07-MMS19).
- *
- * Annotations sit on the controller rather than the service so that a denial is
- * not
- * swallowed by the catch(RuntimeException) inside each method and downgraded
- * from 403
- * to 400 — AccessDeniedException is itself a RuntimeException.
- */
+
 @RestController
 @RequestMapping("/api/grade5/approval-lists")
 @CrossOrigin(origins = "http://localhost:3000")
@@ -96,10 +88,7 @@ public class Grade5ScholarshipApprovalListController {
         }
     }
 
-    // Restore a deleted or cancelled approval list.
-    // Repairs a list's own type/status metadata. Grouped with delete rights because
-    // it
-    // rewrites list bookkeeping rather than acting on any individual request.
+    // Restore a previously deleted or canceled approval list by list ID.
     @PreAuthorize("hasAuthority('G5_LIST_DELETE')")
     @PostMapping("/{listId}/restore")
     public ResponseEntity<?> restoreApprovalList(@PathVariable String listId) {

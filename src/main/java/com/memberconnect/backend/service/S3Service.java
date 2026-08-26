@@ -38,15 +38,7 @@ public class S3Service {
     /** Anything outside this set is replaced with '-' when building a key segment. */
     private static final Pattern UNSAFE = Pattern.compile("[^a-z0-9.]+");
 
-    /**
-     * Builds a bucket folder path from the caller's context, e.g.
-     * {@code folder("death-donations", requestNo, documentType)} produces
-     * {@code death-donations/2026/ddr-2026-007/death-certificate}.
-     *
-     * The year is inserted after the module so that no single prefix grows without
-     * bound and whole years can be archived or lifecycle-ruled as a unit. Null and
-     * blank segments are dropped rather than producing empty path components.
-     */
+
     public static String folder(String module, String... segments) {
         StringBuilder path = new StringBuilder(slug(module));
         path.append('/').append(Year.now().getValue());
@@ -71,12 +63,7 @@ public class S3Service {
         return cleaned;
     }
 
-    /**
-     * Strips any directory part a client may have sent. Browsers normally send a bare
-     * name, but the multipart filename is attacker-controlled and previously went into
-     * the key unescaped, so a name like "../../secret.pdf" would have shifted the
-     * object outside its intended prefix.
-     */
+    // Helper method to get the safe file name
     private static String safeFileName(String originalFilename) {
         if (originalFilename == null || originalFilename.isBlank()) {
             return "file";
@@ -87,21 +74,13 @@ public class S3Service {
         return cleaned.isEmpty() ? "file" : cleaned;
     }
 
-    /**
-     * Uploads with no context. Kept so that any caller not yet passing a folder still
-     * compiles and still works — those objects land under {@code misc/<year>/} rather
-     * than at the bucket root.
-     */
+    // 
     public String uploadFile(MultipartFile file) throws IOException {
         return uploadFile(file, folder("misc"));
     }
 
     /**
      * Uploads into a folder, returning the full S3 key to store on the owning record.
-     *
-     * Keys created before this existed are flat ({@code <uuid>_<name>}) and are left
-     * alone: download and delete pass the stored key through verbatim, so old and new
-     * layouts coexist without a migration.
      */
     public String uploadFile(MultipartFile file, String prefix) throws IOException {
         String cleanPrefix = (prefix == null || prefix.isBlank()) ? folder("misc") : prefix;

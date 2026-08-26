@@ -75,12 +75,22 @@ public class AuditService {
     public static final String MODULE_NOMINEE_CHANGE = "PROFILE_CHANGE_NOMINEE";
     public static final String MODULE_REMITTANCE_CHANGE = "PROFILE_CHANGE_REMITTANCE";
 
+    /**
+     * Member Transfers (MMC27-MMC30). Named as a profile change rather than a module of
+     * its own because that is what it is: the SRS lists transfers in the same "All
+     * Member Profile Change Requests List" as the four above, and MMC30 requires the
+     * audit record to be written "against the Member Record" - which is what including
+     * it below puts on the member's Progress timeline.
+     */
+    public static final String MODULE_MEMBER_TRANSFER = "PROFILE_CHANGE_TRANSFER";
+
     /** The four profile-change modules, as one list for history queries. */
     public static final List<String> PROFILE_CHANGE_MODULES = List.of(
             MODULE_BASIC_PROFILE_CHANGE,
             MODULE_NAME_CHANGE,
             MODULE_NOMINEE_CHANGE,
-            MODULE_REMITTANCE_CHANGE
+            MODULE_REMITTANCE_CHANGE,
+            MODULE_MEMBER_TRANSFER
     );
 
     /** Human label per module, used in the Progress timeline's entry titles. */
@@ -93,6 +103,7 @@ public class AuditService {
             case MODULE_NAME_CHANGE -> "Name Change Request";
             case MODULE_NOMINEE_CHANGE -> "Nominee Change Request";
             case MODULE_REMITTANCE_CHANGE -> "Remittance Change Request";
+            case MODULE_MEMBER_TRANSFER -> "Member Transfer Request";
             case MODULE_APPLICATION -> "Application";
             default -> "Member";
         };

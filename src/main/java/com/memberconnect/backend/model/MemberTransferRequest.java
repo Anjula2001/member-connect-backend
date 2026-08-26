@@ -27,6 +27,18 @@ public class MemberTransferRequest {
     @Column(name = "requested_date")
     private LocalDate requestedDate;
 
+    /**
+     * The District Office this request belongs to (MMC28's Location filter).
+     *
+     * Stamped once at creation from the member's administering office, falling back to
+     * the district of the user raising it - the same rule TerminationRequest uses, so
+     * the two modules scope identically. Nullable because rows created before this
+     * column existed have no office recorded; those are hidden from a location-restricted
+     * caller and visible to Head Office.
+     */
+    @Column(name = "submission_location")
+    private String submissionLocation;
+
     @ManyToOne
     @JoinColumn(name = "member_id", referencedColumnName = "memberId")
     private Member member;
