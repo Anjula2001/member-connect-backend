@@ -109,13 +109,18 @@ public class BoardApprovalListService {
 
 	// ── toDto ────────────────────────────────────────────────────────────
 
-	private BoardApprovalListDTO toDto(BoardApprovalList entity) {
+	/**
+	 * Everything that does not require touching the applications collection.
+	 *
+	 * Shared by toDto (detail - includes the ids) and toSummaryDto (list view - the
+	 * count only), so the two cannot drift apart field by field.
+	 */
+	private BoardApprovalListDTO toScalarDto(BoardApprovalList entity) {
 		BoardApprovalListDTO dto = new BoardApprovalListDTO();
 		dto.setId(entity.getId());
 		dto.setListId(entity.getListId());
 		dto.setBoardMeetingId(entity.getBoardMeetingId());
 		dto.setBoardMeetingDate(entity.getBoardMeetingDate());
-		dto.setApplicationIds(entity.getApplications().stream().map(Member_Application::getApplicationID).collect(Collectors.toList()));
 		dto.setNameChangeRequestIds(parseCsvAsIntegers(entity.getNameChangeRequestIdsCsv()));
 		dto.setNomineeChangeRequestIds(parseCsvAsIntegers(entity.getNomineeChangeRequestIdsCsv()));
 		dto.setStatus(entity.getStatus());
@@ -127,6 +132,24 @@ public class BoardApprovalListService {
 		dto.setRejectReason(entity.getRejectReason());
 		dto.setBoardRemarks(entity.getBoardRemarks());
 		dto.setApprovedListDocument(entity.getApprovedListDocument());
+		return dto;
+	}
+
+	/** Detail view: carries the full application id list. */
+	private BoardApprovalListDTO toDto(BoardApprovalList entity) {
+		BoardApprovalListDTO dto = toScalarDto(entity);
+		List<String> applicationIds = entity.getApplications().stream()
+				.map(Member_Application::getApplicationID)
+				.collect(Collectors.toList());
+		dto.setApplicationIds(applicationIds);
+		dto.setApplicationCount(applicationIds.size());
+		return dto;
+	}
+
+	/** List view: the count only, so no lazy collection is touched. */
+	private BoardApprovalListDTO toSummaryDto(BoardApprovalList entity, int applicationCount) {
+		BoardApprovalListDTO dto = toScalarDto(entity);
+		dto.setApplicationCount(applicationCount);
 		return dto;
 	}
 
@@ -160,6 +183,10 @@ public class BoardApprovalListService {
 			for (String applicationId : dto.getApplicationIds()) {
 				Member_Application application = memberApplicationRepository.findByApplicationID(applicationId)
 						.orElseThrow(() -> new RuntimeException("Application not found: " + applicationId));
+				// MR08 rolls a deleted list back to what each application was BEFORE it
+				// joined - Submitted for Approval, or Rejected for a previous rejection.
+				// That original is only knowable if it is captured before the overwrite.
+				application.setStatusBeforeBoardList(application.getStatus());
 				application.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 				memberApplicationRepository.save(application);
 				// From dev: the Progress tab records the application joining the list.
@@ -176,6 +203,10 @@ public class BoardApprovalListService {
 				NameChangeRequest ncr = nameChangeRequestRepo.findById(id)
 						.orElseThrow(() -> new RuntimeException("Name change request not found: " + id));
 				statusPolicy.assertListable(ncr.getStatus(), ncr.getRequestNo());
+				// Remember what it was, so deleting this list can put it back (MMC10).
+				// assertListable allows Submitted for Approval and Rejected, and the two
+				// must be told apart on rollback.
+				ncr.setStatusBeforeBoardList(ncr.getStatus());
 				ncr.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 				nameChangeRequestRepo.save(ncr);
 			}
@@ -188,6 +219,8 @@ public class BoardApprovalListService {
 				NommineChangeRequests ncr = nomineeChangeRequestRepo.findById(id)
 						.orElseThrow(() -> new RuntimeException("Nominee change request not found: " + id));
 				statusPolicy.assertListable(ncr.getStatus(), ncr.getRequestNo());
+				// Remember what it was, so deleting this list can put it back (MMC23).
+				ncr.setStatusBeforeBoardList(ncr.getStatus());
 				ncr.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 				nomineeChangeRequestRepo.save(ncr);
 			}
@@ -392,9 +425,21 @@ public class BoardApprovalListService {
 
 	// ── Read ─────────────────────────────────────────────────────────────
 
-	public List<BoardApprovalListDTO> getAllBoardApprovalLists() {
-		return boardApprovalListRepository.findAll().stream()
-				.map(this::toDto)
+	/**
+	 * MR07's retrieval: "All" (both bounds null) or a Board Meeting date period.
+	 *
+	 * The period is applied in the query rather than in the browser, and the rows come
+	 * back without their application ids - two changes that together stop this screen
+	 * shipping every application of every list in order to render a row count.
+	 */
+	public List<BoardApprovalListDTO> getAllBoardApprovalLists(LocalDate from, LocalDate to) {
+		Map<Long, Integer> counts = boardApprovalListRepository.countApplicationsPerList().stream()
+				.collect(Collectors.toMap(
+						row -> (Long) row[0],
+						row -> ((Number) row[1]).intValue()));
+
+		return boardApprovalListRepository.findInMeetingDateRange(from, to).stream()
+				.map(entity -> toSummaryDto(entity, counts.getOrDefault(entity.getId(), 0)))
 				.toList();
 	}
 
@@ -584,13 +629,34 @@ public class BoardApprovalListService {
 
 	// ── Delete ───────────────────────────────────────────────────────────
 
+	/**
+	 * The status a de-listed row goes back to.
+	 *
+	 * Null means the row was listed before the prior status was recorded, so there is
+	 * nothing to restore and Submitted for Approval is the safe reading.
+	 */
+	private ApplicationStatus restoredStatusFor(ApplicationStatus statusBeforeBoardList) {
+		return statusBeforeBoardList == null
+				? ApplicationStatus.SUBMITTED_FOR_APPROVAL
+				: statusBeforeBoardList;
+	}
+
 	public String deleteBoardApprovalList(String listId) {
 		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
 				.orElseThrow(() -> new RuntimeException("Board approval list not found"));
 
 		for (Member_Application application : entity.getApplications()) {
 			if (application.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
-				application.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+				// Spec MR08: "rolled back to the Submitted for Approval status or Rejected
+				// status depend on what status it was originally". Previously this always
+				// wrote Submitted for Approval, which silently erased a prior rejection -
+				// a rejected application re-listed and then un-listed came back looking as
+				// though it had never been rejected.
+				//
+				// Rows listed before StatusBeforeBoardList existed have nothing recorded,
+				// so they keep the old fallback.
+				application.setStatus(restoredStatusFor(application.getStatusBeforeBoardList()));
+				application.setStatusBeforeBoardList(null);
 				memberApplicationRepository.save(application);
 			}
 		}
@@ -600,7 +666,13 @@ public class BoardApprovalListService {
 		for (Integer id : nameChangeIds) {
 			nameChangeRequestRepo.findById(id).ifPresent(ncr -> {
 				if (ncr.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
-					ncr.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+					// MMC10: back to whichever of Submitted for Approval / Rejected it
+					// held before listing. Writing Submitted for Approval unconditionally
+					// erased a prior rejection - the same defect already fixed above for
+					// applications. Rows listed before the column existed have nothing
+					// recorded and keep the old fallback.
+					ncr.setStatus(restoredStatusFor(ncr.getStatusBeforeBoardList()));
+					ncr.setStatusBeforeBoardList(null);
 					nameChangeRequestRepo.save(ncr);
 				}
 			});
@@ -611,7 +683,9 @@ public class BoardApprovalListService {
 		for (Integer id : nomineeChangeIds) {
 			nomineeChangeRequestRepo.findById(id).ifPresent(ncr -> {
 				if (ncr.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
-					ncr.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+					// MMC23: same rollback rule as name changes above.
+					ncr.setStatus(restoredStatusFor(ncr.getStatusBeforeBoardList()));
+					ncr.setStatusBeforeBoardList(null);
 					nomineeChangeRequestRepo.save(ncr);
 				}
 			});
@@ -620,4 +694,17 @@ public class BoardApprovalListService {
 		boardApprovalListRepository.delete(entity);
 		return "Board approval list deleted successfully";
 	}
+
+    /**
+     * How many lists sit in the given statuses.
+     *
+     * Answered with a COUNT in the database. The dashboard previously fetched every
+     * list and filtered in the browser to arrive at the same number.
+     */
+    public long countByStatuses(java.util.List<String> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return boardApprovalListRepository.count();
+        }
+        return boardApprovalListRepository.countByStatusIn(statuses);
+    }
 }

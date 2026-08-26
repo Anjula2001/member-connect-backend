@@ -179,4 +179,15 @@ public class DormantMembershipController {
     public String deleteApprovalList(@PathVariable String listId) {
         return dormantService.deleteApprovalList(listId);
     }
+
+    /**
+     * Row count for the dashboard, so a counter does not have to download the rows.
+     * Inherits the same authorization as the listing beside it.
+     */
+    @GetMapping("/approval-lists/count")
+    @PreAuthorize(BOARD_ROLES)
+    public java.util.Map<String, Long> countApprovalLists(
+            @RequestParam(required = false) java.util.List<String> statuses) {
+        return java.util.Map.of("count", dormantService.countApprovalListsByStatuses(statuses));
+    }
 }

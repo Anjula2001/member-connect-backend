@@ -15,6 +15,15 @@ public class BoardApprovalListDTO {
 	private Long boardMeetingId;
 	private LocalDate boardMeetingDate;
 	private List<String> applicationIds = new ArrayList<>();
+
+	/**
+	 * How many applications the list holds.
+	 *
+	 * The list view returns this WITHOUT applicationIds: the panel only ever renders
+	 * the number, and producing the ids meant walking a lazy collection per row. Open
+	 * a single list and applicationIds is populated as before.
+	 */
+	private Integer applicationCount;
 	private List<Integer> nameChangeRequestIds = new ArrayList<>();
 	private List<Integer> nomineeChangeRequestIds = new ArrayList<>();
 	private String status;

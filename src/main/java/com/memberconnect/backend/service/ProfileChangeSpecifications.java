@@ -8,6 +8,8 @@ import java.util.List;
 import org.springframework.data.jpa.domain.Specification;
 
 import com.memberconnect.backend.enums.ApplicationStatus;
+import com.memberconnect.backend.enums.MemberTransferStatus;
+import com.memberconnect.backend.model.MemberTransferRequest;
 import com.memberconnect.backend.model.ProfileChangeRequest;
 
 import jakarta.persistence.criteria.Predicate;
@@ -28,6 +30,41 @@ import jakarta.persistence.criteria.Predicate;
 public final class ProfileChangeSpecifications {
 
     private ProfileChangeSpecifications() {
+    }
+
+    /**
+     * The same filter for Member Transfers, which needs its own builder for two reasons:
+     * MemberTransferRequest does not extend ProfileChangeRequest, and it has no
+     * submissionLocation of its own - the location is the member's, reached through the
+     * association.
+     */
+    public static Specification<MemberTransferRequest> transferFilter(
+            Collection<MemberTransferStatus> statuses,
+            Collection<String> locations,
+            LocalDate from,
+            LocalDate to
+    ) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (statuses != null && !statuses.isEmpty()) {
+                predicates.add(root.get("status").in(statuses));
+            }
+
+            if (locations != null && !locations.isEmpty()) {
+                predicates.add(root.get("member").get("submissionLocation").in(locations));
+            }
+
+            if (from != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("requestedDate"), from));
+            }
+
+            if (to != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("requestedDate"), to));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     public static <T extends ProfileChangeRequest> Specification<T> filter(

@@ -1,4 +1,6 @@
--- Removes everything created by MemberDemoSeeder.
+-- Removes everything created by MemberDemoSeeder and by
+-- MemberApplicationDemoSeeder (APP-DEMO-REG-nnn mock applications, plus the
+-- BAL-DEMO-REG board approval list and BM-DEMO-REG meeting that hold three of them).
 --
 -- Safe to run repeatedly. Targets ONLY rows whose IDs carry the demo prefixes
 -- (MEM-DEMO-% / APP-DEMO-%), so genuine members and applications are never touched.
@@ -29,6 +31,18 @@ WHERE (module_name = 'MEMBER'
 
 -- 3. The members themselves (releases the FK on member_application)
 DELETE FROM member WHERE member_id LIKE 'MEM-DEMO-%';
+
+-- 3b. The demo Board Approval List and the meeting it sits on.
+--     Its join table references member_application, so this has to run before step 4
+--     or the delete below trips the foreign key.
+DELETE FROM board_approval_list_applications
+WHERE board_approval_list_id IN (
+    SELECT id FROM board_approval_list WHERE list_id = 'BAL-DEMO-REG'
+);
+
+DELETE FROM board_approval_list WHERE list_id = 'BAL-DEMO-REG';
+
+DELETE FROM board_meeting WHERE board_meeting_id = 'BM-DEMO-REG';
 
 -- 4. The applications behind them
 DELETE FROM member_application WHERE applicationid LIKE 'APP-DEMO-%';

@@ -1,6 +1,7 @@
 package com.memberconnect.backend.controller;
 
 import com.memberconnect.backend.dto.MemberDTO;
+import com.memberconnect.backend.dto.MemberSearchPageDTO;
 import com.memberconnect.backend.dto.MemberRetirementValidationDTO;
 import com.memberconnect.backend.dto.MemberSummaryDTO;
 import com.memberconnect.backend.enums.MemberStatus;
@@ -13,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import com.memberconnect.backend.enums.MembershipDocumentType;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -85,9 +88,55 @@ public class MemberController {
             @RequestParam(required = false) String educationalZone,
             @RequestParam(required = false) String educationalDistrict,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartTo) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartTo,
+            // MR15/16/17: "Members without <document>" - applied here so the print
+            // screens stop fetching the whole active membership to discard most of it.
+            @RequestParam(required = false) MembershipDocumentType withoutDocument,
+            // MR15/16/17 Board Meeting Date period. Omitting both is the spec's "Any".
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate boardMeetingFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate boardMeetingTo,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDirection) {
         return memberService.searchMembers(query, statuses, locations, workingLocationType, educationalZone,
-                educationalDistrict, membershipStartFrom, membershipStartTo);
+                educationalDistrict, membershipStartFrom, membershipStartTo,
+                withoutDocument, boardMeetingFrom, boardMeetingTo, sortBy, sortDirection);
+    }
+
+    /**
+     * One page of the same search, for the Member Directory.
+     *
+     * A separate route rather than page parameters on /search, because five other
+     * callers depend on that one answering with a plain array — the printable
+     * Directory report, the account-linking picker, the member lookup by id, the
+     * dashboard counter and the three document print screens. They all want every
+     * matching row, and they now get it through the same SQL predicate rather than by
+     * reading the table into memory, so nothing had to change for them to get faster.
+     *
+     * {@code page} is zero-based; {@code size} is capped server-side so no caller can
+     * ask for the whole membership in one response.
+     */
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
+            + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
+    @GetMapping("/search/page")
+    public MemberSearchPageDTO searchMembersPage(
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) List<MemberStatus> statuses,
+            @RequestParam(required = false) List<String> locations,
+            @RequestParam(required = false) String workingLocationType,
+            @RequestParam(required = false) String educationalZone,
+            @RequestParam(required = false) String educationalDistrict,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate membershipStartTo,
+            @RequestParam(required = false) MembershipDocumentType withoutDocument,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate boardMeetingFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate boardMeetingTo,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDirection,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        return memberService.searchMembersPage(query, statuses, locations, workingLocationType, educationalZone,
+                educationalDistrict, membershipStartFrom, membershipStartTo,
+                withoutDocument, boardMeetingFrom, boardMeetingTo, sortBy, sortDirection, page, size);
     }
 
     @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
@@ -162,5 +211,17 @@ public class MemberController {
         return ResponseEntity.ok(java.util.Map.of(
                 "loans", loans,
                 "obligations", obligations));
+    }
+
+    /**
+     * Row count for the dashboard, so a counter does not have to download the rows.
+     * Inherits the same authorization as the listing beside it.
+     */
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
+            + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
+    @GetMapping("/count")
+    public java.util.Map<String, Long> countMembers(
+            @RequestParam(required = false) java.util.List<String> locations) {
+        return java.util.Map.of("count", memberService.countMembers(locations));
     }
 }

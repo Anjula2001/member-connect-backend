@@ -1,5 +1,7 @@
 package com.memberconnect.backend.repository;
 
+import com.memberconnect.backend.enums.DormantApprovalListStatus;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,4 +43,12 @@ public interface DormantApprovalListRepository extends JpaRepository<DormantAppr
     @Query("SELECT MAX(CAST(SUBSTRING(l.listId, 5) AS int)) FROM DormantApprovalList l "
             + "WHERE l.listId LIKE 'DAL-%'")
     Integer findMaxListSequence();
+
+    /**
+     * Counted in the database rather than by loading rows.
+     *
+     * The dashboard needs a number, not the records behind it; reading the whole
+     * table to call .length on it is what this replaces.
+     */
+    long countByStatusIn(Collection<DormantApprovalListStatus> statuses);
 }

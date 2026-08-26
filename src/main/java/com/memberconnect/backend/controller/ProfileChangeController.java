@@ -22,7 +22,7 @@ import com.memberconnect.backend.service.ProfileChangeSearchService;
  * The unified "All Member Profile Change Requests List" (Requirement 02,
  * MMC02 / MMC06 / MMC15 / MMC19).
  *
- * One endpoint replaces the four separate "get all" calls the list screen used to make,
+ * One endpoint replaces the five separate "get all" calls the list screen used to make,
  * which is what allows Type, Status, Location, Received On, Search and Sort to be
  * applied across the types rather than within one of them at a time.
  */
@@ -39,7 +39,7 @@ public class ProfileChangeController {
     }
 
     /**
-     * Every filter is optional. Omitting types searches all four; omitting statuses
+     * Every filter is optional. Omitting types searches all five; omitting statuses
      * returns every status — the SRS's default of "Submitted for Approval" is a
      * default on the screen, not a server-side one, so that the same endpoint can also
      * back the approval-list builder, which needs Rejected rows too.
@@ -69,15 +69,6 @@ public class ProfileChangeController {
         );
     }
 
-    /**
-     * MMC02: "If the logged in user has only access to the current district location,
-     * this field will be un-editable and the current location will be auto selected."
-     *
-     * Enforced here rather than only in the dropdown, because a disabled control is not
-     * an access rule — a district user editing the request could otherwise list every
-     * other district's requests. Head Office and above keep whatever they asked for,
-     * including nothing, which means all locations.
-     */
     /*
      * There is deliberately no district lock here.
      *

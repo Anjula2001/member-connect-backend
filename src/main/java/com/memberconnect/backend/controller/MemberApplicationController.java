@@ -1,5 +1,6 @@
 package com.memberconnect.backend.controller;
 
+import com.memberconnect.backend.dto.ApplicationSearchPageDTO;
 import com.memberconnect.backend.dto.MemberApplicationDTO;
 import com.memberconnect.backend.dto.NicValidationResponseDTO;
 import com.memberconnect.backend.enums.ApplicationStatus;
@@ -37,21 +38,50 @@ public class MemberApplicationController {
     }
 
     /**
-     * Server-side filtered/sorted search for the New Member Registration List.
-     * All parameters optional. Replaces pulling the whole table into the browser.
+     * One page of the New Member Registration List, filtered and sorted by the database.
+     *
+     * All filter parameters are optional. {@code page} is zero-based; {@code size} is
+     * capped server-side so no caller can ask for the whole table in one response.
+     *
+     * The response is an envelope rather than a bare array because the screen needs the
+     * totals — matching rows, page count, and how many rows the select-all checkbox
+     * covers — which it can no longer derive from the rows it was sent.
      */
     @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
     @GetMapping("/search")
-    public List<MemberApplicationDTO> searchApplications(
+    public ApplicationSearchPageDTO searchApplications(
             @RequestParam(required = false) String query,
             @RequestParam(required = false) List<ApplicationStatus> statuses,
             @RequestParam(required = false) List<String> locations,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate receivedFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate receivedTo,
             @RequestParam(required = false) String sortBy,
-            @RequestParam(required = false) String sortDirection) {
+            @RequestParam(required = false) String sortDirection,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
         return service.searchApplications(
-                query, statuses, locations, receivedFrom, receivedTo, sortBy, sortDirection);
+                query, statuses, locations, receivedFrom, receivedTo,
+                sortBy, sortDirection, page, size);
+    }
+
+    /**
+     * The application IDs the select-all checkbox covers, for the same filter.
+     *
+     * Selection spans the whole result rather than the current page, so the screen asks
+     * for the identifiers when the operator ticks the header checkbox instead of
+     * downloading every matching record to find them. Same filter parameters as
+     * /search, minus sorting and paging — the caller wants the set, not an order.
+     */
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
+    @GetMapping("/search/selectable-ids")
+    public List<String> selectableApplicationIds(
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) List<ApplicationStatus> statuses,
+            @RequestParam(required = false) List<String> locations,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate receivedFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate receivedTo) {
+        return service.selectableApplicationIds(
+                query, statuses, locations, receivedFrom, receivedTo);
     }
 
     // Full edit is District Office only (they own the application until it's submitted);
@@ -116,4 +146,15 @@ public class MemberApplicationController {
         return service.validateNic(nicNumber, excludeApplicationId);
     }
 
+
+    /**
+     * Row count for the dashboard, so a counter does not have to download the rows.
+     * Inherits the same authorization as the listing beside it.
+     */
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
+    @GetMapping("/count")
+    public java.util.Map<String, Long> countApplications(
+            @RequestParam(required = false) java.util.List<String> locations) {
+        return java.util.Map.of("count", service.countApplications(locations));
+    }
 }

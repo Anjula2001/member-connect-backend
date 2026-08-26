@@ -3,6 +3,7 @@ package com.memberconnect.backend.service;
 import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.ProgramOptionDto;
 import com.memberconnect.backend.dto.UniversityScholarshipFundRequestDto;
+import com.memberconnect.backend.dto.UniversityScholarshipFundRequestListDto;
 import com.memberconnect.backend.dto.UniversityScholarshipRequestDto;
 import com.memberconnect.backend.enums.ApplicantType;
 import com.memberconnect.backend.enums.UniversityScholarshipFundRequestStatus;
@@ -42,11 +43,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.Set;
+import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
 
@@ -343,6 +349,290 @@ public class UniversityScholarshipService {
                         locationScope, request.getSubmissionLocation()))
                 .map(this::toListDto)
                 .toList();
+    }
+
+    /**
+     * The University Scholarship list, narrowed server-side (MMS21-MMS48).
+     *
+     * The screen used to call getAllScholarshipRequests() and apply Location, Status,
+     * Received On, Search and Sort in the browser, so "Retrieve" fetched every request
+     * in the caller's scope on every press and threw most of them away.
+     *
+     * Location goes through resolveLocationScope, so a District Office caller stays
+     * pinned to their own district whatever they ask for - the same rule the unfiltered
+     * list already applied.
+     */
+    public List<UniversityScholarshipListDto> searchScholarshipRequests(
+            List<String> locations,
+            List<String> statuses,
+            String receivedOn,
+            String fromDate,
+            String toDate,
+            String search,
+            String sortBy,
+            String sortDirection) {
+
+        CurrentUserService.LocationScope locationScope =
+                currentUserService.resolveLocationScope(locations);
+
+        if (locationScope.showsNothing()) {
+            return List.of();
+        }
+
+        LocalDate[] range = resolveReceivedOnRange(receivedOn, fromDate, toDate);
+        LocalDate from = range[0];
+        LocalDate to = range[1];
+
+        Set<String> wantedStatuses = normaliseStatusFilter(statuses);
+        String needle = search == null || search.isBlank()
+                ? null
+                : search.trim().toLowerCase();
+
+        List<UniversityScholarshipListDto> matched = scholarshipRequestRepository.findAll()
+                .stream()
+                .filter(request -> currentUserService.matchesScope(
+                        locationScope, request.getSubmissionLocation()))
+                .map(this::toListDto)
+                .filter(dto -> wantedStatuses.isEmpty()
+                        || wantedStatuses.contains(canonicalStatus(dto.getStatus())))
+                .filter(dto -> withinRange(dto.getRequestDate(), from, to))
+                .filter(dto -> matchesScholarshipSearch(dto, needle))
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        matched.sort(scholarshipComparator(sortBy, sortDirection));
+        return matched;
+    }
+
+    /**
+     * MMS's "Application Received On" options as a concrete date range.
+     *
+     * ALL_DAYS and a DATE_PERIOD missing either bound both mean "no limit", which is why
+     * nulls come back rather than defaults.
+     */
+    private LocalDate[] resolveReceivedOnRange(String receivedOn, String fromDate, String toDate) {
+        String period = receivedOn == null ? "all" : receivedOn.trim().toLowerCase();
+        LocalDate today = LocalDate.now();
+
+        switch (period) {
+            case "thismonth":
+            case "this_month":
+                return new LocalDate[] { today.withDayOfMonth(1), today };
+            case "thisandlastmonth":
+            case "this_and_last_month":
+                return new LocalDate[] { today.minusMonths(1).withDayOfMonth(1), today };
+            case "dateperiod":
+            case "date_period":
+                return new LocalDate[] { parseDateOrNull(fromDate), parseDateOrNull(toDate) };
+            default:
+                return new LocalDate[] { null, null };
+        }
+    }
+
+    private LocalDate parseDateOrNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    /**
+     * A row with no requested date is excluded from a bounded period rather than
+     * silently included in every one the user picks.
+     */
+    private boolean withinRange(LocalDate value, LocalDate from, LocalDate to) {
+        if (from == null && to == null) {
+            return true;
+        }
+        if (value == null) {
+            return false;
+        }
+        return (from == null || !value.isBefore(from)) && (to == null || !value.isAfter(to));
+    }
+
+    /**
+     * Statuses arrive from the screen already stripped of spaces and underscores and
+     * lower-cased, so both sides are reduced to the same shape before comparing.
+     */
+    private Set<String> normaliseStatusFilter(List<String> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return Set.of();
+        }
+        return statuses.stream()
+                .filter(status -> status != null && !status.isBlank())
+                .map(UniversityScholarshipService::canonicalStatus)
+                .collect(Collectors.toSet());
+    }
+
+    private static String canonicalStatus(String status) {
+        return status == null ? "" : status.toLowerCase().replaceAll("[\\s_]+", "");
+    }
+
+    /** MMS21: student name, member name, member number, request id, NIC and exam number. */
+    private boolean matchesScholarshipSearch(UniversityScholarshipListDto dto, String needle) {
+        if (needle == null) {
+            return true;
+        }
+        return containsIgnoreCase(dto.getStudentName(), needle)
+                || containsIgnoreCase(dto.getMemberName(), needle)
+                || containsIgnoreCase(dto.getMemberId(), needle)
+                || containsIgnoreCase(dto.getRequestId(), needle)
+                || containsIgnoreCase(dto.getNic(), needle)
+                || containsIgnoreCase(dto.getExamNumber(), needle);
+    }
+
+    private boolean containsIgnoreCase(String value, String lowercaseNeedle) {
+        return value != null && value.toLowerCase().contains(lowercaseNeedle);
+    }
+
+    /** Nulls sort last in both directions, so an undated row never heads the list. */
+    private Comparator<UniversityScholarshipListDto> scholarshipComparator(
+            String sortBy, String sortDirection) {
+
+        String key = sortBy == null ? "requested-date" : sortBy.trim().toLowerCase();
+
+        Comparator<UniversityScholarshipListDto> comparator = switch (key) {
+            case "status" -> Comparator.comparing(
+                    UniversityScholarshipListDto::getStatus,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "member-id", "memberid" -> Comparator.comparing(
+                    UniversityScholarshipListDto::getMemberId,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "scholarship-id", "scholarshipid" -> Comparator.comparing(
+                    dto -> dto.getRequestId() != null ? dto.getRequestId() : String.valueOf(dto.getId()),
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            default -> Comparator.comparing(
+                    UniversityScholarshipListDto::getRequestDate,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+        };
+
+        return "desc".equalsIgnoreCase(sortDirection) ? comparator.reversed() : comparator;
+    }
+
+    /**
+     * The University Scholarship Fund Requests list, narrowed server-side.
+     *
+     * A dedicated search rather than a flag on the scholarship one: fund requests are a
+     * different entity with their own status enum, and sharing an endpoint would mean
+     * one route returning two shapes.
+     *
+     * The screen previously fetched every scholarship request with its fund requests
+     * nested inside, flattened them in the browser, and filtered there - so it pulled
+     * the whole scholarship module down to render a page of ten fund requests.
+     */
+    public List<UniversityScholarshipFundRequestListDto> searchFundRequests(
+            List<String> locations,
+            List<String> statuses,
+            String receivedOn,
+            String fromDate,
+            String toDate,
+            String search,
+            String sortBy,
+            String sortDirection) {
+
+        CurrentUserService.LocationScope locationScope =
+                currentUserService.resolveLocationScope(locations);
+
+        if (locationScope.showsNothing()) {
+            return List.of();
+        }
+
+        LocalDate[] range = resolveReceivedOnRange(receivedOn, fromDate, toDate);
+        LocalDate from = range[0];
+        LocalDate to = range[1];
+
+        Set<String> wantedStatuses = normaliseStatusFilter(statuses);
+        String needle = search == null || search.isBlank()
+                ? null
+                : search.trim().toLowerCase();
+
+        List<UniversityScholarshipFundRequestListDto> matched = fundRequestRepository.findAll()
+                .stream()
+                // Scope is the parent's: a fund request has no location of its own.
+                .filter(fundRequest -> {
+                    UniversityScholarshipRequest parent = fundRequest.getUniversityScholarshipRequest();
+                    return parent != null
+                            && currentUserService.matchesScope(
+                                    locationScope, parent.getSubmissionLocation());
+                })
+                .map(this::toFundRequestListDto)
+                .filter(dto -> wantedStatuses.isEmpty()
+                        || wantedStatuses.contains(canonicalStatus(dto.getStatus())))
+                .filter(dto -> withinRange(dto.getRequestedDate(), from, to))
+                .filter(dto -> matchesFundRequestSearch(dto, needle))
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        matched.sort(fundRequestComparator(sortBy, sortDirection));
+        return matched;
+    }
+
+    private UniversityScholarshipFundRequestListDto toFundRequestListDto(
+            UniversityScholarshipFundRequest fundRequest) {
+
+        UniversityScholarshipFundRequestListDto dto = new UniversityScholarshipFundRequestListDto();
+        dto.setId(fundRequest.getId());
+        dto.setRequestId(fundRequest.getFundRequestId());
+        dto.setRequestedDate(fundRequest.getRequestedDate());
+        dto.setRequestedPeriod(fundRequest.getRequestedPeriod());
+        dto.setRequestedAmount(fundRequest.getRequestedAmount());
+        dto.setDisbursedAmount(fundRequest.getDisbursedAmount());
+        dto.setStatus(fundRequest.getStatus() != null ? fundRequest.getStatus().name() : "");
+
+        UniversityScholarshipRequest parent = fundRequest.getUniversityScholarshipRequest();
+        if (parent != null) {
+            dto.setScholarshipRequestId(parent.getUniversityScholarshipRequestID());
+            dto.setStudentName(parent.getStudentName());
+            dto.setUniversityName(parent.getUniversity() != null ? parent.getUniversity().getName() : "");
+            dto.setNic(parent.getNic());
+            dto.setSubmissionLocation(parent.getSubmissionLocation());
+            if (parent.getMember() != null) {
+                dto.setMemberId(parent.getMember().getMemberId());
+                dto.setMemberName(parent.getMember().getFullName());
+            }
+        }
+
+        return dto;
+    }
+
+    /** Same fields the scholarship search covers, plus the fund request's own id. */
+    private boolean matchesFundRequestSearch(
+            UniversityScholarshipFundRequestListDto dto, String needle) {
+
+        if (needle == null) {
+            return true;
+        }
+        return containsIgnoreCase(dto.getRequestId(), needle)
+                || containsIgnoreCase(dto.getScholarshipRequestId(), needle)
+                || containsIgnoreCase(dto.getStudentName(), needle)
+                || containsIgnoreCase(dto.getMemberName(), needle)
+                || containsIgnoreCase(dto.getMemberId(), needle)
+                || containsIgnoreCase(dto.getNic(), needle);
+    }
+
+    private Comparator<UniversityScholarshipFundRequestListDto> fundRequestComparator(
+            String sortBy, String sortDirection) {
+
+        String key = sortBy == null ? "requested-date" : sortBy.trim().toLowerCase();
+
+        Comparator<UniversityScholarshipFundRequestListDto> comparator = switch (key) {
+            case "status" -> Comparator.comparing(
+                    UniversityScholarshipFundRequestListDto::getStatus,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "member-id", "memberid" -> Comparator.comparing(
+                    UniversityScholarshipFundRequestListDto::getMemberId,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "scholarship-id", "scholarshipid" -> Comparator.comparing(
+                    UniversityScholarshipFundRequestListDto::getScholarshipRequestId,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            default -> Comparator.comparing(
+                    UniversityScholarshipFundRequestListDto::getRequestedDate,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+        };
+
+        return "desc".equalsIgnoreCase(sortDirection) ? comparator.reversed() : comparator;
     }
 
     // Get scholarship request by request ID with member and university details

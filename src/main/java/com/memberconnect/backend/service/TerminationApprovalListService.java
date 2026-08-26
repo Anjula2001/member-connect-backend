@@ -17,6 +17,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -118,9 +119,21 @@ public class TerminationApprovalListService {
         return toDto(saved);
     }
 
-    public List<TerminationApprovalListDTO> getAllApprovalLists() {
-        return approvalListRepository.findAllWithRequests().stream()
-                .map(this::toDto)
+    /**
+     * Retrieval by "All" (both bounds null) or a Board Meeting date period.
+     *
+     * The period is applied in the query rather than in the browser, and the rows come
+     * back without their request numbers - together that stops this screen fetching
+     * every termination request of every list in order to render a row count.
+     */
+    public List<TerminationApprovalListDTO> getAllApprovalLists(LocalDate from, LocalDate to) {
+        Map<Long, Integer> counts = approvalListRepository.countRequestsPerList().stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> ((Number) row[1]).intValue()));
+
+        return approvalListRepository.findInMeetingDateRange(from, to).stream()
+                .map(entity -> toSummaryDto(entity, counts.getOrDefault(entity.getId(), 0)))
                 .toList();
     }
 
@@ -409,17 +422,16 @@ public class TerminationApprovalListService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private TerminationApprovalListDTO toDto(TerminationApprovalList entity) {
+    /**
+     * Everything that does not require touching the requests collection. Shared by
+     * toDto (detail) and toSummaryDto (list view) so the two cannot drift apart.
+     */
+    private TerminationApprovalListDTO toScalarDto(TerminationApprovalList entity) {
         TerminationApprovalListDTO dto = new TerminationApprovalListDTO();
         dto.setId(entity.getId());
         dto.setListId(entity.getListId());
         dto.setBoardMeetingId(entity.getBoardMeetingId());
         dto.setBoardMeetingDate(entity.getBoardMeetingDate());
-        dto.setRequestNos(
-                entity.getRequests().stream()
-                        .map(TerminationRequest::getRequestNo)
-                        .collect(Collectors.toList())
-        );
         dto.setStatus(entity.getStatus() != null ? entity.getStatus().name() : null);
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setProcessedAt(entity.getProcessedAt());
@@ -430,5 +442,46 @@ public class TerminationApprovalListService {
         dto.setBoardRemarks(entity.getBoardRemarks());
         dto.setApprovedListDocument(entity.getApprovedListDocument());
         return dto;
+    }
+
+    /** Detail view: carries the full request number list. */
+    private TerminationApprovalListDTO toDto(TerminationApprovalList entity) {
+        TerminationApprovalListDTO dto = toScalarDto(entity);
+        List<String> requestNos = entity.getRequests().stream()
+                .map(TerminationRequest::getRequestNo)
+                .collect(Collectors.toList());
+        dto.setRequestNos(requestNos);
+        dto.setRequestCount(requestNos.size());
+        return dto;
+    }
+
+    /** List view: the count only, so no request collection is fetched. */
+    private TerminationApprovalListDTO toSummaryDto(TerminationApprovalList entity, int requestCount) {
+        TerminationApprovalListDTO dto = toScalarDto(entity);
+        dto.setRequestCount(requestCount);
+        return dto;
+    }
+
+    /**
+     * How many lists sit in the given statuses.
+     *
+     * Answered with a COUNT in the database. The dashboard previously fetched every
+     * list and filtered in the browser to arrive at the same number.
+     */
+    public long countByStatuses(java.util.List<String> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return approvalListRepository.count();
+        }
+        java.util.List<com.memberconnect.backend.enums.TerminationApprovalListStatus> parsed =
+                new java.util.ArrayList<>();
+        for (String status : statuses) {
+            try {
+                parsed.add(com.memberconnect.backend.enums.TerminationApprovalListStatus
+                        .valueOf(status.trim().toUpperCase()));
+            } catch (IllegalArgumentException ignored) {
+                // An unrecognised status matches nothing rather than everything.
+            }
+        }
+        return parsed.isEmpty() ? 0L : approvalListRepository.countByStatusIn(parsed);
     }
 }

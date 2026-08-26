@@ -8,6 +8,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -18,17 +19,20 @@ import org.springframework.stereotype.Service;
 
 import com.memberconnect.backend.dto.ProfileChangeListItemDTO;
 import com.memberconnect.backend.enums.ApplicationStatus;
+import com.memberconnect.backend.enums.MemberTransferStatus;
 import com.memberconnect.backend.enums.ProfileChangeSortBy;
 import com.memberconnect.backend.enums.ProfileChangeType;
 import com.memberconnect.backend.enums.RequestReceivedOn;
 import com.memberconnect.backend.model.BasicProfileChangeRequest;
 import com.memberconnect.backend.model.Member;
+import com.memberconnect.backend.model.MemberTransferRequest;
 import com.memberconnect.backend.model.NameChangeRequest;
 import com.memberconnect.backend.model.NommineChangeRequests;
 import com.memberconnect.backend.model.ProfileChangeRequest;
 import com.memberconnect.backend.model.RemittanceAmountChange;
 import com.memberconnect.backend.repository.BasicProfileChangeRequestRepo;
 import com.memberconnect.backend.repository.MemberRepository;
+import com.memberconnect.backend.repository.MemberTransferRepository;
 import com.memberconnect.backend.repository.NameChangeRequestRepo;
 import com.memberconnect.backend.repository.NominneChangeRequestRepo;
 import com.memberconnect.backend.repository.RemittanceAmountChangeRepo;
@@ -42,11 +46,13 @@ import com.memberconnect.backend.repository.RemittanceAmountChangeRepo;
  * Previously the screen called each type's "get all" endpoint in turn and filtered in
  * the browser: Location, Received On and Sort did not exist at all, Status was a
  * single-select defaulting to ALL rather than a multi-select defaulting to Submitted
- * for Approval, and the search box was bound to state that was never read. Doing it
- * here also means a district user cannot see other districts' requests simply by
- * editing the client.
+ * for Approval, and the search box was bound to state that was never read.
  *
- * The four types live in four tables with no common parent table and no association to
+ * Note that this is not an access boundary. Every caller may search every location -
+ * see ProfileChangeController for why the district lock was removed. The value of
+ * filtering here is correctness and volume, not authorisation.
+ *
+ * The five types live in five tables with no common parent table and no association to
  * Member, so this merges in memory rather than in SQL. Two things keep that honest:
  * the per-type filtering is pushed down as a Specification, and the members are
  * resolved with one findByMemberIdIn call for the whole result set rather than one
@@ -59,6 +65,7 @@ public class ProfileChangeSearchService {
     private final NameChangeRequestRepo nameChangeRepo;
     private final NominneChangeRequestRepo nomineeChangeRepo;
     private final RemittanceAmountChangeRepo remittanceChangeRepo;
+    private final MemberTransferRepository memberTransferRepo;
     private final MemberRepository memberRepository;
 
     public ProfileChangeSearchService(
@@ -66,12 +73,14 @@ public class ProfileChangeSearchService {
             NameChangeRequestRepo nameChangeRepo,
             NominneChangeRequestRepo nomineeChangeRepo,
             RemittanceAmountChangeRepo remittanceChangeRepo,
+            MemberTransferRepository memberTransferRepo,
             MemberRepository memberRepository
     ) {
         this.basicProfileRepo = basicProfileRepo;
         this.nameChangeRepo = nameChangeRepo;
         this.nomineeChangeRepo = nomineeChangeRepo;
         this.remittanceChangeRepo = remittanceChangeRepo;
+        this.memberTransferRepo = memberTransferRepo;
         this.memberRepository = memberRepository;
     }
 
@@ -125,6 +134,10 @@ public class ProfileChangeSearchService {
             ));
         }
 
+        if (wanted.contains(ProfileChangeType.MEMBER_TRANSFER)) {
+            rows.addAll(collectTransfers(statuses, locations, rangeFrom, rangeTo));
+        }
+
         attachMemberDetails(rows);
 
         List<ProfileChangeListItemDTO> matched = applySearch(rows, search);
@@ -162,6 +175,80 @@ public class ProfileChangeSearchService {
                     return row;
                 })
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Member Transfers, collected separately from the other four.
+     *
+     * MemberTransferRequest does not extend ProfileChangeRequest, so the shared collect()
+     * cannot reach it, and it stores MemberTransferStatus rather than ApplicationStatus.
+     * Both statuses are mapped onto the shared vocabulary here so one Status filter, one
+     * sort and one results table serve all five types - which is what MMC28 asks for.
+     */
+    private List<ProfileChangeListItemDTO> collectTransfers(
+            Collection<ApplicationStatus> statuses,
+            Collection<String> locations,
+            LocalDate from,
+            LocalDate to
+    ) {
+        Set<MemberTransferStatus> transferStatuses = (statuses == null || statuses.isEmpty())
+                ? EnumSet.noneOf(MemberTransferStatus.class)
+                : statuses.stream()
+                        .map(ProfileChangeSearchService::toTransferStatus)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toCollection(() -> EnumSet.noneOf(MemberTransferStatus.class)));
+
+        // A status filter that names only statuses transfers cannot hold - "Added to
+        // Board Approval List", say - must return no transfers rather than all of them.
+        if (statuses != null && !statuses.isEmpty() && transferStatuses.isEmpty()) {
+            return List.of();
+        }
+
+        Specification<MemberTransferRequest> spec =
+                ProfileChangeSpecifications.transferFilter(transferStatuses, locations, from, to);
+
+        return memberTransferRepo.findAll(spec).stream()
+                .map(entity -> {
+                    ProfileChangeListItemDTO row = new ProfileChangeListItemDTO();
+                    row.setType(ProfileChangeType.MEMBER_TRANSFER);
+                    row.setTypeLabel(ProfileChangeType.MEMBER_TRANSFER.getLabel());
+                    // The transfer table's key is a Long; the shared row carries an
+                    // Integer because the other four use one.
+                    row.setRequestId(entity.getId() == null ? null : entity.getId().intValue());
+                    row.setRequestNo(entity.getRequestId());
+                    row.setStatus(toApplicationStatus(entity.getStatus()));
+                    row.setRequestedDate(entity.getRequestedDate());
+                    Member member = entity.getMember();
+                    if (member != null) {
+                        row.setSubmissionLocation(member.getSubmissionLocation());
+                        row.setMemberId(member.getMemberId());
+                    }
+                    return row;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /** MemberTransferStatus spells its submitted state without underscores. */
+    private static ApplicationStatus toApplicationStatus(MemberTransferStatus status) {
+        if (status == null) return null;
+        return switch (status) {
+            case SUBMITTEDFORAPPROVAL -> ApplicationStatus.SUBMITTED_FOR_APPROVAL;
+            case APPROVED -> ApplicationStatus.APPROVED;
+            case REJECTED -> ApplicationStatus.REJECTED;
+            case INACTIVE -> ApplicationStatus.INACTIVE;
+        };
+    }
+
+    /** The reverse, for filtering. Null means "transfers have no such status". */
+    private static MemberTransferStatus toTransferStatus(ApplicationStatus status) {
+        if (status == null) return null;
+        return switch (status) {
+            case SUBMITTED_FOR_APPROVAL -> MemberTransferStatus.SUBMITTEDFORAPPROVAL;
+            case APPROVED -> MemberTransferStatus.APPROVED;
+            case REJECTED -> MemberTransferStatus.REJECTED;
+            case INACTIVE -> MemberTransferStatus.INACTIVE;
+            default -> null;
+        };
     }
 
     /**

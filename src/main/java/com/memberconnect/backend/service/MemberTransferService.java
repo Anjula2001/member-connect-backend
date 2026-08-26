@@ -296,8 +296,17 @@ public class MemberTransferService {
     public MemberTransferRequest approveRequest(String key) {
         MemberTransferRequest request = findRequestByIdOrRequestId(key);
 
-        if (request.getStatus() == MemberTransferStatus.APPROVED) {
-            throw new RuntimeException("Request is already approved");
+        // "Submitted for Approval --> Approved / Rejected" (MMC30) is the only route in.
+        // Guarding the source status matters more here than on most transitions: an
+        // approval writes the requested values onto the member profile and, when the
+        // district moves, hands the member's loans and accounts to another district -
+        // none of which should be reachable from a rejected or inactive request.
+        if (request.getStatus() != MemberTransferStatus.SUBMITTEDFORAPPROVAL) {
+            throw new RuntimeException(
+                    request.getStatus() == MemberTransferStatus.APPROVED
+                            ? "Request is already approved"
+                            : "Only a request awaiting approval can be approved (current status: "
+                                    + request.getStatus() + ")");
         }
 
         // Update request status
@@ -386,6 +395,11 @@ public class MemberTransferService {
                     districtAfter
             ));
         }
+
+        // MMC30 requires the member to be told about the decision either way. The
+        // rejection path already did this; approval did not, so notifyDecision's
+        // APPROVED branch was unreachable and approved members were never notified.
+        notifyDecision(saved, MemberTransferStatus.APPROVED);
 
         return saved;
     }
@@ -586,6 +600,18 @@ public class MemberTransferService {
     public MemberTransferRequest rejectRequest(String key, String reason) {
         MemberTransferRequest request = findRequestByIdOrRequestId(key);
 
+        // Same single entry point as approval (MMC30). Without this an already-approved
+        // request could be flipped to Rejected while the changes it made to the member
+        // profile stayed applied, leaving request and profile permanently disagreeing.
+        MemberTransferStatus previousStatus = request.getStatus();
+        if (previousStatus != MemberTransferStatus.SUBMITTEDFORAPPROVAL) {
+            throw new RuntimeException(
+                    previousStatus == MemberTransferStatus.REJECTED
+                            ? "Request is already rejected"
+                            : "Only a request awaiting approval can be rejected (current status: "
+                                    + previousStatus + ")");
+        }
+
         request.setStatus(MemberTransferStatus.REJECTED);
         request.setDecisionReason(reason);
 
@@ -597,7 +623,7 @@ public class MemberTransferService {
                 AuditService.MODULE_MEMBER_TRANSFER,
                 memberDbId(saved),
                 "REJECTED",
-                MemberTransferStatus.SUBMITTEDFORAPPROVAL.name(),
+                previousStatus.name(),
                 MemberTransferStatus.REJECTED.name(),
                 saved.getRequestId()
                         + (StringUtils.hasText(reason) ? " · Reason: " + reason.trim() : ""));

@@ -5,6 +5,9 @@ import org.springframework.data.domain.PageRequest;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +22,10 @@ import com.memberconnect.backend.enums.ApplicationStatus;
 import com.memberconnect.backend.model.Audit;
 import com.memberconnect.backend.model.User;
 import com.memberconnect.backend.repository.AuditRepository;
+import com.memberconnect.backend.repository.DeathDonationRequestRepository;
+import com.memberconnect.backend.repository.MemberDeathRecordRepository;
 import com.memberconnect.backend.repository.MemberRepository;
+import com.memberconnect.backend.repository.TerminationRequestRepository;
 
 /**
  * Writes and reads the audit trail.
@@ -100,6 +106,10 @@ public class AuditService {
             case MODULE_REMITTANCE_CHANGE -> "Remittance Change Request";
             case MODULE_MEMBER_TRANSFER -> "Member Transfer Request";
             case MODULE_APPLICATION -> "Application";
+            case MODULE_TERMINATION -> "Termination Request";
+            case MODULE_MEMBER_DEATH -> "Member Death Record";
+            case MODULE_DEATH_DONATION -> "Death Donation Request";
+            case MODULE_DORMANT -> "Dormant Membership";
             default -> "Member";
         };
     }
@@ -108,14 +118,31 @@ public class AuditService {
     private final MemberRepository memberRepository;
     private final ObjectMapper objectMapper;
 
+    /*
+     * Termination, Member Death and Death Donation record their audit entries against
+     * their OWN record id, not the member's, so a member's entries in those modules can
+     * only be found by first resolving which of those records belong to them. These are
+     * repositories, not services, so injecting them here introduces no cycle with the
+     * services that call AuditService.
+     */
+    private final TerminationRequestRepository terminationRequestRepository;
+    private final MemberDeathRecordRepository memberDeathRecordRepository;
+    private final DeathDonationRequestRepository deathDonationRequestRepository;
+
     public AuditService(
             AuditRepository auditRepository,
             MemberRepository memberRepository,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            TerminationRequestRepository terminationRequestRepository,
+            MemberDeathRecordRepository memberDeathRecordRepository,
+            DeathDonationRequestRepository deathDonationRequestRepository
     ) {
         this.auditRepository = auditRepository;
         this.memberRepository = memberRepository;
         this.objectMapper = objectMapper;
+        this.terminationRequestRepository = terminationRequestRepository;
+        this.memberDeathRecordRepository = memberDeathRecordRepository;
+        this.deathDonationRequestRepository = deathDonationRequestRepository;
     }
 
     // ── Recording: plain string values ───────────────────────────────────────
@@ -356,31 +383,93 @@ public class AuditService {
     }
 
     /**
-     * History for a member, merged with the application it was created from — the
-     * spec requires the application's creation and updates to appear here too.
+     * Everything that has happened to this member, across every module that records
+     * against them.
+     *
+     * Audit rows are keyed by (moduleName, referenceId), but referenceId does not mean
+     * the same thing in every module:
+     *
+     *   - MEMBER, the profile-change modules and DORMANT_MEMBERSHIP record against the
+     *     member's own row id, so they can be matched directly.
+     *   - MEMBER_APPLICATION records against the application the member was created
+     *     from, resolved by the caller.
+     *   - MEMBER_TERMINATION, MEMBER_DEATH and DEATH_DONATION record against their own
+     *     request/record id, so this member's rows in those modules are only findable
+     *     by first looking up which of those records are theirs. They were previously
+     *     absent from the timeline entirely - a terminated member's Progress tab showed
+     *     nothing about the termination.
+     *
+     * The approval-list modules (TERMINATION_APPROVAL_LIST, DORMANT_APPROVAL_LIST) are
+     * deliberately left out: a list spans many members, so its entries describe the list
+     * rather than any one member's history.
+     *
+     * Because referenceId is only meaningful per module, an entry is kept only when its
+     * id is one of the ids allowed FOR ITS OWN MODULE. Matching modules and ids
+     * independently would let a termination request whose id happens to equal this
+     * member's id show up on their timeline.
      */
     public List<AuditDTO> getMemberHistory(Long memberId, Long applicationId) {
-        // The profile-change modules record against the member's own id, so they belong
-        // on this timeline. They were being written but never shown: the module filter
-        // listed only MEMBER and MEMBER_APPLICATION, so every Basic Profile, Name,
-        // Nominee and Remittance entry was dropped on the way out.
-        List<String> memberScoped = new ArrayList<>(List.of(MODULE_MEMBER));
-        memberScoped.addAll(PROFILE_CHANGE_MODULES);
+        Map<String, Set<Long>> allowed = new LinkedHashMap<>();
 
-        List<String> modules = new ArrayList<>(memberScoped);
-        List<Long> refs = new ArrayList<>(List.of(memberId));
-        if (applicationId != null) {
-            modules.add(MODULE_APPLICATION);
-            refs.add(applicationId);
+        // Modules keyed by the member's own row id.
+        allowed.put(MODULE_MEMBER, Set.of(memberId));
+        allowed.put(MODULE_DORMANT, Set.of(memberId));
+        for (String module : PROFILE_CHANGE_MODULES) {
+            allowed.put(module, Set.of(memberId));
         }
-        // Both lists are matched independently, so filter out cross-matches
-        // (an application id that happens to equal a member id).
-        return auditRepository.findByModuleNameInAndReferenceIdInOrderByActionAtAsc(modules, refs).stream()
-                .filter(a -> (memberScoped.contains(a.getModuleName()) && a.getReferenceId().equals(memberId))
-                        || (MODULE_APPLICATION.equals(a.getModuleName())
-                            && applicationId != null && a.getReferenceId().equals(applicationId)))
+
+        if (applicationId != null) {
+            allowed.put(MODULE_APPLICATION, Set.of(applicationId));
+        }
+
+        // Modules keyed by their own record id: resolve this member's records first.
+        String membershipNo = memberRepository.findById(memberId)
+                .map(member -> member.getMemberId())
+                .orElse(null);
+        if (membershipNo != null && !membershipNo.isBlank()) {
+            putIfAny(allowed, MODULE_TERMINATION,
+                    terminationRequestRepository.findByMemberId(membershipNo),
+                    request -> request.getId());
+            putIfAny(allowed, MODULE_MEMBER_DEATH,
+                    memberDeathRecordRepository.findByMember_MemberIdOrderByCreatedAtDesc(membershipNo),
+                    record -> record.getId());
+            putIfAny(allowed, MODULE_DEATH_DONATION,
+                    deathDonationRequestRepository.findByMember_MemberIdOrderByRequestedDateDesc(membershipNo),
+                    request -> request.getId());
+        }
+
+        List<Long> refs = allowed.values().stream()
+                .flatMap(Set::stream)
+                .distinct()
+                .toList();
+        if (refs.isEmpty()) {
+            return List.of();
+        }
+
+        return auditRepository
+                .findByModuleNameInAndReferenceIdInOrderByActionAtAsc(
+                        List.copyOf(allowed.keySet()), refs)
+                .stream()
+                .filter(a -> allowed.getOrDefault(a.getModuleName(), Set.of())
+                        .contains(a.getReferenceId()))
                 .map(this::toDto)
                 .toList();
+    }
+
+    /** Registers a module's reference ids, skipping it when the member has no records. */
+    private <T> void putIfAny(
+            Map<String, Set<Long>> allowed,
+            String module,
+            List<T> records,
+            Function<T, Long> idOf
+    ) {
+        Set<Long> ids = records.stream()
+                .map(idOf)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        if (!ids.isEmpty()) {
+            allowed.put(module, ids);
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

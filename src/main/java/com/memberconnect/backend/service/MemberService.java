@@ -1,6 +1,7 @@
 package com.memberconnect.backend.service;
 
 import com.memberconnect.backend.dto.MemberDTO;
+import com.memberconnect.backend.dto.MemberSearchPageDTO;
 import com.memberconnect.backend.enums.MemberStatus;
 import com.memberconnect.backend.enums.Role;
 import com.memberconnect.backend.model.Member;
@@ -12,17 +13,33 @@ import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import com.memberconnect.backend.enums.MembershipDocumentType;
+import com.memberconnect.backend.repository.BoardApprovalListRepository;
+
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 @Service
 @Transactional
 @SuppressWarnings("null")
 public class MemberService {
+
+    /** Matches DEFAULT_PAGE_SIZE in the frontend's TablePagination control. */
+    private static final int DEFAULT_PAGE_SIZE = 10;
+
+    /** Guards against a caller asking for the whole membership in one page. */
+    private static final int MAX_PAGE_SIZE = 200;
+
 
     /**
      * Member statuses owned by the termination workflow. See updateStatus() for why
@@ -46,6 +63,11 @@ public class MemberService {
 
     @Autowired
     private MemberApplicationRepository memberApplicationRepository;
+
+    // MR15/16/17's Board Meeting Date filter. A member carries no meeting date, so the
+    // period has to be resolved through the application the member was created from.
+    @Autowired
+    private BoardApprovalListRepository boardApprovalListRepository;
 
     @Autowired
     private ModelMapper modelMapper;
@@ -131,65 +153,104 @@ public class MemberService {
         return convertToDTO(member);
     }
 
+    /**
+     * @param withoutDocument when set, keeps only members whose copy of that document
+     *        has not been printed - the "Members without Membership Cards / Signature
+     *        Cards / Passbooks" option the print screens default to (MR15/16/17). It
+     *        used to be applied in the browser, which meant every active member was
+     *        fetched and most were discarded, and the discarded share grows as more
+     *        documents get printed.
+     * @param sortBy one of memberID, status, working-location-type, district, zone;
+     *        anything else (including null) sorts by membership date, the spec default.
+     * @param sortDirection "desc" to reverse; ascending otherwise, per the spec default.
+     */
     public List<MemberDTO> searchMembers(String query, List<MemberStatus> statuses, List<String> locations,
                                           String workingLocationType, String educationalZone,
                                           String educationalDistrict,
-                                          LocalDate membershipStartFrom, LocalDate membershipStartTo) {
+                                          LocalDate membershipStartFrom, LocalDate membershipStartTo,
+                                          MembershipDocumentType withoutDocument,
+                                          LocalDate boardMeetingFrom, LocalDate boardMeetingTo,
+                                          String sortBy, String sortDirection) {
 
-        // Normalise sentinel values from the UI
-        final String q = (query == null || query.isBlank()) ? null : query.toLowerCase().trim();
-        final boolean filterByStatus = (statuses != null && !statuses.isEmpty());
-        final boolean filterByLocation = (locations != null && !locations.isEmpty());
-        final String wlt = (workingLocationType == null || workingLocationType.isBlank()
-                || "all-types".equalsIgnoreCase(workingLocationType)) ? null : workingLocationType.toLowerCase();
-        final String ez = (educationalZone == null || educationalZone.isBlank()
-                || "all-zones".equalsIgnoreCase(educationalZone)) ? null : educationalZone.toLowerCase();
-        final String ed = (educationalDistrict == null || educationalDistrict.isBlank()
-                || "all-districts".equalsIgnoreCase(educationalDistrict)) ? null : educationalDistrict.toLowerCase();
+        List<Member> matched = memberRepository.findAll(
+                memberFilter(query, statuses, locations, workingLocationType, educationalZone,
+                        educationalDistrict, membershipStartFrom, membershipStartTo,
+                        withoutDocument, boardMeetingFrom, boardMeetingTo),
+                MemberSpecifications.sort(sortBy, sortDirection));
 
-        return memberRepository.findAll().stream()
-                .filter(m -> {
-                    // keyword search across name / NIC / memberId
-                    if (q != null) {
-                        boolean matches =
-                                (m.getFullName() != null && m.getFullName().toLowerCase().contains(q)) ||
-                                (m.getNameWithInitials() != null && m.getNameWithInitials().toLowerCase().contains(q)) ||
-                                (m.getNic() != null && m.getNic().toLowerCase().contains(q)) ||
-                                (m.getMemberId() != null && m.getMemberId().toLowerCase().contains(q));
-                        if (!matches) return false;
-                    }
-                    // status filter
-                    if (filterByStatus && !statuses.contains(m.getStatus())) return false;
-                    // location filter — the District Office branch the member registered through,
-                    // NOT the working location (school/institution name). These are different concepts:
-                    // a member can work in one district and have registered via a District Office in another.
-                    if (filterByLocation &&
-                            (m.getSubmissionLocation() == null || !locations.contains(m.getSubmissionLocation())))
-                        return false;
-                    // working location type filter
-                    if (wlt != null &&
-                            (m.getWorkingLocationType() == null || !wlt.equalsIgnoreCase(m.getWorkingLocationType())))
-                        return false;
-                    // educational zone filter
-                    if (ez != null &&
-                            (m.getEducationalZone() == null || !ez.equalsIgnoreCase(m.getEducationalZone())))
-                        return false;
-                    // educational district filter — the member's WORKING district, distinct
-                    // from the Location filter above (the District Office they registered at).
-                    if (ed != null &&
-                            (m.getEducationalDistrict() == null || !ed.equalsIgnoreCase(m.getEducationalDistrict())))
-                        return false;
-                    // Membership Start Date period
-                    if (membershipStartFrom != null &&
-                            (m.getMembershipStartDate() == null || m.getMembershipStartDate().isBefore(membershipStartFrom)))
-                        return false;
-                    if (membershipStartTo != null &&
-                            (m.getMembershipStartDate() == null || m.getMembershipStartDate().isAfter(membershipStartTo)))
-                        return false;
-                    return true;
-                })
-                .map(this::convertToDTO)
-                .toList();
+        return matched.stream().map(this::convertToDTO).toList();
+    }
+
+    /**
+     * One page of the Member Directory, filtered, sorted and sliced by the database.
+     *
+     * The unpaged overload above still exists for the callers that genuinely need
+     * every row — the printable Directory report, the account-linking picker, the
+     * dashboard counter — and it now runs the same SQL predicate rather than reading
+     * the table. This method exists for the screens that show ten rows at a time, so
+     * that the other pages are never fetched at all and the footer's total comes from
+     * a COUNT rather than from the length of a list nobody asked for.
+     */
+    public MemberSearchPageDTO searchMembersPage(String query, List<MemberStatus> statuses, List<String> locations,
+                                                 String workingLocationType, String educationalZone,
+                                                 String educationalDistrict,
+                                                 LocalDate membershipStartFrom, LocalDate membershipStartTo,
+                                                 MembershipDocumentType withoutDocument,
+                                                 LocalDate boardMeetingFrom, LocalDate boardMeetingTo,
+                                                 String sortBy, String sortDirection,
+                                                 Integer page, Integer size) {
+
+        Specification<Member> spec = memberFilter(query, statuses, locations, workingLocationType,
+                educationalZone, educationalDistrict, membershipStartFrom, membershipStartTo,
+                withoutDocument, boardMeetingFrom, boardMeetingTo);
+
+        Sort sort = MemberSpecifications.sort(sortBy, sortDirection);
+        int pageNumber = (page == null || page < 0) ? 0 : page;
+        int pageSize = (size == null || size < 1) ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+
+        Page<Member> result = memberRepository.findAll(spec, PageRequest.of(pageNumber, pageSize, sort));
+
+        // Narrowing the filter, or a member leaving the result, can leave the requested
+        // page past the end of what remains. Answering with the last page that does
+        // exist saves the browser from noticing an empty page and asking again; the
+        // page actually returned is reported back so the caller can follow.
+        if (pageNumber > 0 && result.getContent().isEmpty()) {
+            pageNumber = result.getTotalPages() == 0 ? 0 : result.getTotalPages() - 1;
+            result = memberRepository.findAll(spec, PageRequest.of(pageNumber, pageSize, sort));
+        }
+
+        return new MemberSearchPageDTO(
+                result.getContent().stream().map(this::convertToDTO).toList(),
+                pageNumber,
+                pageSize,
+                result.getTotalElements(),
+                result.getTotalPages());
+    }
+
+    /**
+     * The shared predicate behind both overloads.
+     *
+     * The board meeting period is resolved to a set of application ids once here
+     * rather than per member. Null means "any meeting" — the spec default — and is
+     * deliberately distinct from an empty set, which means a period was given and no
+     * meeting inside it approved anybody.
+     */
+    private Specification<Member> memberFilter(String query, List<MemberStatus> statuses, List<String> locations,
+                                               String workingLocationType, String educationalZone,
+                                               String educationalDistrict,
+                                               LocalDate membershipStartFrom, LocalDate membershipStartTo,
+                                               MembershipDocumentType withoutDocument,
+                                               LocalDate boardMeetingFrom, LocalDate boardMeetingTo) {
+
+        final Set<Long> approvedApplicationIds =
+                (boardMeetingFrom == null && boardMeetingTo == null)
+                        ? null
+                        : new HashSet<>(boardApprovalListRepository
+                                .findApplicationIdsInMeetingDateRange(boardMeetingFrom, boardMeetingTo));
+
+        return MemberSpecifications.filter(query, statuses, locations, workingLocationType,
+                educationalZone, educationalDistrict, membershipStartFrom, membershipStartTo,
+                approvedApplicationIds, withoutDocument);
     }
 
     public MemberDTO updateMember(Long id, MemberDTO dto) {
@@ -338,5 +399,19 @@ public class MemberService {
             dto.setApplicationId(member.getApplication().getId());
         }
         return dto;
+    }
+
+    /**
+     * How many rows exist, optionally narrowed to submission locations.
+     *
+     * Same location contract as the search endpoint beside it: the caller states the
+     * locations, an empty list means no narrowing. Answered with a COUNT rather than by
+     * returning rows for the caller to measure.
+     */
+    public long countMembers(java.util.List<String> locations) {
+        if (locations == null || locations.isEmpty()) {
+            return memberRepository.count();
+        }
+        return memberRepository.countBySubmissionLocationIn(locations);
     }
 }

@@ -15,6 +15,15 @@ public class TerminationApprovalListDTO {
     private Long boardMeetingId;
     private LocalDate boardMeetingDate;
     private List<String> requestNos = new ArrayList<>();
+
+    /**
+     * How many termination requests the list holds.
+     *
+     * The list view returns this WITHOUT requestNos: the panel renders only the
+     * number, and producing the request numbers meant JOIN FETCHing every request of
+     * every list. Open a single list and requestNos is populated as before.
+     */
+    private Integer requestCount;
     private String status;
     private LocalDateTime createdAt;
     private LocalDateTime processedAt;

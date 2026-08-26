@@ -99,4 +99,15 @@ public class Grade5ScholarshipApprovalListController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
+
+    /**
+     * Row count for the dashboard, so a counter does not have to download the rows.
+     * Inherits the same authorization as the listing beside it.
+     */
+    @PreAuthorize("hasAuthority('G5_LIST_VIEW')")
+    @GetMapping("/count")
+    public java.util.Map<String, Long> countApprovalLists(
+            @RequestParam(required = false) java.util.List<String> statuses) {
+        return java.util.Map.of("count", service.countByStatuses(statuses));
+    }
 }

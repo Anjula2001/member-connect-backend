@@ -140,4 +140,17 @@ public class Member_Application {
     @Column(name = "BoardDecisionReason", length = 2000)
     private String boardDecisionReason;
 
+    /**
+     * What the application was immediately before it joined a Board Approval List.
+     *
+     * MR08 requires a deleted list to roll each application back to "Submitted for
+     * Approval" OR "Rejected" depending on what it was originally, and once the status
+     * column has been overwritten with ADDED_TO_BOARD_APPROVAL_LIST that original is
+     * gone. Captured on MR06, consumed and cleared on MR08, cleared again when MR10
+     * decides the application.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "StatusBeforeBoardList")
+    private ApplicationStatus statusBeforeBoardList;
+
 }

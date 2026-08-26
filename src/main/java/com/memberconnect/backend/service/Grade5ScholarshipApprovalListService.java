@@ -281,4 +281,17 @@ public class Grade5ScholarshipApprovalListService {
         Grade5ScholarshipApprovalList saved = approvalListRepository.save(entity);
         return toDto(saved);
     }
+
+    /**
+     * How many lists sit in the given statuses.
+     *
+     * Answered with a COUNT in the database. The dashboard previously fetched every
+     * list and filtered in the browser to arrive at the same number.
+     */
+    public long countByStatuses(java.util.List<String> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return approvalListRepository.count();
+        }
+        return approvalListRepository.countByStatusIn(statuses);
+    }
 }
