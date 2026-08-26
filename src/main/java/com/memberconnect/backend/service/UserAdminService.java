@@ -4,6 +4,7 @@ import com.memberconnect.backend.dto.CreateUserRequestDTO;
 import com.memberconnect.backend.dto.ResetPasswordAdminDTO;
 import com.memberconnect.backend.dto.UpdateUserAdminDTO;
 import com.memberconnect.backend.dto.UserProfileDTO;
+import com.memberconnect.backend.enums.Role;
 import com.memberconnect.backend.model.User;
 import com.memberconnect.backend.repository.UserRepo;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,6 +63,7 @@ public class UserAdminService {
         user.setFullName(request.getFullName() != null ? request.getFullName().trim() : username);
         user.setRole(request.getRole());
         user.setAssignedDistrict(request.getAssignedDistrict() != null ? request.getAssignedDistrict().trim() : null);
+        user.setAuthorized(resolveAuthorized(request.getRole(), request.getAuthorized()));
         user.setActive(true);
         user.setCreatedAt(LocalDateTime.now());
 
@@ -89,6 +91,13 @@ public class UserAdminService {
             user.setActive(request.getIsActive());
         }
 
+        // Re-resolved against the role the user ENDS UP with, so moving an authorised
+        // District Office officer to a role that cannot hold authority clears the flag
+        // instead of leaving it silently set.
+        user.setAuthorized(resolveAuthorized(
+                user.getRole(),
+                request.getAuthorized() != null ? request.getAuthorized() : user.isAuthorized()));
+
         User saved = userRepo.save(user);
         return toDto(saved);
     }
@@ -114,6 +123,18 @@ public class UserAdminService {
         return toDto(saved);
     }
 
+    /**
+     * Authority is a District Office / Head Office concept only (see {@link User#isAuthorized()}).
+     * Any other role is forced to false rather than trusting what the client sent, so a
+     * hand-crafted request cannot mark, say, an ACCOUNTS account as an authoriser.
+     */
+    private boolean resolveAuthorized(Role role, Boolean requested) {
+        if (role != Role.DISTRICT_OFFICE && role != Role.HEAD_OFFICE) {
+            return false;
+        }
+        return Boolean.TRUE.equals(requested);
+    }
+
     private UserProfileDTO toDto(User user) {
         return new UserProfileDTO(
                 user.getId(),
@@ -123,6 +144,7 @@ public class UserAdminService {
                 user.getProfilePictureUrl(),
                 user.getAssignedDistrict(),
                 user.isActive(),
+                user.isAuthorized(),
                 user.getCreatedAt()
         );
     }

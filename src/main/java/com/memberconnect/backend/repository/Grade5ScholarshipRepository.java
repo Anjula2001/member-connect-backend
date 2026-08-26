@@ -1,5 +1,6 @@
 package com.memberconnect.backend.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,10 +17,26 @@ public interface Grade5ScholarshipRepository
             String requestNo
     );
 
+    boolean existsByBirthCertificateNumber(String birthCertificateNumber);
+
+    boolean existsByBirthCertificateNumberAndRequestNoNot(
+            String birthCertificateNumber,
+            String requestNo
+    );
+
     Optional<Grade5ScholarshipRequest>
         findTopByRequestNoStartingWithOrderByRequestNoDesc(String prefix);
 
     Optional<Grade5ScholarshipRequest> findTopByMemberIdOrderByIdDesc(String memberId);
+
+    /**
+     * Every request a member holds, newest first.
+     *
+     * A member can raise a Grade 5 request per child, and again in a later exam year,
+     * so "the member's request" is not a single row - findTopByMemberIdOrderByIdDesc
+     * above answers a narrower question and hides the rest.
+     */
+    List<Grade5ScholarshipRequest> findByMemberIdOrderByIdDesc(String memberId);
 
     Optional<Grade5ScholarshipRequest> findByRequestNo(String requestNo);
 }

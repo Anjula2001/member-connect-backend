@@ -68,6 +68,9 @@ public class MemberService {
     private AuditService auditService;
 
     @Autowired
+    private MemberStatusHistoryService memberStatusHistoryService;
+
+    @Autowired
     private MemberFinancialsService memberFinancialsService;
 
     public MemberDTO saveMember(MemberDTO memberDTO) {
@@ -382,6 +385,7 @@ public class MemberService {
         auditService.record(AuditService.MODULE_MEMBER, saved.getId(), "Status Changed",
                 before == null ? null : before.name(),
                 status == null ? null : status.name(), null);
+        memberStatusHistoryService.record(saved, before, status, null, "MEMBER_STATUS_UPDATED");
 
         // MR12 — notify the member once their membership becomes active. Best-effort:
         // NotificationService swallows delivery failures so activation still succeeds.

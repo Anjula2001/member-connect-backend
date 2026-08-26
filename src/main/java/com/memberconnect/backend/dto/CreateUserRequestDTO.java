@@ -14,4 +14,5 @@ public class CreateUserRequestDTO {
     private String fullName;
     private Role role;
     private String assignedDistrict;
+    private Boolean authorized;
 }

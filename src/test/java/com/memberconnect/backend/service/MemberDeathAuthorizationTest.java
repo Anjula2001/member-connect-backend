@@ -68,6 +68,8 @@ class MemberDeathAuthorizationTest {
     @Mock private DeathDonationEntitlementService entitlementService;
     @Mock private DocumentService documentService;
 
+    @Mock private MemberStatusHistoryService memberStatusHistoryService;
+
     @InjectMocks private MemberDeathRecordService service;
 
     private static final String RECORD_NO = "MDR0001";

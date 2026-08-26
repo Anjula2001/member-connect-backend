@@ -135,14 +135,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * MMT11 - sent once the Finance Module has closed the accounts and the member
-     * has moved to TERMINATED.
-     *
-     * This is deliberately not sent at board approval. Approval only stops the
-     * monthly remittance; telling a member their membership is terminated while
-     * their savings accounts are still open would be untrue.
-     */
+   
     public void notifyMembershipTerminated(String memberId, String requestNo) {
         Member member = memberRepository.findByMemberId(memberId).orElse(null);
 
@@ -230,13 +223,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * MMC04 / MMC12 / MMC17 / MMC25 - sent when a profile change request is approved
-     * and the Member Profile has been updated with the requested values.
-     *
-     * One method covers all four request types because the SRS wording is identical
-     * for each; only the request type name and number differ.
-     */
+    // profile change approved notifications
     public void sendProfileChangeApproved(Member member, ProfileChangeType type, String requestNo) {
         String name = displayName(member);
         String what = type.getLabel();
@@ -267,11 +254,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * MMC04 / MMC12 / MMC17 / MMC25 - sent when a profile change request is rejected.
-     * The Member Profile is left untouched, and the reason entered by the approver is
-     * carried in both channels (truncated for SMS only, as elsewhere in this class).
-     */
+    // profile change rejected notifications
     public void sendProfileChangeRejected(
             Member member,
             ProfileChangeType type,
@@ -326,7 +309,9 @@ public class NotificationService {
                     buildEmailBody(member, requestNo, reason)
             );
             log.info(
-                    "Notification channel EMAIL succeeded. memberId={}, requestNo={}",
+                    // Handed to the notification executor; SmtpEmailSender logs the
+                    // actual SENT/FAILED outcome once Gmail has answered.
+                    "Notification channel EMAIL accepted for delivery. memberId={}, requestNo={}",
                     memberId, requestNo
             );
         } catch (Exception e) {
@@ -364,12 +349,7 @@ public class NotificationService {
         }
     }
 
-    /**
-     * Email channel for the registration-flow notifications, which identify the
-     * member by membership number rather than by a request number. Same contract
-     * as sendEmail above: a blank address is skipped, a transport failure is
-     * logged and never propagated to the caller's transaction.
-     */
+
     private void dispatchEmail(String to, String subject, String body, String memberId, String purpose) {
         String address = trimToNull(to);
 
@@ -384,7 +364,9 @@ public class NotificationService {
 
         try {
             emailSender.send(address, subject, body);
-            log.info("Notification channel EMAIL succeeded. memberId={}, purpose={}", memberId, purpose);
+            // Handed to the notification executor; SmtpEmailSender logs the actual
+            // SENT/FAILED outcome once Gmail has answered.
+            log.info("Notification channel EMAIL accepted for delivery. memberId={}, purpose={}", memberId, purpose);
         } catch (Exception e) {
             log.error(
                     "Notification channel EMAIL failed. memberId={}, purpose={}, cause={}",
@@ -417,12 +399,7 @@ public class NotificationService {
         }
     }
 
-    /**
-     * Greeting used by the registration-flow notifications. It prefers the name
-     * with initials, which is how the membership documentation addresses the
-     * member; the termination notification uses resolveMemberName instead, which
-     * prefers the full name. The two orders are deliberate, not an oversight.
-     */
+    
     private String displayName(Member member) {
         String nameWithInitials = trimToNull(member.getNameWithInitials());
         if (nameWithInitials != null) {
@@ -476,21 +453,7 @@ public class NotificationService {
         return "Member";
     }
 
-    // ------------------------------------------------------------------
-    // Record Member Death (SRS section 4).
-    //
-    // These differ from every other notification in this class in who they are
-    // addressed to: the member is dead, so the recipient is the NOMINEE, whose
-    // contact details live on the death record rather than on the Member. The
-    // record is therefore resolved here, at delivery time, instead of the
-    // contact details being carried on the event - a number captured at approval
-    // and delivered days later could easily be stale.
-    // ------------------------------------------------------------------
-
-    /**
-     * Tells the nominee that the Member Death Record has been marked INCOMPLETE,
-     * with the reason (MMT18).
-     */
+    // Member Death
     public void notifyMemberDeathMarkedIncomplete(String memberId, String recordNo, String reason) {
         MemberDeathRecord record = findDeathRecord(recordNo, "member-death-incomplete");
         if (record == null) {
@@ -521,11 +484,7 @@ public class NotificationService {
         dispatchSms(record.getNomineeMobile(), sms, memberId, "member-death-incomplete");
     }
 
-    /**
-     * Tells the nominee that the Member Death Record was rejected, at whichever
-     * level rejected it (MMT22 / MMT23 / MMT24). The member profile has already
-     * been put back to Active by the time this runs.
-     */
+    // Member Death rejected
     public void notifyMemberDeathRejected(String memberId, String recordNo, String reason, String level) {
         MemberDeathRecord record = findDeathRecord(recordNo, "member-death-rejected");
         if (record == null) {
@@ -556,11 +515,7 @@ public class NotificationService {
         dispatchSms(record.getNomineeMobile(), sms, memberId, "member-death-rejected");
     }
 
-    /**
-     * Tells the nominee that the Finance Module has closed every account and the
-     * membership is now terminated due to death, with the disbursement details
-     * (MMT25).
-     */
+    // Member Death completed
     public void notifyMemberDeceased(String memberId, String recordNo) {
         MemberDeathRecord record = findDeathRecord(recordNo, "member-deceased");
         if (record == null) {
@@ -593,18 +548,209 @@ public class NotificationService {
         dispatchSms(record.getNomineeMobile(), sms, memberId, "member-deceased");
     }
 
-    // ------------------------------------------------------------------
-    // Death Donations for Members (SRS Requirement 05, MMD01 / MMD05-07).
-    //
-    // Unlike Record Member Death above, the recipient is the REQUESTING MEMBER
-    // themselves - they are alive and it is their relative who died - so these
-    // read contact details from the Member profile, not from a nominee.
-    // ------------------------------------------------------------------
+    // Retirement notifications (mark as Incomplete)
+    public void notifyRetirementMarkedIncomplete(String memberId, String requestNo, String reason) {
+        Member member = findMemberFor(memberId, requestNo, "retirement-incomplete");
+        if (member == null) {
+            return;
+        }
 
-    /**
-     * Tells the member their Death Donation Request was marked INCOMPLETE, with
-     * the reason (SRS MMD01, p.15).
-     */
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Retirement Request " + requestNo + " — Incomplete",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "Your membership retirement request has been reviewed and marked as INCOMPLETE.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Status         : Incomplete\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please visit your District Office with the details described above so the\n"
+                        + "request can be completed and submitted for approval.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "retirement-incomplete"
+        );
+    }
+
+   // Retirement notifications (rejected)
+    public void notifyRetirementRejected(String memberId, String requestNo, String reason) {
+        Member member = findMemberFor(memberId, requestNo, "retirement-rejected");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Retirement Request " + requestNo + " — Rejected",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "Your membership retirement request has been reviewed and has NOT been\n"
+                        + "approved. Your membership remains active and no further action is required\n"
+                        + "unless you wish to reapply.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Status         : Rejected\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please contact your District Office if you wish to discuss this decision.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "retirement-rejected"
+        );
+    }
+
+    // Retirement notifications (completed)
+    public void notifyMemberRetired(String memberId, String requestNo) {
+        Member member = findMemberFor(memberId, requestNo, "member-retired");
+        if (member == null) {
+            return;
+        }
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Your Future Finance Institute membership has ended on retirement",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "Your retirement has been completed and your membership (" + memberId + ")\n"
+                        + "is now terminated due to retirement. Your accounts have been settled by the\n"
+                        + "Finance Department.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Status         : Retired\n"
+                        + "\n"
+                        + "Thank you for your membership with the Future Finance Institute.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "member-retired"
+        );
+    }
+
+   // Grade 5 Scholarship notifications (mark as Incomplete)
+    public void notifyGrade5MarkedIncomplete(
+            String memberId, String requestNo, String studentName, String reason) {
+
+        Member member = findMemberFor(memberId, requestNo, "grade5-incomplete");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+        String safeStudent = trimToNull(studentName) == null ? "your child" : studentName.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Grade 5 Scholarship Request " + requestNo + " — Incomplete",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The Grade 5 scholarship request submitted for " + safeStudent + " has been\n"
+                        + "reviewed and marked as INCOMPLETE. It has not been rejected - it cannot be\n"
+                        + "sent for approval until the point below is resolved.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Student        : " + safeStudent + "\n"
+                        + "Status         : Incomplete\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please visit your District Office with the details described above so the\n"
+                        + "request can be completed and submitted for approval.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "grade5-incomplete"
+        );
+    }
+
+    // Grade 5 Scholarship notifications (rejected)
+    public void notifyGrade5Rejected(
+            String memberId, String requestNo, String studentName, String reason) {
+
+        Member member = findMemberFor(memberId, requestNo, "grade5-rejected");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+        String safeStudent = trimToNull(studentName) == null ? "your child" : studentName.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Grade 5 Scholarship Request " + requestNo + " — Rejected",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The Board has reviewed the Grade 5 scholarship request submitted for\n"
+                        + safeStudent + " and has NOT approved it.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Student        : " + safeStudent + "\n"
+                        + "Status         : Rejected\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please contact your District Office if you wish to discuss this decision.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "grade5-rejected"
+        );
+    }
+
+    // Grade 5 Scholarship notifications (approved)
+    public void notifyGrade5Approved(String memberId, String requestNo, String studentName) {
+        Member member = findMemberFor(memberId, requestNo, "grade5-approved");
+        if (member == null) {
+            return;
+        }
+
+        String safeStudent = trimToNull(studentName) == null ? "your child" : studentName.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Grade 5 Scholarship Request " + requestNo + " — Approved",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The Board has approved the Grade 5 scholarship request submitted for\n"
+                        + safeStudent + ". The necessary fund disbursement is now underway.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Student        : " + safeStudent + "\n"
+                        + "Status         : Approved\n"
+                        + "\n"
+                        + "You will be informed once the funds have been released. Please contact\n"
+                        + "your District Office if you have any questions.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "grade5-approved"
+        );
+    }
+
+    // Death Donation notifications (mark as Incomplete)
     public void notifyDeathDonationMarkedIncomplete(String memberId, String requestNo, String reason) {
         Member member = findMemberFor(memberId, requestNo, "death-donation-incomplete");
         if (member == null) {
@@ -644,10 +790,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * Tells the member their Death Donation Request was rejected, naming the
-     * level that rejected it (MMD05 / MMD06 / MMD07).
-     */
+    // Death Donation notifications (rejected)
     public void notifyDeathDonationRejected(
             String memberId,
             String requestNo,
@@ -693,13 +836,7 @@ public class NotificationService {
         );
     }
 
-    /**
-     * Tells the member their Death Donation Request was approved (SRS p.5).
-     *
-     * Deliberately says the funds are "being processed" rather than paid: the
-     * approval hands off to the Finance Module (MMD08), which does the actual
-     * disbursement afterwards.
-     */
+    // Death Donation notifications (approved)
     public void notifyDeathDonationApproved(String memberId, String requestNo, String level) {
         Member member = findMemberFor(memberId, requestNo, "death-donation-approved");
         if (member == null) {
@@ -738,6 +875,330 @@ public class NotificationService {
         );
     }
 
+    // ------------------------------------------------------------------
+    // University Scholarship
+    //
+    // Addressed to the member rather than the student: the member holds the
+    // membership the scholarship is granted against, and it is their contact
+    // details the profile carries. The student is named in the body so a member
+    // with more than one child knows which request the message is about.
+    // ------------------------------------------------------------------
+
+    /** Tells the member their University Scholarship request was marked INCOMPLETE, with the reason. */
+    public void notifyUniversityScholarshipMarkedIncomplete(
+            String memberId, String requestNo, String studentName, String reason) {
+        Member member = findMemberFor(memberId, requestNo, "university-scholarship-incomplete");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "University Scholarship Request " + requestNo + " \u2014 Incomplete",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The University Scholarship request below has been reviewed and marked as INCOMPLETE.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Student        : " + safeStudentName(studentName) + "\n"
+                        + "Status         : Incomplete\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please visit your District Office with the details described above so the\n"
+                        + "request can be completed and submitted for approval.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "university-scholarship-incomplete"
+        );
+    }
+
+    /** Tells the member their University Scholarship request was rejected, with the reason. */
+    public void notifyUniversityScholarshipRejected(
+            String memberId, String requestNo, String studentName, String reason) {
+        Member member = findMemberFor(memberId, requestNo, "university-scholarship-rejected");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "University Scholarship Request " + requestNo + " \u2014 Rejected",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The University Scholarship request below has been reviewed and has not been\n"
+                        + "approved.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Student        : " + safeStudentName(studentName) + "\n"
+                        + "Status         : Rejected\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please contact your District Office if you would like to discuss this decision.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "university-scholarship-rejected"
+        );
+    }
+
+    /**
+     * Tells the member their University Scholarship request was approved.
+     *
+     * No amount or payment date is quoted: approval grants the scholarship, and each
+     * instalment is released later through its own fund request.
+     */
+    public void notifyUniversityScholarshipApproved(
+            String memberId, String requestNo, String studentName) {
+        Member member = findMemberFor(memberId, requestNo, "university-scholarship-approved");
+        if (member == null) {
+            return;
+        }
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "University Scholarship Request " + requestNo + " \u2014 Approved",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The University Scholarship request below has been APPROVED.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Student        : " + safeStudentName(studentName) + "\n"
+                        + "Status         : Approved\n"
+                        + "\n"
+                        + "Scholarship payments are released through fund requests raised against this\n"
+                        + "scholarship. Please contact your District Office for any further information.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "university-scholarship-approved"
+        );
+    }
+
+    /**
+     * Tells the member a Fund Request against their scholarship was marked INCOMPLETE,
+     * with the reason.
+     *
+     * The scholarship's request number is quoted alongside the fund request's own, so
+     * a member holding more than one scholarship can tell which is meant.
+     */
+    public void notifyFundRequestMarkedIncomplete(
+            String memberId, String fundRequestNo, String scholarshipRequestNo,
+            String studentName, String period, String reason) {
+        Member member = findMemberFor(memberId, fundRequestNo, "fund-request-incomplete");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Scholarship Fund Request " + fundRequestNo + " \u2014 Incomplete",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The Fund Request below has been reviewed and marked as INCOMPLETE.\n"
+                        + "\n"
+                        + "Fund Request Number : " + fundRequestNo + "\n"
+                        + "Scholarship Number  : " + safeValue(scholarshipRequestNo) + "\n"
+                        + "Member Number       : " + memberId + "\n"
+                        + "Student             : " + safeStudentName(studentName) + "\n"
+                        + "Period              : " + safeValue(period) + "\n"
+                        + "Status              : Incomplete\n"
+                        + "Reason              : " + safeReason + "\n"
+                        + "\n"
+                        + "Please visit your District Office with the details described above so the\n"
+                        + "fund request can be completed and submitted for approval.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "fund-request-incomplete"
+        );
+    }
+
+    /** Tells the member a Fund Request against their scholarship was rejected, with the reason. */
+    public void notifyFundRequestRejected(
+            String memberId, String fundRequestNo, String scholarshipRequestNo,
+            String studentName, String period, String reason) {
+        Member member = findMemberFor(memberId, fundRequestNo, "fund-request-rejected");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Scholarship Fund Request " + fundRequestNo + " \u2014 Rejected",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The Fund Request below has been reviewed and has not been approved.\n"
+                        + "\n"
+                        + "Fund Request Number : " + fundRequestNo + "\n"
+                        + "Scholarship Number  : " + safeValue(scholarshipRequestNo) + "\n"
+                        + "Member Number       : " + memberId + "\n"
+                        + "Student             : " + safeStudentName(studentName) + "\n"
+                        + "Period              : " + safeValue(period) + "\n"
+                        + "Status              : Rejected\n"
+                        + "Reason              : " + safeReason + "\n"
+                        + "\n"
+                        + "The scholarship itself is unaffected. Please contact your District Office if\n"
+                        + "you would like to discuss this decision.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "fund-request-rejected"
+        );
+    }
+
+    /**
+     * Tells the member a Fund Request against their scholarship was approved.
+     *
+     * The requested amount is quoted rather than a disbursed one: approval authorises
+     * the payment, and the Finance Division releases it afterwards.
+     */
+    public void notifyFundRequestApproved(
+            String memberId, String fundRequestNo, String scholarshipRequestNo,
+            String studentName, String period, Double requestedAmount) {
+        Member member = findMemberFor(memberId, fundRequestNo, "fund-request-approved");
+        if (member == null) {
+            return;
+        }
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Scholarship Fund Request " + fundRequestNo + " \u2014 Approved",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "The Fund Request below has been APPROVED.\n"
+                        + "\n"
+                        + "Fund Request Number : " + fundRequestNo + "\n"
+                        + "Scholarship Number  : " + safeValue(scholarshipRequestNo) + "\n"
+                        + "Member Number       : " + memberId + "\n"
+                        + "Student             : " + safeStudentName(studentName) + "\n"
+                        + "Period              : " + safeValue(period) + "\n"
+                        + "Requested Amount    : " + formatFundAmount(requestedAmount) + "\n"
+                        + "Status              : Approved\n"
+                        + "\n"
+                        + "The request has been passed to the Finance Division, which will process the\n"
+                        + "payment. Please contact your District Office if you need any further\n"
+                        + "information.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "fund-request-approved"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // Member Transfers (MMC30)
+    // ------------------------------------------------------------------
+
+    /**
+     * Tells the member their transfer request was approved and their profile updated.
+     *
+     * The new working location and designation are quoted back so the member can check
+     * that what was applied is what they asked for - a transfer changes where their
+     * membership is administered, so a wrong value matters to them immediately.
+     */
+    public void notifyMemberTransferApproved(
+            String memberId, String requestNo, String newWorkingLocation, String newDesignation) {
+        Member member = findMemberFor(memberId, requestNo, "member-transfer-approved");
+        if (member == null) {
+            return;
+        }
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Member Transfer Request " + requestNo + " \u2014 Approved",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "Your Member Transfer request has been APPROVED and your membership profile\n"
+                        + "has been updated with the requested changes.\n"
+                        + "\n"
+                        + "Request Number   : " + requestNo + "\n"
+                        + "Member Number    : " + memberId + "\n"
+                        + "Status           : Approved\n"
+                        + "Working Location : " + safeValue(newWorkingLocation) + "\n"
+                        + "Designation      : " + safeValue(newDesignation) + "\n"
+                        + "\n"
+                        + "If your District has changed, your loans and savings accounts are being\n"
+                        + "moved to the new District Office. Please contact your District Office if any\n"
+                        + "of the details above are not what you requested.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "member-transfer-approved"
+        );
+    }
+
+    /** Tells the member their transfer request was rejected, with the reason. */
+    public void notifyMemberTransferRejected(String memberId, String requestNo, String reason) {
+        Member member = findMemberFor(memberId, requestNo, "member-transfer-rejected");
+        if (member == null) {
+            return;
+        }
+
+        String safeReason = reason == null ? "" : reason.trim();
+
+        dispatchEmail(
+                member.getEmailAddress(),
+                "Member Transfer Request " + requestNo + " \u2014 Rejected",
+                "Dear " + resolveMemberName(member) + ",\n"
+                        + "\n"
+                        + "Your Member Transfer request has been reviewed and has not been approved.\n"
+                        + "No changes have been made to your membership profile.\n"
+                        + "\n"
+                        + "Request Number : " + requestNo + "\n"
+                        + "Member Number  : " + memberId + "\n"
+                        + "Status         : Rejected\n"
+                        + "Reason         : " + safeReason + "\n"
+                        + "\n"
+                        + "Please contact your District Office if you would like to discuss this decision.\n"
+                        + "\n"
+                        + "This is an automatically generated message. Please do not reply.\n"
+                        + "\n"
+                        + "MemberConnect\n",
+                memberId,
+                "member-transfer-rejected"
+        );
+    }
+
+    /** Keeps a missing optional detail from printing as "null" in the body. */
+    private String safeValue(String value) {
+        return trimToNull(value) == null ? "-" : value.trim();
+    }
+
+    private String formatFundAmount(Double amount) {
+        return amount == null ? "-" : String.format("LKR %,.2f", amount);
+    }
+
+    /** A request saved before the student name was mandatory still has to address someone. */
+    private String safeStudentName(String studentName) {
+        return trimToNull(studentName) == null ? "-" : studentName.trim();
+    }
+
     /** A missing member is logged and swallowed, like every other failure here. */
     private Member findMemberFor(String memberId, String requestNo, String purpose) {
         Member member = memberRepository.findByMemberId(memberId).orElse(null);
@@ -750,11 +1211,7 @@ public class NotificationService {
         return member;
     }
 
-    /**
-     * A missing record is logged and swallowed, like every other failure here: the
-     * approval it relates to is already committed and must not be undone by a
-     * notification that cannot be addressed.
-     */
+    // A missing death record is logged and swallowed, like every other failure here.
     private MemberDeathRecord findDeathRecord(String recordNo, String purpose) {
         MemberDeathRecord record = memberDeathRecordRepository.findByRecordId(recordNo).orElse(null);
         if (record == null) {
@@ -800,24 +1257,7 @@ public class NotificationService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    // ------------------------------------------------------------------
-    // Inactivating Dormant Membership Profiles (SRS section 4)
-    //
-    // Two member-facing messages, not three. There is deliberately no
-    // notification when the board REJECTS an inactivation: the member never knew
-    // they were on a list, so "the Board declined to deactivate you" is noise
-    // with no action attached, and it would disclose an internal deliberation
-    // they were never party to.
-    // ------------------------------------------------------------------
-
-    /**
-     * MMD10 - the identification process has flagged this member as dormant.
-     *
-     * Sent while the member can still do something about it: a single
-     * transaction before the next board meeting clears the flag automatically.
-     * Without this the first they hear of it is the inactivation notice, by
-     * which point reversing it needs Head Office.
-     */
+    // Dormant membership notifications (selected for dormant)
     public void notifySelectedForDormant(String memberId, int dormantPeriodMonths) {
         Member member = memberRepository.findByMemberId(memberId).orElse(null);
 
@@ -855,7 +1295,7 @@ public class NotificationService {
         );
     }
 
-    /** MMD17 / SRS 4.2.6 - the Board approved the inactivation and it is applied. */
+    /**the Board approved the inactivation and it is applied. */
     public void notifyMembershipInactivatedDormant(String memberId, String listId) {
         Member member = memberRepository.findByMemberId(memberId).orElse(null);
 

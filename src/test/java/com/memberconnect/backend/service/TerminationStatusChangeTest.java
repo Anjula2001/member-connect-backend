@@ -68,6 +68,8 @@ class TerminationStatusChangeTest {
     @Mock private AuditService auditService;
 
 
+    @Mock private MemberStatusHistoryService memberStatusHistoryService;
+
     @InjectMocks private TerminationService terminationService;
 
     private Member member;

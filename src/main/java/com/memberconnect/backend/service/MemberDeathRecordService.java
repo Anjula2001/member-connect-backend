@@ -149,6 +149,7 @@ public class MemberDeathRecordService {
     private final AuditService auditService;
     private final DeathDonationEntitlementService entitlementService;
     private final DocumentService documentService;
+    private final MemberStatusHistoryService memberStatusHistoryService;
 
     public MemberDeathRecordService(
             MemberDeathRecordRepository recordRepository,
@@ -165,7 +166,8 @@ public class MemberDeathRecordService {
             ApplicationEventPublisher eventPublisher,
             AuditService auditService,
             DeathDonationEntitlementService entitlementService,
-            DocumentService documentService
+            DocumentService documentService,
+            MemberStatusHistoryService memberStatusHistoryService
     ) {
         this.recordRepository = recordRepository;
         this.documentRepository = documentRepository;
@@ -182,6 +184,7 @@ public class MemberDeathRecordService {
         this.auditService = auditService;
         this.entitlementService = entitlementService;
         this.documentService = documentService;
+        this.memberStatusHistoryService = memberStatusHistoryService;
     }
 
     public List<CauseOfDeathDTO> getCauseOfDeathOptions() {
@@ -395,6 +398,11 @@ public class MemberDeathRecordService {
         if (member.getStatus() == MemberStatus.ACTIVE) {
             member.setStatus(MemberStatus.MEMBER_DEATH_RECORDED);
             memberRepository.save(member);
+            // The date of death, not today: the member stopped being active when they
+            // died, which is what a later "was the member active on X" asks about
+            memberStatusHistoryService.record(member, MemberStatus.ACTIVE, member.getStatus(),
+                    saved.getDeceasedDate(), "MEMBER_DEATH_RECORDED",
+                    "Member death record " + saved.getId());
         }
 
         return mapToResponse(saved);
@@ -530,10 +538,16 @@ public class MemberDeathRecordService {
         if (newStatus == MemberDeathRecordStatus.INACTIVE) {
             member.setStatus(MemberStatus.ACTIVE);
             memberRepository.save(member);
+            memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                    null, "MEMBER_DEATH_RECORD_INACTIVE",
+                    "Member death record " + record.getId() + " made inactive");
         } else if (newStatus == MemberDeathRecordStatus.NEW
                 && member.getStatus() == MemberStatus.ACTIVE) {
             member.setStatus(MemberStatus.MEMBER_DEATH_RECORDED);
             memberRepository.save(member);
+            memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                    record.getDeceasedDate(), "MEMBER_DEATH_RECORD_REOPENED",
+                    "Member death record " + record.getId() + " reopened");
         }
 
         auditService.recordStatusChange(AuditService.MODULE_MEMBER_DEATH, saved.getId(),
@@ -567,6 +581,9 @@ public class MemberDeathRecordService {
         MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.MEMBER_DEATH_APPROVED);
         memberRepository.save(member);
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                saved.getDeceasedDate(), "MEMBER_DEATH_APPROVED",
+                "Member death record " + saved.getId() + " approved");
 
         auditService.recordStatusChange(AuditService.MODULE_MEMBER_DEATH, saved.getId(),
                 "APPROVE", decisionLevel, MemberDeathRecordStatus.APPROVED,
@@ -604,6 +621,9 @@ public class MemberDeathRecordService {
         MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.ACTIVE);
         memberRepository.save(member);
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                null, "MEMBER_DEATH_REJECTED",
+                "Member death record " + saved.getId() + " rejected");
 
         auditService.recordStatusChange(AuditService.MODULE_MEMBER_DEATH, saved.getId(),
                 "REJECT", decisionLevel, MemberDeathRecordStatus.REJECTED,
@@ -684,6 +704,9 @@ public class MemberDeathRecordService {
         MemberStatus previousMemberStatus = member.getStatus();
         member.setStatus(MemberStatus.DECEASED);
         memberRepository.save(member);
+        memberStatusHistoryService.record(member, previousMemberStatus, member.getStatus(),
+                record.getDeceasedDate(), "MEMBER_DECEASED",
+                "Member death record " + record.getId() + " completed by Finance");
 
         auditService.record(AuditService.MODULE_MEMBER_DEATH, record.getId(),
                 "FINANCE_COMPLETION", null, "COMPLETED",

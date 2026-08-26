@@ -45,7 +45,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.Set;
@@ -78,6 +80,12 @@ public class UniversityScholarshipService {
 
     @Autowired
     private com.memberconnect.backend.config.CurrentUserService currentUserService;
+
+    @Autowired
+    private MemberStatusHistoryService memberStatusHistoryService;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Value("${scholarship.required.remitted.months}")
     private int requiredRemittedMonths;
@@ -129,19 +137,28 @@ public class UniversityScholarshipService {
         this.fundRequestRepository = fundRequestRepository;
     }
    
-    // Validate member active status 
-    private void validateMemberActiveOnExamLastDate(UniversityScholarshipRequestDto dto) {
-        
-        Member member = memberRepository.findByMemberId(dto.getMemberId())
-                .orElseThrow(() -> new RuntimeException("Member not found"));
+    // Validates that the member was Active on the selected exam's last date.
+    private void validateMemberActiveDuringExam(String memberId, String examYear) {
+        if (!StringUtils.hasText(memberId) || !StringUtils.hasText(examYear)) {
+            return;
+        }
 
-        if (member.getStatus() == null || !"ACTIVE".equalsIgnoreCase(member.getStatus().name())) {
+        UniversityScholarshipExamMaster examMaster = examMasterRepository
+                .findByExamYear(examYear)
+                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
+
+        LocalDate examLastDate = examMaster.getExamLastDate();
+        if (examLastDate == null) {
+            throw new RuntimeException("Selected exam last date not found in Exam Master");
+        }
+
+        if (memberStatusHistoryService.wasNotActiveOn(memberId, examLastDate)) {
             throw new RuntimeException(
-                    "The University Scholarship Request cannot be saved. The Member is not Active "
+                    "The University Scholarship Request cannot be saved. The Member is not Active during the selected Exam"
             );
         }
     }
-    
+
     // Validate membership duration of the member at the time of exam last date
     private void validateMembershipDuration(UniversityScholarshipRequestDto dto) {
 
@@ -276,7 +293,15 @@ public class UniversityScholarshipService {
         validateMemberFinanceEligibility(member);
     }
 
-    // Validate that no other scholarship was approved for the member within a year from the exam last date
+    /**
+     * Validate that the member holds no other approved scholarship for the same exam
+     * year, approved within a year of that exam.
+     *
+     * The window runs from the last day of the month the exam's last date falls in -
+     * the exam is treated as finishing with its month rather than on the day the last
+     * paper happens to be sat - and forward one year from there. A scholarship counts
+     * as inside the window when the board's decision on it was recorded in that period.
+     */
     private void validateAnotherApprovedScholarshipWithinYear(UniversityScholarshipRequestDto dto) {
 
         UniversityScholarshipExamMaster examMaster = examMasterRepository
@@ -284,19 +309,22 @@ public class UniversityScholarshipService {
                 .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
 
         LocalDate examLastDate = examMaster.getExamLastDate();
+        if (examLastDate == null) {
+            throw new RuntimeException("Selected exam last date not found in Exam Master");
+        }
 
         Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
-        LocalDate startDate = examLastDate.minusYears(1);
-        LocalDate endDate = examLastDate;
+        LocalDate examMonthEnd = examLastDate.with(TemporalAdjusters.lastDayOfMonth());
 
         boolean exists = scholarshipRequestRepository
-            .existsByMember_MemberIdAndStatusAndAcademicYearStartDateBetween(
+            .existsApprovedForExamYearProcessedBetween(
                     member.getMemberId(),
                     UniversityScholarshipRequestStatus.APPROVED,
-                    startDate,
-                    endDate
+                    dto.getExamYear(),
+                    examMonthEnd.atStartOfDay(),
+                    examMonthEnd.plusYears(1).atTime(LocalTime.MAX)
             );
 
         if (exists) {
@@ -993,7 +1021,12 @@ public class UniversityScholarshipService {
 
         fundRequest.setStatus(UniversityScholarshipFundRequestStatus.INCOMPLETE);
         fundRequest.setIncompleteReason(reason.trim());
-        return toFundRequestDto(fundRequestRepository.save(fundRequest));
+
+        UniversityScholarshipFundRequest saved = fundRequestRepository.save(fundRequest);
+        notifyFundRequestMember(
+                saved, UniversityScholarshipFundRequestStatus.INCOMPLETE, reason.trim());
+
+        return toFundRequestDto(saved);
     }
 
     //change a fund request's status from View Mode.
@@ -1086,7 +1119,12 @@ public class UniversityScholarshipService {
 
             fundRequest.setStatus(UniversityScholarshipFundRequestStatus.INCOMPLETE);
             fundRequest.setIncompleteReason(reason.trim());
-            return toFundRequestDto(fundRequestRepository.save(fundRequest));
+
+            UniversityScholarshipFundRequest saved = fundRequestRepository.save(fundRequest);
+            notifyFundRequestMember(
+                    saved, UniversityScholarshipFundRequestStatus.INCOMPLETE, reason.trim());
+
+            return toFundRequestDto(saved);
         }
 
         if (fundRequest.getStatus() != UniversityScholarshipFundRequestStatus.SUBMITTED_FOR_COMMITTEE_APPROVAL) {
@@ -1097,7 +1135,12 @@ public class UniversityScholarshipService {
             fundRequest.setStatus(UniversityScholarshipFundRequestStatus.APPROVED);
             fundRequest.setIncompleteReason(null);
             fundRequest.setDecisionReason(null);
-            return toFundRequestDto(fundRequestRepository.save(fundRequest));
+
+            UniversityScholarshipFundRequest saved = fundRequestRepository.save(fundRequest);
+            notifyFundRequestMember(
+                    saved, UniversityScholarshipFundRequestStatus.APPROVED, null);
+
+            return toFundRequestDto(saved);
         }
 
         if (nextStatus == UniversityScholarshipFundRequestStatus.REJECTED) {
@@ -1108,7 +1151,12 @@ public class UniversityScholarshipService {
             fundRequest.setStatus(UniversityScholarshipFundRequestStatus.REJECTED);
             fundRequest.setIncompleteReason(null);
             fundRequest.setDecisionReason(reason.trim());
-            return toFundRequestDto(fundRequestRepository.save(fundRequest));
+
+            UniversityScholarshipFundRequest saved = fundRequestRepository.save(fundRequest);
+            notifyFundRequestMember(
+                    saved, UniversityScholarshipFundRequestStatus.REJECTED, reason.trim());
+
+            return toFundRequestDto(saved);
         }
 
         if (nextStatus != UniversityScholarshipFundRequestStatus.NEW) {
@@ -1192,7 +1240,7 @@ public class UniversityScholarshipService {
         Member member = memberRepository.findByMemberId(dto.getMemberId())
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
-        validateMemberActiveOnExamLastDate(dto);
+        validateMemberActiveDuringExam(dto.getMemberId(), dto.getExamYear());
         validateMembershipDuration(dto);
         validateFinanceEligibility(dto, member);
         validateAnotherApprovedScholarshipWithinYear(dto);
@@ -1331,6 +1379,15 @@ public class UniversityScholarshipService {
         if (request.getStatus() == UniversityScholarshipRequestStatus.APPROVED) {
                 throw new RuntimeException("Approved University Scholarship records cannot be edited from the normal edit screen");
         }
+
+        // The exam year is editable here, so the rule has to hold on the way out too -
+        // otherwise a request created against a valid exam could be switched to one the
+        // member was not Active for
+        validateMemberActiveDuringExam(
+                        dto.getMemberId() != null
+                                ? dto.getMemberId()
+                                : (request.getMember() != null ? request.getMember().getMemberId() : null),
+                        dto.getExamYear());
 
         if (dto.getMemberId() != null) {
                 Member member = memberRepository.findByMemberId(dto.getMemberId())
@@ -1563,7 +1620,11 @@ public class UniversityScholarshipService {
         request.setRejectReason(reason.trim());
         stampCommitteeDecision(request);
 
-        return scholarshipRequestRepository.save(request);
+        UniversityScholarshipRequest saved = scholarshipRequestRepository.save(request);
+
+        notifyMember(saved, UniversityScholarshipRequestStatus.REJECTED, reason.trim());
+
+        return saved;
     }
 
     private void stampCommitteeDecision(UniversityScholarshipRequest request) {
@@ -1585,7 +1646,77 @@ public class UniversityScholarshipService {
                 request.setStatus(UniversityScholarshipRequestStatus.INCOMPLETE);
                 request.setIncompleteReason(reason);
 
-                return scholarshipRequestRepository.save(request);
+                UniversityScholarshipRequest saved = scholarshipRequestRepository.save(request);
+
+                notifyMember(saved, UniversityScholarshipRequestStatus.INCOMPLETE, reason);
+
+                return saved;
+    }
+
+    /**
+     * Emails the member about a decision on their request.
+     *
+     * Best-effort by design: NotificationService swallows its own delivery failures, and
+     * this adds the same guard around a member that cannot be resolved, because an
+     * undeliverable email must never undo a decision that has already been recorded.
+     */
+    private void notifyMember(
+            UniversityScholarshipRequest request,
+            UniversityScholarshipRequestStatus status,
+            String reason
+    ) {
+        String memberId = request.getMember() != null ? request.getMember().getMemberId() : null;
+        if (!StringUtils.hasText(memberId)) {
+            return;
+        }
+
+        String requestNo = request.getUniversityScholarshipRequestID();
+        String studentName = request.getStudentName();
+
+        switch (status) {
+            case INCOMPLETE -> notificationService.notifyUniversityScholarshipMarkedIncomplete(
+                    memberId, requestNo, studentName, reason);
+            case REJECTED -> notificationService.notifyUniversityScholarshipRejected(
+                    memberId, requestNo, studentName, reason);
+            case APPROVED -> notificationService.notifyUniversityScholarshipApproved(
+                    memberId, requestNo, studentName);
+            default -> { }
+        }
+    }
+
+    /**
+     * Emails the member about a decision on a fund request raised against their
+     * scholarship. Best-effort, like notifyMember above.
+     */
+    private void notifyFundRequestMember(
+            UniversityScholarshipFundRequest fundRequest,
+            UniversityScholarshipFundRequestStatus status,
+            String reason
+    ) {
+        UniversityScholarshipRequest scholarship = fundRequest.getUniversityScholarshipRequest();
+        String memberId = scholarship != null && scholarship.getMember() != null
+                ? scholarship.getMember().getMemberId()
+                : null;
+
+        if (!StringUtils.hasText(memberId)) {
+            return;
+        }
+
+        String fundRequestNo = fundRequest.getFundRequestId();
+        String scholarshipNo = scholarship.getUniversityScholarshipRequestID();
+        String studentName = scholarship.getStudentName();
+        String period = fundRequest.getRequestedPeriod();
+
+        switch (status) {
+            case INCOMPLETE -> notificationService.notifyFundRequestMarkedIncomplete(
+                    memberId, fundRequestNo, scholarshipNo, studentName, period, reason);
+            case REJECTED -> notificationService.notifyFundRequestRejected(
+                    memberId, fundRequestNo, scholarshipNo, studentName, period, reason);
+            case APPROVED -> notificationService.notifyFundRequestApproved(
+                    memberId, fundRequestNo, scholarshipNo, studentName, period,
+                    fundRequest.getRequestedAmount());
+            default -> { }
+        }
     }
 
     // Attach scholarship requests to a normal board meeting for approval
@@ -1767,12 +1898,8 @@ public class UniversityScholarshipService {
                     }
                     request.setStatus(UniversityScholarshipRequestStatus.REJECTED);
                     request.setRejectReason(reason.trim());
-                    System.out.println("SIMULATING NOTIFICATION: SMS sent to Student " + request.getStudentName() + " and Member: Request rejected. Reason: " + reason);
-                    System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request rejected. Reason: " + reason);
                 } else {
                     request.setStatus(UniversityScholarshipRequestStatus.APPROVED);
-                    System.out.println("SIMULATING NOTIFICATION: SMS sent to Student " + request.getStudentName() + " and Member: Request approved.");
-                    System.out.println("SIMULATING NOTIFICATION: Email sent to Student " + request.getStudentName() + " and Member: Request approved.");
                 }
 
                 request.setProcessedBy(processedBy);
@@ -1786,7 +1913,11 @@ public class UniversityScholarshipService {
                     } catch (Exception ignored) {}
                 }
 
-                scholarshipRequestRepository.save(request);
+                UniversityScholarshipRequest saved = scholarshipRequestRepository.save(request);
+
+                // After the save, so the member is only told about a decision that was
+                // actually recorded
+                notifyMember(saved, saved.getStatus(), saved.getRejectReason());
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to process decisions: " + e.getMessage(), e);
@@ -1830,14 +1961,6 @@ public class UniversityScholarshipService {
         if (!isUniversityStatusTransitionAllowed(currentStatus, newStatus)) {
             throw new RuntimeException(
                     "Cannot change status from " + currentStatus + " to " + newStatus);
-        }
-
-        if (newStatus == UniversityScholarshipRequestStatus.NEW
-                && request.getApprovalListId() != null
-                && !request.getApprovalListId().isBlank()) {
-            throw new RuntimeException(
-                    "This request is attached to approval list " + request.getApprovalListId()
-                            + " and cannot be returned to New. Remove it from the list first.");
         }
 
         request.setStatus(newStatus);
