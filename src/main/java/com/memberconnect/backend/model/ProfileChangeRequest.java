@@ -48,6 +48,24 @@ public abstract class ProfileChangeRequest {
     @Column(name = "status")
     private ApplicationStatus status;
 
+    /**
+     * The status held immediately before the request was added to a board approval
+     * list, so deleting that list can put it back.
+     *
+     * MMC10 and MMC23 both say a deleted list rolls its requests back "to the
+     * 'Submitted for Approval' status or 'Rejected' status depend on what status it was
+     * originally". Without somewhere to record the original, delete could only ever
+     * write Submitted for Approval - which erased a prior rejection, even though
+     * MMC08/MMC21 explicitly allow Rejected requests onto a new list.
+     *
+     * Nullable: rows listed before this column existed have nothing recorded, and fall
+     * back to Submitted for Approval as before. Mirrors
+     * Member_Application.statusBeforeBoardList, which solved the same problem.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status_before_board_list")
+    private ApplicationStatus statusBeforeBoardList;
+
     /** Required whenever the request is rejected (MMC04, MMC12, MMC17, MMC25). */
     @Column(name = "reject_reason", columnDefinition = "TEXT")
     private String rejectReason;
@@ -87,6 +105,14 @@ public abstract class ProfileChangeRequest {
 
     public void setRequestedDate(LocalDate requestedDate) {
         this.requestedDate = requestedDate;
+    }
+
+    public ApplicationStatus getStatusBeforeBoardList() {
+        return statusBeforeBoardList;
+    }
+
+    public void setStatusBeforeBoardList(ApplicationStatus statusBeforeBoardList) {
+        this.statusBeforeBoardList = statusBeforeBoardList;
     }
 
     public ApplicationStatus getStatus() {

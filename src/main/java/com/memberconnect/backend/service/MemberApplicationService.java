@@ -2,6 +2,7 @@ package com.memberconnect.backend.service;
 import com.memberconnect.backend.dto.NicValidationResponseDTO;
 import com.memberconnect.backend.dto.MemberApplicationDTO;
 import com.memberconnect.backend.dto.RemittanceMasterAccountDTO;
+import com.memberconnect.backend.dto.ApplicationSearchPageDTO;
 import com.memberconnect.backend.enums.ApplicationStatus;
 import com.memberconnect.backend.enums.MemberStatus;
 import com.memberconnect.backend.enums.RemittanceAccountCode;
@@ -19,6 +20,10 @@ import com.memberconnect.backend.repository.TerminationRequestRepository;
 import org.modelmapper.ModelMapper;
 import org.modelmapper.TypeToken;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -29,7 +34,6 @@ import org.springframework.http.HttpStatus;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.Period;
-import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -39,7 +43,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.lang.reflect.Field;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -47,6 +50,12 @@ import java.util.stream.Collectors;
 public class MemberApplicationService {
     private static final Pattern OLD_NIC_PATTERN = Pattern.compile("^\\d{9}[VX]$");
     private static final Pattern NEW_NIC_PATTERN = Pattern.compile("^\\d{12}$");
+
+    /** Matches DEFAULT_PAGE_SIZE in the frontend's TablePagination control. */
+    private static final int DEFAULT_PAGE_SIZE = 10;
+
+    /** Guards against a caller asking for the whole table in one page. */
+    private static final int MAX_PAGE_SIZE = 200;
 
     @Autowired
     private MemberApplicationRepository memberApplicationRepository;
@@ -199,98 +208,92 @@ public class MemberApplicationService {
     }
 
     /**
-     * Server-side search for the New Member Registration List. Previously the whole
-     * application table was shipped to the browser and filtered there, which does not
-     * scale; this mirrors MemberService.searchMembers().
+     * One page of the New Member Registration List, filtered, sorted and sliced by the
+     * database.
+     *
+     * This used to read the entire application table with findAll(), filter and sort it
+     * in the JVM, map every survivor to a DTO and hand the lot to the browser, which
+     * then showed ten of them. Retrieval cost grew with the size of the table no matter
+     * how narrow the filter was. Now the only rows that leave the database are the ones
+     * on the requested page, and the counts beside them come from COUNT queries rather
+     * than from the length of a list nobody wanted.
      *
      * Applications already converted into Members (APPROVED) are excluded — the spec
      * states this screen only shows registrations not yet approved as Members.
      */
-    public List<MemberApplicationDTO> searchApplications(
+    public ApplicationSearchPageDTO searchApplications(
             String query,
             List<ApplicationStatus> statuses,
             List<String> locations,
             LocalDate receivedFrom,
             LocalDate receivedTo,
             String sortBy,
-            String sortDirection) {
+            String sortDirection,
+            Integer page,
+            Integer size) {
 
-        final String q = (query == null || query.isBlank()) ? null : query.toLowerCase().trim();
-        final boolean filterByStatus = statuses != null && !statuses.isEmpty();
-        final boolean filterByLocation = locations != null && !locations.isEmpty();
+        Specification<Member_Application> spec = MemberApplicationSpecifications.filter(
+                query, statuses, locations, receivedFrom, receivedTo);
 
-        List<Member_Application> results = memberApplicationRepository.findAll().stream()
-                .filter(app -> app.getStatus() != ApplicationStatus.APPROVED)
-                .filter(app -> !filterByStatus || statuses.contains(app.getStatus()))
-                .filter(app -> !filterByLocation
-                        || (app.getSubmissionLocation() != null
-                            && locations.stream().anyMatch(loc -> loc.equalsIgnoreCase(app.getSubmissionLocation()))))
-                .filter(app -> matchesReceivedPeriod(app.getApplicationDate(), receivedFrom, receivedTo))
-                .filter(app -> q == null || matchesKeyword(app, q))
-                .collect(Collectors.toCollection(java.util.ArrayList::new));
+        Sort sort = MemberApplicationSpecifications.sort(sortBy, sortDirection);
+        int pageNumber = (page == null || page < 0) ? 0 : page;
+        int pageSize = (size == null || size < 1) ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
 
-        results.sort(applicationComparator(sortBy, sortDirection));
+        Page<Member_Application> result = memberApplicationRepository.findAll(
+                spec, PageRequest.of(pageNumber, pageSize, sort));
 
-        return results.stream()
+        // Deleting the last row of the last page, or narrowing the filter, leaves the
+        // requested page past the end of what is left. Answering with the last page
+        // that does exist saves the browser from noticing the empty page and asking a
+        // second time; it reports the page it actually returned so the caller can
+        // follow.
+        if (pageNumber > 0 && result.getContent().isEmpty()) {
+            pageNumber = result.getTotalPages() == 0 ? 0 : result.getTotalPages() - 1;
+            result = memberApplicationRepository.findAll(
+                    spec, PageRequest.of(pageNumber, pageSize, sort));
+        }
+
+        List<MemberApplicationDTO> content = result.getContent().stream()
                 .map(app -> modelMapper.map(app, MemberApplicationDTO.class))
                 .toList();
-    }
 
-    /** Search across the applicant's names and NIC, as the spec specifies. */
-    private boolean matchesKeyword(Member_Application app, String q) {
-        return containsIgnoreCase(app.getFullName(), q)
-                || containsIgnoreCase(app.getNameAsInPayroll(), q)
-                || containsIgnoreCase(app.getNameWithInitials(), q)
-                || containsIgnoreCase(app.getNicNumber(), q);
-    }
+        long selectableCount = memberApplicationRepository.count(
+                spec.and(MemberApplicationSpecifications.selectableOnly()));
 
-    private boolean containsIgnoreCase(String value, String q) {
-        return value != null && value.toLowerCase().contains(q);
+        return new ApplicationSearchPageDTO(
+                content,
+                pageNumber,
+                pageSize,
+                result.getTotalElements(),
+                result.getTotalPages(),
+                selectableCount);
     }
 
     /**
-     * applicationDate is stored as a String; parse defensively so a malformed or empty
-     * value simply fails the date filter instead of breaking the whole search.
+     * Every application ID matching the filter that the operator is allowed to tick.
+     *
+     * The select-all checkbox covers the whole result rather than the visible page, so
+     * that an operator building a board approval list of 23 applications does not have
+     * to walk three pages to tick them. Answering it needs identifiers, not records, so
+     * this reads one column and skips the DTO mapping entirely.
      */
-    private boolean matchesReceivedPeriod(String applicationDate, LocalDate from, LocalDate to) {
-        if (from == null && to == null) {
-            return true;
-        }
-        LocalDate parsed = parseApplicationDate(applicationDate);
-        if (parsed == null) {
-            return false;
-        }
-        return (from == null || !parsed.isBefore(from)) && (to == null || !parsed.isAfter(to));
-    }
+    public List<String> selectableApplicationIds(
+            String query,
+            List<ApplicationStatus> statuses,
+            List<String> locations,
+            LocalDate receivedFrom,
+            LocalDate receivedTo) {
 
-    private LocalDate parseApplicationDate(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalDate.parse(value.trim());
-        } catch (DateTimeParseException error) {
-            return null;
-        }
-    }
+        Specification<Member_Application> spec = MemberApplicationSpecifications
+                .filter(query, statuses, locations, receivedFrom, receivedTo)
+                .and(MemberApplicationSpecifications.selectableOnly());
 
-    private Comparator<Member_Application> applicationComparator(String sortBy, String sortDirection) {
-        Comparator<Member_Application> comparator = switch (sortBy == null ? "" : sortBy) {
-            case "status" -> Comparator.comparing(
-                    app -> app.getStatus() == null ? "" : app.getStatus().name(),
-                    Comparator.nullsLast(Comparator.naturalOrder()));
-            case "district" -> Comparator.comparing(
-                    Member_Application::getSubmissionLocation,
-                    Comparator.nullsLast(Comparator.naturalOrder()));
-            case "zone" -> Comparator.comparing(
-                    Member_Application::getEducationalZone,
-                    Comparator.nullsLast(Comparator.naturalOrder()));
-            // Default is applied date; fall back to the raw string when unparseable.
-            default -> Comparator.comparing(
-                    app -> parseApplicationDate(app.getApplicationDate()),
-                    Comparator.nullsLast(Comparator.naturalOrder()));
-        };
-        return "desc".equalsIgnoreCase(sortDirection) ? comparator.reversed() : comparator;
+        return memberApplicationRepository
+                .findBy(spec, q -> q.as(MemberApplicationRepository.ApplicationIdView.class).all())
+                .stream()
+                .map(MemberApplicationRepository.ApplicationIdView::getApplicationID)
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     public MemberApplicationDTO updateMemberApplication(Long id, MemberApplicationDTO dto) {
@@ -568,6 +571,26 @@ public class MemberApplicationService {
     }
 
     private void validateDistrictZoneOnUpdate(Member_Application existing, MemberApplicationDTO dto) {
+        /*
+         * Only validate when this update actually touches one of the two fields.
+         *
+         * Running unconditionally meant that when a payload carried neither field, the
+         * check fell back to the STORED pair and validated that instead. An application
+         * already holding a combination absent from the district/zone master - legacy
+         * data, or a zone since renamed or removed - could then never be updated again
+         * for any reason, because every update re-validated data it was not changing.
+         * Board Approvals hit this on a status-only rejection: the board's decision was
+         * refused with "Invalid educational district and zone combination", which names
+         * two fields the rejection never mentioned.
+         *
+         * The sibling checks beside the two call sites (NIC, applicant age) are all
+         * conditional on their field being present; this one was the exception. Editing
+         * still cannot INTRODUCE a bad combination - that is what the guard is for.
+         */
+        if (dto.getEducationalDistrict() == null && dto.getEducationalZone() == null) {
+            return;
+        }
+
         String district = dto.getEducationalDistrict() != null
                 ? dto.getEducationalDistrict()
                 : existing.getEducationalDistrict();
@@ -660,5 +683,19 @@ public class MemberApplicationService {
         }
 
         return keys;
+    }
+
+    /**
+     * How many rows exist, optionally narrowed to submission locations.
+     *
+     * Same location contract as the search endpoint beside it: the caller states the
+     * locations, an empty list means no narrowing. Answered with a COUNT rather than by
+     * returning rows for the caller to measure.
+     */
+    public long countApplications(java.util.List<String> locations) {
+        if (locations == null || locations.isEmpty()) {
+            return memberApplicationRepository.count();
+        }
+        return memberApplicationRepository.countBySubmissionLocationIn(locations);
     }
 }

@@ -21,4 +21,12 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     // Used to derive the next sequence number for the "MEM-<year>-<seq>" ID format.
     Optional<Member> findFirstByMemberIdStartingWithOrderByMemberIdDesc(String prefix);
+
+    /**
+     * Counted in the database rather than by loading rows.
+     *
+     * The dashboard needs a number, not the records behind it; reading the whole
+     * table to call .length on it is what this replaces.
+     */
+    long countBySubmissionLocationIn(Collection<String> locations);
 }

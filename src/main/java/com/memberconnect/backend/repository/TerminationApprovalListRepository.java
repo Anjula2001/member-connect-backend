@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import com.memberconnect.backend.enums.TerminationApprovalListStatus;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,4 +42,12 @@ public interface TerminationApprovalListRepository extends JpaRepository<Termina
 
 	// Used to block deletion of a Board Meeting that still has approvals attached.
 	boolean existsByBoardMeetingId(Long boardMeetingId);
+
+    /**
+     * Counted in the database rather than by loading rows.
+     *
+     * The dashboard needs a number, not the records behind it; reading the whole
+     * table to call .length on it is what this replaces.
+     */
+    long countByStatusIn(Collection<TerminationApprovalListStatus> statuses);
 }

@@ -70,4 +70,14 @@ public class TerminationApprovalListController {
     public String deleteApprovalList(@PathVariable String listId) {
         return approvalListService.deleteApprovalList(listId);
     }
+
+    /**
+     * Row count for the dashboard, so a counter does not have to download the rows.
+     * Inherits the same authorization as the listing beside it.
+     */
+    @GetMapping("/count")
+    public java.util.Map<String, Long> countApprovalLists(
+            @RequestParam(required = false) java.util.List<String> statuses) {
+        return java.util.Map.of("count", approvalListService.countByStatuses(statuses));
+    }
 }

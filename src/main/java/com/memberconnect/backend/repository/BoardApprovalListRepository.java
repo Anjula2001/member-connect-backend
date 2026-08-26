@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -67,4 +68,12 @@ public interface BoardApprovalListRepository extends JpaRepository<BoardApproval
 	List<Long> findApplicationIdsInMeetingDateRange(
 			@Param("from") LocalDate from,
 			@Param("to") LocalDate to);
+
+    /**
+     * Counted in the database rather than by loading rows.
+     *
+     * The dashboard needs a number, not the records behind it; reading the whole
+     * table to call .length on it is what this replaces.
+     */
+    long countByStatusIn(Collection<String> statuses);
 }

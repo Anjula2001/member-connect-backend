@@ -174,4 +174,16 @@ public class MemberController {
                 "loans", loans,
                 "obligations", obligations));
     }
+
+    /**
+     * Row count for the dashboard, so a counter does not have to download the rows.
+     * Inherits the same authorization as the listing beside it.
+     */
+    @PreAuthorize("hasAnyRole('DISTRICT_OFFICE','DISTRICT_COMMITTEE','PD_COMMITTEE',"
+            + "'HEAD_OFFICE','BOARD_SECRETARY','SUPER_ADMIN')")
+    @GetMapping("/count")
+    public java.util.Map<String, Long> countMembers(
+            @RequestParam(required = false) java.util.List<String> locations) {
+        return java.util.Map.of("count", memberService.countMembers(locations));
+    }
 }

@@ -461,4 +461,27 @@ public class TerminationApprovalListService {
         dto.setRequestCount(requestCount);
         return dto;
     }
+
+    /**
+     * How many lists sit in the given statuses.
+     *
+     * Answered with a COUNT in the database. The dashboard previously fetched every
+     * list and filtered in the browser to arrive at the same number.
+     */
+    public long countByStatuses(java.util.List<String> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return approvalListRepository.count();
+        }
+        java.util.List<com.memberconnect.backend.enums.TerminationApprovalListStatus> parsed =
+                new java.util.ArrayList<>();
+        for (String status : statuses) {
+            try {
+                parsed.add(com.memberconnect.backend.enums.TerminationApprovalListStatus
+                        .valueOf(status.trim().toUpperCase()));
+            } catch (IllegalArgumentException ignored) {
+                // An unrecognised status matches nothing rather than everything.
+            }
+        }
+        return parsed.isEmpty() ? 0L : approvalListRepository.countByStatusIn(parsed);
+    }
 }

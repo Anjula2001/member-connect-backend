@@ -410,4 +410,18 @@ public class MemberService {
         }
         return dto;
     }
+
+    /**
+     * How many rows exist, optionally narrowed to submission locations.
+     *
+     * Same location contract as the search endpoint beside it: the caller states the
+     * locations, an empty list means no narrowing. Answered with a COUNT rather than by
+     * returning rows for the caller to measure.
+     */
+    public long countMembers(java.util.List<String> locations) {
+        if (locations == null || locations.isEmpty()) {
+            return memberRepository.count();
+        }
+        return memberRepository.countBySubmissionLocationIn(locations);
+    }
 }

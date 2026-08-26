@@ -203,6 +203,10 @@ public class BoardApprovalListService {
 				NameChangeRequest ncr = nameChangeRequestRepo.findById(id)
 						.orElseThrow(() -> new RuntimeException("Name change request not found: " + id));
 				statusPolicy.assertListable(ncr.getStatus(), ncr.getRequestNo());
+				// Remember what it was, so deleting this list can put it back (MMC10).
+				// assertListable allows Submitted for Approval and Rejected, and the two
+				// must be told apart on rollback.
+				ncr.setStatusBeforeBoardList(ncr.getStatus());
 				ncr.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 				nameChangeRequestRepo.save(ncr);
 			}
@@ -215,6 +219,8 @@ public class BoardApprovalListService {
 				NommineChangeRequests ncr = nomineeChangeRequestRepo.findById(id)
 						.orElseThrow(() -> new RuntimeException("Nominee change request not found: " + id));
 				statusPolicy.assertListable(ncr.getStatus(), ncr.getRequestNo());
+				// Remember what it was, so deleting this list can put it back (MMC23).
+				ncr.setStatusBeforeBoardList(ncr.getStatus());
 				ncr.setStatus(ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST);
 				nomineeChangeRequestRepo.save(ncr);
 			}
@@ -623,6 +629,18 @@ public class BoardApprovalListService {
 
 	// ── Delete ───────────────────────────────────────────────────────────
 
+	/**
+	 * The status a de-listed row goes back to.
+	 *
+	 * Null means the row was listed before the prior status was recorded, so there is
+	 * nothing to restore and Submitted for Approval is the safe reading.
+	 */
+	private ApplicationStatus restoredStatusFor(ApplicationStatus statusBeforeBoardList) {
+		return statusBeforeBoardList == null
+				? ApplicationStatus.SUBMITTED_FOR_APPROVAL
+				: statusBeforeBoardList;
+	}
+
 	public String deleteBoardApprovalList(String listId) {
 		BoardApprovalList entity = boardApprovalListRepository.findByListId(listId)
 				.orElseThrow(() -> new RuntimeException("Board approval list not found"));
@@ -637,10 +655,7 @@ public class BoardApprovalListService {
 				//
 				// Rows listed before StatusBeforeBoardList existed have nothing recorded,
 				// so they keep the old fallback.
-				ApplicationStatus restored = application.getStatusBeforeBoardList() == null
-						? ApplicationStatus.SUBMITTED_FOR_APPROVAL
-						: application.getStatusBeforeBoardList();
-				application.setStatus(restored);
+				application.setStatus(restoredStatusFor(application.getStatusBeforeBoardList()));
 				application.setStatusBeforeBoardList(null);
 				memberApplicationRepository.save(application);
 			}
@@ -651,7 +666,13 @@ public class BoardApprovalListService {
 		for (Integer id : nameChangeIds) {
 			nameChangeRequestRepo.findById(id).ifPresent(ncr -> {
 				if (ncr.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
-					ncr.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+					// MMC10: back to whichever of Submitted for Approval / Rejected it
+					// held before listing. Writing Submitted for Approval unconditionally
+					// erased a prior rejection - the same defect already fixed above for
+					// applications. Rows listed before the column existed have nothing
+					// recorded and keep the old fallback.
+					ncr.setStatus(restoredStatusFor(ncr.getStatusBeforeBoardList()));
+					ncr.setStatusBeforeBoardList(null);
 					nameChangeRequestRepo.save(ncr);
 				}
 			});
@@ -662,7 +683,9 @@ public class BoardApprovalListService {
 		for (Integer id : nomineeChangeIds) {
 			nomineeChangeRequestRepo.findById(id).ifPresent(ncr -> {
 				if (ncr.getStatus() == ApplicationStatus.ADDED_TO_BOARD_APPROVAL_LIST) {
-					ncr.setStatus(ApplicationStatus.SUBMITTED_FOR_APPROVAL);
+					// MMC23: same rollback rule as name changes above.
+					ncr.setStatus(restoredStatusFor(ncr.getStatusBeforeBoardList()));
+					ncr.setStatusBeforeBoardList(null);
 					nomineeChangeRequestRepo.save(ncr);
 				}
 			});
@@ -671,4 +694,17 @@ public class BoardApprovalListService {
 		boardApprovalListRepository.delete(entity);
 		return "Board approval list deleted successfully";
 	}
+
+    /**
+     * How many lists sit in the given statuses.
+     *
+     * Answered with a COUNT in the database. The dashboard previously fetched every
+     * list and filtered in the browser to arrive at the same number.
+     */
+    public long countByStatuses(java.util.List<String> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return boardApprovalListRepository.count();
+        }
+        return boardApprovalListRepository.countByStatusIn(statuses);
+    }
 }

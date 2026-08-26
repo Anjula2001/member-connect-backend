@@ -85,8 +85,17 @@ public class MemberTransferController {
     // Endpoint to approve a member transfer request
     @PreAuthorize("hasAuthority('MT_REQUEST_APPROVE')")
     @PostMapping("/approve/{requestId}")
-    public MemberTransferRequest approveRequest(@PathVariable String requestId) {
-        return memberTransferService.approveRequest(requestId);
+    public ResponseEntity<?> approveRequest(@PathVariable String requestId) {
+        // Same shape as changeRequestStatus below: the service rejects a transition the
+        // spec does not allow, and the caller is told why rather than getting a bare 500.
+        try {
+            return ResponseEntity.ok(memberTransferService.approveRequest(requestId));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", e.getMessage() != null
+                            ? e.getMessage()
+                            : "Failed to approve the request"));
+        }
     }
 
     // Endpoint to change a request's status from View Mode. The only transition it
@@ -111,11 +120,18 @@ public class MemberTransferController {
     // Endpoint to reject a member transfer request
     @PreAuthorize("hasAuthority('MT_REQUEST_APPROVE')")
     @PostMapping("/reject/{requestId}")
-    public MemberTransferRequest rejectRequest(
+    public ResponseEntity<?> rejectRequest(
             @PathVariable String requestId,
             @RequestBody java.util.Map<String, String> body
     ) {
-        String reason = body.get("decisionReason");
-        return memberTransferService.rejectRequest(requestId, reason);
+        try {
+            return ResponseEntity.ok(
+                    memberTransferService.rejectRequest(requestId, body.get("decisionReason")));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", e.getMessage() != null
+                            ? e.getMessage()
+                            : "Failed to reject the request"));
+        }
     }
 }
