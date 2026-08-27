@@ -121,12 +121,12 @@ public final class RolePermissions {
                 Permission.US_FINANCE_DISBURSE,
                 Permission.US_MASTER_VIEW,
                 // Member Transfers (MMC29-MMC30). MMC30 names the District Office as
-                // the approver, resolved here in favour of Head Office for the reason
-                // given at the top of this file: the office that raises a request does
-                // not approve it. District Office keeps VIEW and CREATE only.
-                Permission.MT_REQUEST_VIEW,
-                Permission.MT_REQUEST_APPROVE,
-                Permission.MT_REQUEST_SET_INACTIVE));
+                // the approver. That was previously resolved here in favour of Head
+                // Office, and the product decision of 2026-08-27 reverses it: the
+                // decision goes back where MMC30 puts it, with an authorised District
+                // Office officer. Head Office is left reading transfers only, plus the
+                // Inactive right as an authorised officer — see AUTHORITY_GRANTS.
+                Permission.MT_REQUEST_VIEW));
 
         // Board Secretary — the same Grade 5 approval track, plus delete privileges.
         // Mirrors DELETE_RIGHTS_ROLES in the frontend's Member Registration matrix so the
@@ -170,11 +170,10 @@ public final class RolePermissions {
                 Permission.US_FUND_SUBMIT,
                 Permission.US_FUND_INCOMPLETE,
                 Permission.US_MASTER_VIEW,
-                // Member Transfers. Mirrors this role's standing elsewhere: it reads
-                // requests and holds the Inactive right, but approval of a transfer
-                // stays with Head Office.
-                Permission.MT_REQUEST_VIEW,
-                Permission.MT_REQUEST_SET_INACTIVE));
+                // Member Transfers. Reads requests only: MT_REQUEST_SET_INACTIVE went
+                // to AUTHORITY_GRANTS on 2026-08-27 and this role cannot carry the
+                // flag, so there is no authorised Board Secretary to grant it back to.
+                Permission.MT_REQUEST_VIEW));
 
         // Scholarship Officer — not named as an actor anywhere in the SRS, but it is the
         // the seat chosen for the University Scholarship Committee (MMS26). It reads the
@@ -258,6 +257,20 @@ public final class RolePermissions {
      * US_FUND_CREATE, US_FUND_SUBMIT and US_FUND_INCOMPLETE were deliberately left in
      * MATRIX: raising and preparing a fund request stays the whole office's work.
      *
+     * Member Transfers joined on the same date, and this one reverses an earlier
+     * resolution rather than narrowing an existing one:
+     *
+     *   Approve / Reject a transfer ....... authorised District Office (nobody else)
+     *   change a transfer's status ........ authorised District Office, authorised Head Office
+     *
+     * MMC30 names the District Office as the approver; this file previously overrode
+     * that in favour of Head Office. The override is gone, so HEAD_OFFICE now holds no
+     * MT_REQUEST_APPROVE at all and an authorised Head Office officer may cancel a
+     * transfer without being able to decide one. MT_REQUEST_CREATE stays in MATRIX for
+     * DISTRICT_OFFICE, which makes the flag the only maker/checker control left on this
+     * module - it is worth something only while some District Office accounts are left
+     * unauthorised.
+     *
      * Because User.getAuthorities() emits these alongside the role's own permissions,
      * the existing @PreAuthorize("hasAuthority('US_...')") on each endpoint enforces the
      * narrowing without any controller change.
@@ -274,7 +287,14 @@ public final class RolePermissions {
                 // committee gate that exists to scrutinise it.
                 Permission.US_REQUEST_EDIT,
                 Permission.US_REQUEST_SET_INACTIVE,
-                Permission.US_REQUEST_REOPEN));
+                Permission.US_REQUEST_REOPEN,
+                // Member Transfers (2026-08-27). MMC30 seats the decision here, so an
+                // authorised officer both decides a transfer and may take one to
+                // Inactive. MT_REQUEST_CREATE stays in MATRIX: any District Office
+                // clerk raises a transfer, only an authorised officer decides it —
+                // which is the whole maker/checker split on this module now.
+                Permission.MT_REQUEST_APPROVE,
+                Permission.MT_REQUEST_SET_INACTIVE));
 
         // University (2026-08-27). Head Office holds no US_REQUEST_CREATE, so seating a
         // second Committee signature here does not collapse the maker/checker split the
@@ -294,7 +314,12 @@ public final class RolePermissions {
                 Permission.US_FUND_EDIT,
                 Permission.US_FUND_APPROVE,
                 Permission.US_FUND_SET_INACTIVE,
-                Permission.US_FUND_REOPEN));
+                Permission.US_FUND_REOPEN,
+                // Member Transfers (2026-08-27). The Inactive right only — Head Office
+                // holds no MT_REQUEST_APPROVE in any form after MMC30 was restored to
+                // the District Office. An authorised Head Office officer may cancel a
+                // transfer but may not decide one; that asymmetry is deliberate.
+                Permission.MT_REQUEST_SET_INACTIVE));
     }
 
     private RolePermissions() {
