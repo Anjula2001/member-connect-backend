@@ -25,7 +25,11 @@ import com.memberconnect.backend.enums.Role;
  * MMS26 puts a Committee between submission and the Board. The SRS seats that
  * Committee at Head Office, but Head Office also runs the Board step — so holding
  * both would collapse two gates into one signature. US_COMMITTEE_APPROVE is therefore
- * given to SCHOLARSHIP_OFFICER and withheld from the Board roles.
+ * given to SCHOLARSHIP_OFFICER and withheld from the Board roles - with one narrowing
+ * added on 2026-08-27: an *authorised* Head Office account holds it through
+ * AUTHORITY_GRANTS, so the Committee signature belongs to a named officer rather than
+ * to every Head Office login. District Office is still excluded outright, because it
+ * raises requests.
  *
  * Roles absent from this map (DEATH_DONATION_OFFICER) hold no Grade 5 rights at all,
  * rather than falling through to a permissive default.
@@ -65,9 +69,11 @@ public final class RolePermissions {
                 Permission.RET_REQUEST_RETURN_TO_NEW,
                 Permission.RET_REQUEST_SET_INACTIVE,
                 // University (MMS21-MMS25): raises and maintains requests only.
+                // US_REQUEST_EDIT moved to AUTHORITY_GRANTS on 2026-08-27 — editing a
+                // NEW/INCOMPLETE request is an authorised officer's right, not the
+                // whole office's.
                 Permission.US_REQUEST_VIEW,
                 Permission.US_REQUEST_CREATE,
-                Permission.US_REQUEST_EDIT,
                 Permission.US_REQUEST_SUBMIT,
                 Permission.US_REQUEST_INCOMPLETE,
                 Permission.US_MASTER_VIEW,
@@ -96,23 +102,22 @@ public final class RolePermissions {
                 Permission.RET_REQUEST_SET_INACTIVE,
                 Permission.RET_REQUEST_RETURN_TO_NEW,
                 // University: the Board half plus fund requests (MMS27-MMS48).
+                // US_REQUEST_EDIT, US_REQUEST_SET_INACTIVE, US_REQUEST_REOPEN,
+                // US_LIST_DELETE and US_COMMITTEE_APPROVE are NOT here as of
+                // 2026-08-27 — see AUTHORITY_GRANTS. Nor are US_FUND_EDIT,
+                // US_FUND_APPROVE, US_FUND_SET_INACTIVE and US_FUND_REOPEN, moved
+                // there the same day: the office raises fund requests, an authorised
+                // officer decides and alters them.
                 Permission.US_REQUEST_VIEW,
-                Permission.US_REQUEST_SET_INACTIVE,
-                Permission.US_REQUEST_REOPEN,
                 Permission.US_LIST_VIEW,
                 Permission.US_LIST_CREATE,
                 Permission.US_LIST_PRINT,
                 Permission.US_LIST_PROCESS,
-                Permission.US_LIST_DELETE,
                 Permission.US_APPROVED_EDIT,
                 Permission.US_FUND_VIEW,
                 Permission.US_FUND_CREATE,
-                Permission.US_FUND_EDIT,
                 Permission.US_FUND_SUBMIT,
                 Permission.US_FUND_INCOMPLETE,
-                Permission.US_FUND_APPROVE,
-                Permission.US_FUND_SET_INACTIVE,
-                Permission.US_FUND_REOPEN,
                 Permission.US_FINANCE_DISBURSE,
                 Permission.US_MASTER_VIEW,
                 // Member Transfers (MMC29-MMC30). MMC30 names the District Office as
@@ -146,23 +151,24 @@ public final class RolePermissions {
                 Permission.RET_REQUEST_SET_INACTIVE,
                 Permission.RET_REQUEST_RETURN_TO_NEW,
                 // University: same Board track, minus US_FINANCE_DISBURSE.
+                //
+                // Loses US_REQUEST_SET_INACTIVE, US_REQUEST_REOPEN and US_LIST_DELETE
+                // on 2026-08-27, and US_FUND_EDIT, US_FUND_APPROVE,
+                // US_FUND_SET_INACTIVE and US_FUND_REOPEN the same day. All seven
+                // became authorised-officer rights, and UserAdminService forces the
+                // authority flag false for this role, so there is no authorised Board
+                // Secretary to grant them back to. It still raises and prepares a fund
+                // request through US_FUND_CREATE / SUBMIT / INCOMPLETE.
                 Permission.US_REQUEST_VIEW,
-                Permission.US_REQUEST_SET_INACTIVE,
-                Permission.US_REQUEST_REOPEN,
                 Permission.US_LIST_VIEW,
                 Permission.US_LIST_CREATE,
                 Permission.US_LIST_PRINT,
                 Permission.US_LIST_PROCESS,
-                Permission.US_LIST_DELETE,
                 Permission.US_APPROVED_EDIT,
                 Permission.US_FUND_VIEW,
                 Permission.US_FUND_CREATE,
-                Permission.US_FUND_EDIT,
                 Permission.US_FUND_SUBMIT,
                 Permission.US_FUND_INCOMPLETE,
-                Permission.US_FUND_APPROVE,
-                Permission.US_FUND_SET_INACTIVE,
-                Permission.US_FUND_REOPEN,
                 Permission.US_MASTER_VIEW,
                 // Member Transfers. Mirrors this role's standing elsewhere: it reads
                 // requests and holds the Inactive right, but approval of a transfer
@@ -230,16 +236,65 @@ public final class RolePermissions {
      * actually describes, so an authorized District Office officer holds them and an
      * ordinary clerk in the same office still does not.
      *
-     * HEAD_OFFICE is absent because it already holds both through GRADE5_BOARD. Only
-     * DISTRICT_OFFICE and HEAD_OFFICE accounts can carry the flag at all -
-     * UserAdminService forces it false for every other role.
+     * HEAD_OFFICE holds both Grade 5 rights already through GRADE5_BOARD; its entry
+     * below is University-only. Only DISTRICT_OFFICE and HEAD_OFFICE accounts can carry
+     * the flag at all - UserAdminService forces it false for every other role.
+     *
+     * University Scholarships uses the same mechanism as of 2026-08-27 for four
+     * actions, by product decision:
+     *
+     *   edit a NEW/INCOMPLETE request .... authorised District Office, authorised Head Office
+     *   change a request's status ........ authorised District Office, authorised Head Office
+     *   committee Approve / Reject ....... authorised Head Office (SCHOLARSHIP_OFFICER too)
+     *   delete an approval list .......... authorised Head Office
+     *
+     * and for three more on the Fund Request side the same day, Head Office only —
+     * District Office holds no fund request rights at all, authorised or not:
+     *
+     *   edit a NEW/INCOMPLETE fund request .... authorised Head Office
+     *   change a fund request's status ........ authorised Head Office
+     *   fund request Approve / Reject ......... authorised Head Office
+     *
+     * US_FUND_CREATE, US_FUND_SUBMIT and US_FUND_INCOMPLETE were deliberately left in
+     * MATRIX: raising and preparing a fund request stays the whole office's work.
+     *
+     * Because User.getAuthorities() emits these alongside the role's own permissions,
+     * the existing @PreAuthorize("hasAuthority('US_...')") on each endpoint enforces the
+     * narrowing without any controller change.
      */
     private static final Map<Role, Set<Permission>> AUTHORITY_GRANTS = new EnumMap<>(Role.class);
 
     static {
         AUTHORITY_GRANTS.put(Role.DISTRICT_OFFICE, EnumSet.of(
                 Permission.G5_REQUEST_SET_INACTIVE,
-                Permission.G5_REQUEST_REOPEN));
+                Permission.G5_REQUEST_REOPEN,
+                // University (2026-08-27). Edit and status change only. Deliberately no
+                // US_COMMITTEE_APPROVE: this role holds US_REQUEST_CREATE, and pairing
+                // the two would let one office raise a request and clear the very
+                // committee gate that exists to scrutinise it.
+                Permission.US_REQUEST_EDIT,
+                Permission.US_REQUEST_SET_INACTIVE,
+                Permission.US_REQUEST_REOPEN));
+
+        // University (2026-08-27). Head Office holds no US_REQUEST_CREATE, so seating a
+        // second Committee signature here does not collapse the maker/checker split the
+        // way it would at District Office. SCHOLARSHIP_OFFICER keeps US_COMMITTEE_APPROVE
+        // through MATRIX and remains the primary Committee seat.
+        AUTHORITY_GRANTS.put(Role.HEAD_OFFICE, EnumSet.of(
+                Permission.US_REQUEST_EDIT,
+                Permission.US_REQUEST_SET_INACTIVE,
+                Permission.US_REQUEST_REOPEN,
+                Permission.US_LIST_DELETE,
+                Permission.US_COMMITTEE_APPROVE,
+                // Fund requests (2026-08-27). US_FUND_CREATE / SUBMIT / INCOMPLETE stay
+                // in MATRIX: the whole office raises and prepares a fund request, and
+                // only deciding or altering one is narrowed to an authorised officer.
+                // That is the maker/checker split the 2026-08-19 decision gave up when
+                // it let the office that raises fund requests also approve them.
+                Permission.US_FUND_EDIT,
+                Permission.US_FUND_APPROVE,
+                Permission.US_FUND_SET_INACTIVE,
+                Permission.US_FUND_REOPEN));
     }
 
     private RolePermissions() {
