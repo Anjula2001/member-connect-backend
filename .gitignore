@@ -44,3 +44,5 @@ uploads/
 
 # Database dumps — contain real dev data (credentials, NICs, contact details)
 db-backups/
+dockerfile
+.dockerignore
