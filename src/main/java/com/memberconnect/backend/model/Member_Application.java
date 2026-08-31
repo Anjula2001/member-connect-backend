@@ -1,0 +1,156 @@
+package com.memberconnect.backend.model;
+
+
+import com.memberconnect.backend.enums.ApplicationStatus;
+import com.memberconnect.backend.enums.Language;
+import com.memberconnect.backend.enums.Gender;
+import com.memberconnect.backend.enums.NatureOfOccupation;
+import com.memberconnect.backend.enums.Identification;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+@Getter
+@Setter
+@Entity
+@Table(name = "Member_Application")
+public class Member_Application {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(unique = true)
+    private String applicationID;
+
+    @Enumerated(EnumType.STRING)
+    private ApplicationStatus status;
+
+    // The District Office branch where this application was physically submitted/entered.
+    // Distinct from educationalDistrict below, which is the applicant's *working* district
+    // (spec: "The applicant can go to any District Office irrespective of their working district").
+    @Column(name = "SubmissionLocation")
+    private String submissionLocation;
+
+    @Column(name = "ApplicationDate")
+    private String applicationDate;
+
+    @Column(name = "Title")
+    private String title;
+
+    @Column(name = "FullName")
+    private String fullName;
+
+    @Column(name = "NameAsInPayroll")
+    private String nameAsInPayroll;
+
+    @Column(name = "NameWithInitials")
+    private String nameWithInitials;
+
+    @Column(name = "NicNumber")
+    private String nicNumber;
+
+    @Column(name = "DateOfBirth")
+    private LocalDate dateOfBirth;
+
+    @Enumerated(EnumType.STRING)
+    private Gender gender;
+
+    @Enumerated(EnumType.STRING)
+    private Language preferredLanguage;
+
+    @Column(name = "PermanentPrivateAddress")
+    private String permanentPrivateAddress;
+
+    @Column(name = "WorkingLocationType")
+    private String workingLocationType;
+
+    @Column(name = "Designation")
+    private String designation;
+
+    @Enumerated(EnumType.STRING)
+    private NatureOfOccupation natureOfOccupation;
+
+    @Column(name = "EducationalDistrict")
+    private String educationalDistrict;
+
+    @Column(name = "EducationalZone")
+    private String educationalZone;
+
+    @Column(name = "WorkingLocation")
+    private String workingLocation;
+
+    @Column(name = "WorkingLocationAddress")
+    private String workingLocationAddress;
+
+    @Column(name = "ComputerNoInPayslip")
+    private String computerNoInPayslip;
+
+    @Column(name = "SalaryPayingOffice")
+    private String salaryPayingOffice;
+
+    @Column(name = "OfficeTelephone")
+    private String officeTelephone;
+
+    @Column(name = "PrivateTelephone")
+    private String privateTelephone;
+
+    @Column(name = "MobileNumber")
+    private String mobileNumber;
+
+    @Column(name = "EmailAddress")
+    private String emailAddress;
+
+    @Column(name = "ShareAccountAmount")
+    private BigDecimal shareAccountAmount;
+
+    @Column(name = "SpecialDepositAmount")
+    private BigDecimal specialDepositAmount;
+
+    @Column(name = "FixedDepositAmount")
+    private BigDecimal fixedDepositAmount;
+
+    @Column(name = "ScholarshipDeathDonationPensionAmount")
+    private BigDecimal scholarshipDeathDonationPensionAmount;
+
+    @Column(name = "NomineeFullName")
+    private String nomineeFullName;
+
+    @Column(name = "NomineeRelationship")
+    private String nomineeRelationship;
+
+    @Enumerated(EnumType.STRING)
+    private Identification identification;
+
+    @Column(name = "IdentificationNumber")
+    private String identificationNumber; //The number of the selected identification type.
+
+    @Column(name = "IdentificationDetails", length = 2000)
+    private String identificationDetails;
+
+    @Column(name = "NomineeAddress")
+    private String nomineeAddress;
+
+    @Column(name = "RejoinFlag")
+    private Boolean rejoinFlag;
+
+    @Column(name = "BoardDecisionReason", length = 2000)
+    private String boardDecisionReason;
+
+    /**
+     * What the application was immediately before it joined a Board Approval List.
+     *
+     * MR08 requires a deleted list to roll each application back to "Submitted for
+     * Approval" OR "Rejected" depending on what it was originally, and once the status
+     * column has been overwritten with ADDED_TO_BOARD_APPROVAL_LIST that original is
+     * gone. Captured on MR06, consumed and cleared on MR08, cleared again when MR10
+     * decides the application.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "StatusBeforeBoardList")
+    private ApplicationStatus statusBeforeBoardList;
+
+}

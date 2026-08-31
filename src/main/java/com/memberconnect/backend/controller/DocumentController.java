@@ -1,4 +1,242 @@
 package com.memberconnect.backend.controller;
 
+import java.io.IOException;
+import java.util.List;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.memberconnect.backend.dto.DocumentSummaryDTO;
+import com.memberconnect.backend.dto.RequiredDocumentDTO;
+import com.memberconnect.backend.dto.UploadDocumentRequestDTO;
+import com.memberconnect.backend.dto.UploadDocumentResponseDTO;
+import com.memberconnect.backend.model.UploadedDocument;
+import com.memberconnect.backend.service.DocumentService;
+import com.memberconnect.backend.service.MemberDeathRecordService;
+import com.memberconnect.backend.service.TerminationService;
+
+@RestController
+@RequestMapping("/api")
+@CrossOrigin(origins = "http://localhost:3000")
 public class DocumentController {
+
+    private static final String TERMINATION_REQUEST_TYPE = "termination-requests";
+    private static final String MEMBER_DEATH_REQUEST_TYPE = "member-death-records";
+
+    private final DocumentService documentService;
+    private final com.memberconnect.backend.service.S3Service s3Service;
+    private final TerminationService terminationService;
+    private final MemberDeathRecordService memberDeathRecordService;
+
+    public DocumentController(
+            DocumentService documentService,
+            com.memberconnect.backend.service.S3Service s3Service,
+            TerminationService terminationService,
+            MemberDeathRecordService memberDeathRecordService
+    ) {
+        this.documentService = documentService;
+        this.s3Service = s3Service;
+        this.terminationService = terminationService;
+        this.memberDeathRecordService = memberDeathRecordService;
+    }
+
+    // --- Member application document endpoints ---
+
+    @PostMapping("/documents/upload")
+    public UploadDocumentResponseDTO uploadDocumentMetadata(@RequestBody UploadDocumentRequestDTO requestDTO) {
+        return documentService.uploadDocumentMetadata(requestDTO);
+    }
+
+    @GetMapping("/documents/application/{applicationId}")
+    public List<UploadDocumentResponseDTO> getDocumentsByApplication(@PathVariable Long applicationId) {
+        return documentService.getDocumentsByApplication(applicationId);
+    }
+
+    @GetMapping("/documents/summary/{applicationId}")
+    public DocumentSummaryDTO getDocumentSummary(@PathVariable Long applicationId) {
+        return documentService.getDocumentSummary(applicationId);
+    }
+
+    @DeleteMapping("/documents/{id}")
+    public void deleteDocument(@PathVariable Long id) {
+        documentService.deleteDocument(id);
+    }
+
+    // --- Retirement / Grade5 document endpoints ---
+
+    @GetMapping("/{requestType}/{requestNo}/required-documents")
+    public List<RequiredDocumentDTO> getRequiredDocuments(
+            @PathVariable String requestType,
+            @PathVariable String requestNo,
+            @RequestParam String memberId
+    ) {
+        String applicationType = mapRequestTypeToApplicationType(requestType);
+
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertDocumentsReadable(requestNo);
+        }
+
+        return documentService.getRequiredDocuments(requestNo, memberId, applicationType);
+    }
+
+    // Get required documents preview
+    @GetMapping("/{requestType}/required-documents-preview")
+    public List<RequiredDocumentDTO> getRequiredDocumentsPreview(
+            @PathVariable String requestType,
+            @RequestParam String memberId
+    ) {
+        String applicationType = mapRequestTypeToApplicationType(requestType);
+
+        // No record exists yet, so there is nothing to district-scope against -
+        // only the caller's role can be checked here.
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertMayReadDeathRecords();
+        }
+
+        return documentService.getRequiredDocuments("0", memberId, applicationType);
+    }
+
+    // Upload a document for a specific required document
+    @PostMapping("/{requestType}/{requestNo}/documents/{requiredDocumentId}/upload")
+    public UploadedDocument uploadDocument(
+            @PathVariable String requestType,
+            @PathVariable String requestNo,
+            @PathVariable Long requiredDocumentId,
+            @RequestParam("file") MultipartFile file
+    ) throws IOException {
+        String applicationType = mapRequestTypeToApplicationType(requestType);
+
+        if (TERMINATION_REQUEST_TYPE.equals(requestType)) {
+            terminationService.assertDocumentsEditable(requestNo);
+        }
+
+        // This controller carries no role annotations, so each module injects its
+        // own authority here - same reason termination does above.
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertDocumentsEditable(requestNo);
+        }
+
+        return documentService.uploadDocument(
+                requestNo,
+                requiredDocumentId,
+                file,
+                applicationType
+        );
+    }
+
+    // Get uploaded documents for a specific request
+    @GetMapping("/{requestType}/{requestNo}/uploaded-documents")
+    public List<UploadedDocument> getUploadedDocuments(
+            @PathVariable String requestType,
+            @PathVariable String requestNo
+    ) {
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertDocumentsReadable(requestNo);
+        }
+
+        return documentService.getUploadedDocuments(requestNo);
+    }
+
+    // Upload a generic file to S3
+    @PostMapping("/file/upload")
+    public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) throws IOException {
+        String fileName = s3Service.uploadFile(file);
+        return ResponseEntity.ok(fileName);
+    }
+
+    // Download a generic file from S3 by its file name
+    @GetMapping("/file/download")
+    public ResponseEntity<byte[]> downloadGenericFile(@RequestParam("fileName") String fileName) {
+        String contentType = s3Service.getFileContentType(fileName);
+        byte[] fileBytes = s3Service.downloadFile(fileName);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, contentType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                .body(fileBytes);
+    }
+
+    // Get uploaded documents for a specific request and required document type
+    @GetMapping("/{requestType}/{requestNo}/documents/{requiredDocumentId}/uploaded")
+    public List<UploadedDocument> getUploadedDocumentsByRequiredDocument(
+            @PathVariable String requestType,
+            @PathVariable String requestNo,
+            @PathVariable Long requiredDocumentId
+    ) {
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertDocumentsReadable(requestNo);
+        }
+
+        return documentService.getUploadedDocumentsByRequiredDocument(
+                requestNo,
+                requiredDocumentId
+        );
+    }
+
+    // Delete an uploaded document by its ID
+    @DeleteMapping("/{requestType}/documents/{uploadedDocumentId}/file")
+    public void deleteUploadedDocument(
+            @PathVariable String requestType,
+            @PathVariable Long uploadedDocumentId
+    ) {
+        if (TERMINATION_REQUEST_TYPE.equals(requestType)) {
+            UploadedDocument document = documentService.getUploadedDocumentById(uploadedDocumentId);
+            terminationService.assertDocumentsEditable(document.getRequestNo());
+        }
+
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            UploadedDocument document = documentService.getUploadedDocumentById(uploadedDocumentId);
+            memberDeathRecordService.assertDocumentsEditable(document.getRequestNo());
+        }
+
+        documentService.deleteUploadedDocument(uploadedDocumentId);
+    }
+
+    // Download an uploaded document
+    @GetMapping("/{requestType}/documents/{uploadedDocumentId}/download")
+    public ResponseEntity<byte[]> downloadDocument(
+            @PathVariable String requestType,
+            @PathVariable Long uploadedDocumentId
+    ) throws IOException {
+        UploadedDocument document =
+                documentService.getUploadedDocumentById(uploadedDocumentId);
+
+        if (MEMBER_DEATH_REQUEST_TYPE.equals(requestType)) {
+            memberDeathRecordService.assertDocumentsReadable(document.getRequestNo());
+        }
+
+        byte[] fileBytes = s3Service.downloadFile(document.getFilePath());
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + document.getFileName() + "\""
+                )
+                .header(HttpHeaders.CONTENT_TYPE, document.getFileType())
+                .body(fileBytes);
+    }
+
+    private String mapRequestTypeToApplicationType(String requestType) {
+        return switch (requestType) {
+            case "retirement-requests" -> "RETIREMENT";
+            case "grade5-requests" -> "GRADE5";
+            case "termination-requests" -> "TERMINATION";
+            
+            case "termination-approval-lists" -> "TERMINATION_APPROVAL_REPORT";
+            
+            case "member-death-records" -> "MEMBER_DEATH";
+            default -> throw new RuntimeException(
+                    "Invalid request type: " + requestType
+            );
+        };
+    }
 }
