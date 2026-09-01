@@ -12,10 +12,10 @@ import java.time.LocalDateTime;
  * One row per change to a Member's status, carrying the date the change took effect.
  *
  * Member holds only its current status, and the audit trail cannot answer "what was
- * this member's status on date X": the Retirement flow and the dormant-reactivation
- * path write no audit rows at all, and the Termination and Member Death rows are keyed
- * by the request's own id rather than the member's, so they cannot even be looked up
- * per member. University Scholarship eligibility is decided on the member's status on
+ * this member's status on date X": the dormant-reactivation path writes no audit rows
+ * at all, and the Termination, Retirement and Member Death rows are keyed by the
+ * request's own id rather than the member's, so AuditService has to resolve a member's
+ * requests before it can find them. University Scholarship eligibility is decided on the member's status on
  * the exam's last date (a past date), so that question has to be answerable.
  *
  * effectiveDate is the date the change took effect in the business sense - a
