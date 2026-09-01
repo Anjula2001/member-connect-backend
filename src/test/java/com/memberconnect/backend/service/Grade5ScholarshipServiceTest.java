@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
@@ -59,6 +60,12 @@ class Grade5ScholarshipServiceTest {
 
     @Mock
     private CurrentUserService currentUserService;
+
+    // Unstubbed, statusOn returns null - "history knows nothing about that date" -
+    // which is exactly the state of a member whose status changed before this table
+    // existed, and the case the fallback to Member.status is there for.
+    @Mock
+    private MemberStatusHistoryService memberStatusHistoryService;
 
     @Test
     void saveRequestShouldRejectWhenMemberWasNotActiveDuringSelectedExam() {
@@ -195,5 +202,103 @@ class Grade5ScholarshipServiceTest {
                 "The required continues Membership period does not comply (36 months)",
                 exception.getMessage()
         );
+    }
+
+    private static final String NOT_ACTIVE_AT_EXAM =
+            "The Grade 5 Scholarship Request cannot be saved. The Member is not Active during the selected Exam";
+
+    private Grade5StudentDTO examDto() {
+        Grade5StudentDTO dto = new Grade5StudentDTO();
+        dto.setRequestedDate("2025-01-02");
+        dto.setStudentName("Test Student");
+        dto.setBirthCertificateNumber("BC123456");
+        dto.setStudentSchool("Test School");
+        dto.setSchoolDistrict("Colombo");
+        dto.setExamYear(2024);
+        dto.setExaminationNumber("EXAM123456");
+        dto.setDistrictCutOffMark(100);
+        dto.setMarksObtained(120);
+        return dto;
+    }
+
+    private Grade5ExamMaster exam2024() {
+        Grade5ExamMaster examMaster = new Grade5ExamMaster();
+        examMaster.setYear(2024);
+        examMaster.setExamDate(LocalDate.of(2024, 12, 31));
+        return examMaster;
+    }
+
+    /**
+     * The member is Active now, so Member.status alone would let this through. The
+     * history says they were Inactive on exam day, and that is the fact MMS02 asks
+     * about.
+     */
+    @Test
+    void saveRequestShouldRejectWhenHistorySaysInactiveOnExamDateEvenIfActiveNow() {
+        Member member = new Member();
+        member.setMemberId("M-003");
+        member.setStatus(MemberStatus.ACTIVE);
+        member.setMembershipStartDate(LocalDate.of(2018, 1, 1));
+
+        when(memberRepository.findByMemberId("M-003")).thenReturn(Optional.of(member));
+        when(examMasterRepository.findById(2024)).thenReturn(Optional.of(exam2024()));
+        when(memberStatusHistoryService.statusOn("M-003", LocalDate.of(2024, 12, 31)))
+                .thenReturn(MemberStatus.INACTIVE);
+
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> service.saveRequest("M-003", examDto())
+        );
+
+        assertEquals(NOT_ACTIVE_AT_EXAM, exception.getMessage());
+    }
+
+    /**
+     * The mirror image: Retired today, but the history has them Active on exam day, so
+     * this validation must not be what stops the request. It goes on to fail a later
+     * check, which is the point - it got past MMS02.
+     */
+    @Test
+    void saveRequestShouldAcceptWhenHistorySaysActiveOnExamDateEvenIfNotActiveNow() {
+        Member member = new Member();
+        member.setMemberId("M-004");
+        member.setStatus(MemberStatus.RETIRED);
+        member.setMembershipStartDate(LocalDate.of(2018, 1, 1));
+
+        when(memberRepository.findByMemberId("M-004")).thenReturn(Optional.of(member));
+        when(examMasterRepository.findById(2024)).thenReturn(Optional.of(exam2024()));
+        when(memberStatusHistoryService.statusOn("M-004", LocalDate.of(2024, 12, 31)))
+                .thenReturn(MemberStatus.ACTIVE);
+
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> service.saveRequest("M-004", examDto())
+        );
+
+        assertNotEquals(NOT_ACTIVE_AT_EXAM, exception.getMessage());
+    }
+
+    /**
+     * Joining after the exam is the same failure by another route - there was no
+     * membership to be Active in on the day that counts.
+     */
+    @Test
+    void saveRequestShouldRejectWhenMembershipStartedAfterTheExam() {
+        Member member = new Member();
+        member.setMemberId("M-005");
+        member.setStatus(MemberStatus.ACTIVE);
+        member.setMembershipStartDate(LocalDate.of(2025, 6, 1));
+
+        when(memberRepository.findByMemberId("M-005")).thenReturn(Optional.of(member));
+        when(examMasterRepository.findById(2024)).thenReturn(Optional.of(exam2024()));
+        when(memberStatusHistoryService.statusOn("M-005", LocalDate.of(2024, 12, 31)))
+                .thenReturn(MemberStatus.ACTIVE);
+
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> service.saveRequest("M-005", examDto())
+        );
+
+        assertEquals(NOT_ACTIVE_AT_EXAM, exception.getMessage());
     }
 }

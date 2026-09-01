@@ -18,6 +18,7 @@ import com.memberconnect.backend.event.Grade5MarkedIncompleteEvent;
 import com.memberconnect.backend.config.CurrentUserService;
 import com.memberconnect.backend.dto.Grade5RequestListDTO;
 import com.memberconnect.backend.dto.Grade5StudentDTO;
+import com.memberconnect.backend.enums.MemberStatus;
 import com.memberconnect.backend.enums.ScholarshipRequestStatus;
 import com.memberconnect.backend.model.Grade5ExamMaster;
 import com.memberconnect.backend.model.Grade5ScholarshipRequest;
@@ -54,6 +55,8 @@ public class Grade5ScholarshipService {
     private ScholarshipConfigRepository scholarshipConfigRepository;
     @Autowired
     private com.memberconnect.backend.config.CurrentUserService currentUserService;
+    @Autowired
+    private MemberStatusHistoryService memberStatusHistoryService;
 
     @Value("${grade5.scholarship.required.remitted.months:6}")
     private int defaultRequiredRemittedMonths;
@@ -83,6 +86,51 @@ public class Grade5ScholarshipService {
 
     public List<MinorSavingsAccount> getMinorAccounts(String birthCertificateNo) {
         return minorRepo.findByBirthCertificateNo(birthCertificateNo);
+    }
+
+    /**
+     * MMS02: the member must have been Active on the last date of the selected exam.
+     *
+     * member_status_history is the authority, not Member.status. A request can be
+     * raised up to a year after the exam, and by then the member's current status says
+     * nothing about where they stood on the day that actually decides eligibility - a
+     * member who retired last month was still Active at the exam, and a member who is
+     * Active again today may have been Inactive when their child sat it.
+     *
+     * History that is silent about the date is not evidence of inactivity: rows only
+     * exist from the point the table was introduced. So the member's current status is
+     * the fallback rather than an unknown passing unchecked - it is what this
+     * validation used before the history table existed.
+     */
+    private void validateMemberActiveOnExamLastDate(String memberId, Integer examYear) {
+        Member member = memberRepository.findByMemberId(memberId)
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        if (examYear == null) {
+            throw new RuntimeException("Selected exam year is required");
+        }
+
+        Grade5ExamMaster examMaster = Grade5ExamMasterRepository.findById(examYear)
+                .orElseThrow(() -> new RuntimeException("Selected exam year not found in Exam Master"));
+
+        LocalDate examLastDate = examMaster.getExamDate();
+
+        if (examLastDate == null) {
+            throw new RuntimeException("Selected exam date not found in Exam Master");
+        }
+
+        MemberStatus recordedStatus = memberStatusHistoryService.statusOn(memberId, examLastDate);
+        MemberStatus statusAtExam = recordedStatus != null ? recordedStatus : member.getStatus();
+
+        // Joining after the exam is the same failure by a different route: there was no
+        // membership to be Active in on the day that counts.
+        boolean notYetAMemberAtExam = member.getMembershipStartDate() == null
+                || member.getMembershipStartDate().isAfter(examLastDate);
+
+        if (statusAtExam != MemberStatus.ACTIVE || notYetAMemberAtExam) {
+            throw new RuntimeException(
+                    "The Grade 5 Scholarship Request cannot be saved. The Member is not Active during the selected Exam");
+        }
     }
 
     // Validate membership period for the selected exam year. The member must have been a member for at least 36 months as of the exam date.
@@ -320,6 +368,7 @@ public class Grade5ScholarshipService {
         Member member = memberRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
+        validateMemberActiveOnExamLastDate(memberId, dto.getExamYear());
         validateMembershipPeriodForExam(memberId, dto.getExamYear());
         validateScholarshipRemittance(memberId, dto.getExamYear());
         validateFundDisbursement(dto);
@@ -800,6 +849,7 @@ public class Grade5ScholarshipService {
         Grade5ScholarshipRequest entity = repository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Grade 5 request not found"));
 
+        validateMemberActiveOnExamLastDate(entity.getMemberId(), dto.getExamYear());
         validateMembershipPeriodForExam(entity.getMemberId(), dto.getExamYear());
         validateScholarshipRemittance(entity.getMemberId(), dto.getExamYear());
         validateFundDisbursement(dto);
