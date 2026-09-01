@@ -25,6 +25,7 @@ import com.memberconnect.backend.repository.AuditRepository;
 import com.memberconnect.backend.repository.DeathDonationRequestRepository;
 import com.memberconnect.backend.repository.MemberDeathRecordRepository;
 import com.memberconnect.backend.repository.MemberRepository;
+import com.memberconnect.backend.repository.RetirementRequestRepository;
 import com.memberconnect.backend.repository.TerminationRequestRepository;
 
 /**
@@ -64,6 +65,7 @@ public class AuditService {
 
     /** Requirement 04/05 modules: the request's own id is the reference, not the member's. */
     public static final String MODULE_TERMINATION = "MEMBER_TERMINATION";
+    public static final String MODULE_RETIREMENT = "MEMBER_RETIREMENT";
     public static final String MODULE_TERMINATION_APPROVAL_LIST = "TERMINATION_APPROVAL_LIST";
     public static final String MODULE_MEMBER_DEATH = "MEMBER_DEATH";
     public static final String MODULE_DEATH_DONATION = "DEATH_DONATION";
@@ -107,6 +109,7 @@ public class AuditService {
             case MODULE_MEMBER_TRANSFER -> "Member Transfer Request";
             case MODULE_APPLICATION -> "Application";
             case MODULE_TERMINATION -> "Termination Request";
+            case MODULE_RETIREMENT -> "Retirement Request";
             case MODULE_MEMBER_DEATH -> "Member Death Record";
             case MODULE_DEATH_DONATION -> "Death Donation Request";
             case MODULE_DORMANT -> "Dormant Membership";
@@ -119,13 +122,14 @@ public class AuditService {
     private final ObjectMapper objectMapper;
 
     /*
-     * Termination, Member Death and Death Donation record their audit entries against
-     * their OWN record id, not the member's, so a member's entries in those modules can
-     * only be found by first resolving which of those records belong to them. These are
+     * Termination, Retirement, Member Death and Death Donation record their audit
+     * entries against their OWN record id, not the member's, so a member's entries in
+     * those modules can only be found by first resolving which records belong to them. These are
      * repositories, not services, so injecting them here introduces no cycle with the
      * services that call AuditService.
      */
     private final TerminationRequestRepository terminationRequestRepository;
+    private final RetirementRequestRepository retirementRequestRepository;
     private final MemberDeathRecordRepository memberDeathRecordRepository;
     private final DeathDonationRequestRepository deathDonationRequestRepository;
 
@@ -134,6 +138,7 @@ public class AuditService {
             MemberRepository memberRepository,
             ObjectMapper objectMapper,
             TerminationRequestRepository terminationRequestRepository,
+            RetirementRequestRepository retirementRequestRepository,
             MemberDeathRecordRepository memberDeathRecordRepository,
             DeathDonationRequestRepository deathDonationRequestRepository
     ) {
@@ -141,6 +146,7 @@ public class AuditService {
         this.memberRepository = memberRepository;
         this.objectMapper = objectMapper;
         this.terminationRequestRepository = terminationRequestRepository;
+        this.retirementRequestRepository = retirementRequestRepository;
         this.memberDeathRecordRepository = memberDeathRecordRepository;
         this.deathDonationRequestRepository = deathDonationRequestRepository;
     }
@@ -429,6 +435,9 @@ public class AuditService {
         if (membershipNo != null && !membershipNo.isBlank()) {
             putIfAny(allowed, MODULE_TERMINATION,
                     terminationRequestRepository.findByMemberId(membershipNo),
+                    request -> request.getId());
+            putIfAny(allowed, MODULE_RETIREMENT,
+                    retirementRequestRepository.findByMemberId(membershipNo),
                     request -> request.getId());
             putIfAny(allowed, MODULE_MEMBER_DEATH,
                     memberDeathRecordRepository.findByMember_MemberIdOrderByCreatedAtDesc(membershipNo),

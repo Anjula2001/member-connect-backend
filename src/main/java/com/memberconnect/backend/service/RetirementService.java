@@ -53,6 +53,7 @@ public class RetirementService {
     private final CurrentUserService currentUserService;
     private final ApplicationEventPublisher eventPublisher;
     private final MemberStatusHistoryService memberStatusHistoryService;
+    private final AuditService auditService;
 
     public RetirementService(
             MemberRepository memberRepository,
@@ -62,7 +63,8 @@ public class RetirementService {
             DocumentService documentService,
             CurrentUserService currentUserService,
             ApplicationEventPublisher eventPublisher,
-            MemberStatusHistoryService memberStatusHistoryService) {
+            MemberStatusHistoryService memberStatusHistoryService,
+            AuditService auditService) {
         this.memberRepository = memberRepository;
         this.requestRepository = requestRepository;
         this.loanRepository = loanRepository;
@@ -71,6 +73,7 @@ public class RetirementService {
         this.currentUserService = currentUserService;
         this.eventPublisher = eventPublisher;
         this.memberStatusHistoryService = memberStatusHistoryService;
+        this.auditService = auditService;
     }
 
     // returns all retirement requests.
@@ -258,6 +261,14 @@ public class RetirementService {
                 requestedDate, "RETIREMENT_REQUESTED",
                 "Retirement request " + saved.getRequestNo());
 
+        auditService.record(
+                AuditService.MODULE_RETIREMENT,
+                saved.getId(),
+                "CREATE_REQUEST",
+                null,
+                saved.getStatus().name(),
+                "Retirement request " + saved.getRequestNo() + " raised");
+
         return mapToResponse(saved);
     }
 
@@ -280,8 +291,17 @@ public class RetirementService {
             throw new RuntimeException("Cannot submit. Mandatory documents are missing.");
         }
 
+        RetirementRequestStatus previousStatus = request.getStatus();
         request.setStatus(RetirementRequestStatus.SUBMITTED_FOR_APPROVAL);
         RetirementRequest saved = requestRepository.save(request);
+
+        auditService.recordStatusChange(
+                AuditService.MODULE_RETIREMENT,
+                saved.getId(),
+                "SUBMIT_REQUEST",
+                previousStatus,
+                saved.getStatus(),
+                "Retirement request " + saved.getRequestNo() + " submitted for approval");
 
         return mapToResponse(saved);
     }
@@ -385,6 +405,15 @@ public class RetirementService {
         }
 
         RetirementRequest saved = requestRepository.save(request);
+
+        auditService.recordStatusChange(
+                AuditService.MODULE_RETIREMENT,
+                saved.getId(),
+                "STATUS_CHANGE",
+                currentStatus,
+                newStatus,
+                "Manual status change on " + saved.getRequestNo() + " (MMT15)");
+
         return mapToResponse(saved);
     }
 
@@ -438,10 +467,19 @@ public class RetirementService {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
 
+        RetirementRequestStatus previousStatus = request.getStatus();
         request.setStatus(RetirementRequestStatus.INCOMPLETE);
         request.setIncompleteReason(reason);
 
         RetirementRequest saved = requestRepository.save(request);
+
+        auditService.recordStatusChange(
+                AuditService.MODULE_RETIREMENT,
+                saved.getId(),
+                "MARK_INCOMPLETE",
+                previousStatus,
+                saved.getStatus(),
+                "Reason: " + saved.getIncompleteReason());
 
         eventPublisher.publishEvent(new RetirementMarkedIncompleteEvent(
                 saved.getMemberId(),
@@ -466,8 +504,17 @@ public class RetirementService {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
 
+        RetirementRequestStatus previousStatus = request.getStatus();
         request.setStatus(RetirementRequestStatus.APPROVED);
         RetirementRequest saved = requestRepository.save(request);
+
+        auditService.recordStatusChange(
+                AuditService.MODULE_RETIREMENT,
+                saved.getId(),
+                "APPROVE_REQUEST",
+                previousStatus,
+                saved.getStatus(),
+                "Retirement request " + saved.getRequestNo() + " approved");
 
         Member member = getMemberEntity(request.getMemberId());
         MemberStatus previousMemberStatus = member.getStatus();
@@ -533,6 +580,15 @@ public class RetirementService {
                 request.getEffectiveDate(), "RETIREMENT_COMPLETED",
                 "Retirement request " + request.getRequestNo() + " completed by Finance");
 
+        auditService.recordStatusChange(
+                AuditService.MODULE_RETIREMENT,
+                request.getId(),
+                "FINANCE_COMPLETION",
+                previousMemberStatus,
+                member.getStatus(),
+                "Retirement request " + request.getRequestNo()
+                        + " handed to the Finance Module; member retired");
+
         // AFTER_COMMIT, so a member is only ever told their membership has ended once
         // RETIRED is durable. A Finance failure throws above this line, leaving the
         // member RETIREMENT_APPROVED and no email sent.
@@ -580,10 +636,19 @@ public class RetirementService {
         RetirementRequest request = requestRepository.findByRequestNo(requestNo)
                 .orElseThrow(() -> new RuntimeException("Retirement request not found"));
 
+        RetirementRequestStatus previousStatus = request.getStatus();
         request.setStatus(RetirementRequestStatus.REJECTED);
         request.setRejectReason(reason);
 
         RetirementRequest saved = requestRepository.save(request);
+
+        auditService.recordStatusChange(
+                AuditService.MODULE_RETIREMENT,
+                saved.getId(),
+                "REJECT_REQUEST",
+                previousStatus,
+                saved.getStatus(),
+                "Reason: " + saved.getRejectReason());
 
         Member member = getMemberEntity(request.getMemberId());
         MemberStatus previousMemberStatus = member.getStatus();
@@ -697,6 +762,14 @@ public class RetirementService {
         }
 
         RetirementRequest saved = requestRepository.save(request);
+
+        auditService.record(
+                AuditService.MODULE_RETIREMENT,
+                saved.getId(),
+                "UPDATE_REQUEST",
+                null,
+                saved.getStatus().name(),
+                "Retirement request " + saved.getRequestNo() + " details updated");
 
         return mapToResponse(saved);
     }
