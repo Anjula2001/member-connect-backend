@@ -38,6 +38,7 @@ build/
 .env.local
 .env.*.local
 .env.example
+.env.production.example
 
 # Runtime upload artifacts — written by the app at runtime, never source
 uploads/
